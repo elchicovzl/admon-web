@@ -138,9 +138,8 @@ export default function ActionPlanSection() {
             </span>
             <h2
               className="text-5xl lg:text-6xl font-normal text-gray-900 leading-tight"
-              style={{ fontFamily: "Reckless, serif" }}
             >
-              A personalized action plan for growth
+              Valores
             </h2>
           </div>
           <div className="flex items-center">
@@ -148,8 +147,9 @@ export default function ActionPlanSection() {
               <ArrowRight className="w-8 h-8 text-green-600" />
             </div>
             <p className="text-xl text-gray-600 ml-6">
-              Get a clear plan with actionable recommendations that prioritize user experience and lead to sustainable
-              growth for your brand.
+              Administración segura es una empresa que ofrece servicios de trámites y
+              afiliaciones a trabajadores independientes y empresas a la SEGURIDAD SOCIAL
+              INTEGRAL
             </p>
           </div>
         </div>
@@ -159,36 +159,40 @@ export default function ActionPlanSection() {
           <ActionPlanCard
             iconBgColor="bg-blue-50"
             icon={inDepthAnalysisIcon}
-            title="In-depth website analysis"
-            description="A deep dive into your customer journey, pinpointing the strengths and weaknesses of your home, collection, product, and cart pages. Uncover hidden obstacles and untapped opportunities for maximizing conversions."
+            title="Nuestra Misión"
+            description="Administración segura es una empresa que ofrece servicios de trámites y
+              afiliaciones a trabajadores independientes y empresas a la SEGURIDAD SOCIAL
+              INTEGRAL."
             features={[
-              { text: "Navigation and menu audit" },
-              { text: "Home page audit" },
-              { text: "Collection page audit" },
-              { text: "Product page audit" },
-              { text: "Cart & checkout process audit" },
+              { text: "Salud" },
+              { text: "Pensión" },
+              { text: "Riesgos laborales" },
+              { text: "Caja de compensación familiar" },
             ]}
           />
           <ActionPlanCard
             iconBgColor="bg-orange-50"
             icon={conversionRedesignsIcon}
-            title="Conversion-focused redesigns"
-            description="Visualise the impact of conversion-focused design with before-and-after mockups of 10 key sections of your site. Get expert recommendations on how to optimize each element for higher engagement."
+            title="Visión"
+            description="Ser una empresa reconocida a nivel regional y lograr la confianza y credibilidad de
+empresas e independientes en el sector de la seguridad social mediante procesos
+agiles, manejo transparente de los recursos dentro del marco legal."
             features={[
-              { text: "Redesign of 10x key sections" },
-              { text: "Before-and-After Mockups" },
-              { text: "Access to developer-friendly design files" },
+              { text: "Liderazgo Regional" },
+              { text: "Procesos Ágiles" },
+              { text: "Transparencia Legal" },
             ]}
           />
           <ActionPlanCard
             iconBgColor="bg-yellow-50"
             icon={actionableChecklistIcon}
-            title="Actionable checklist"
-            description="Get a comprehensive list of practical steps you can take right now to start improving your website's conversion rates. Prioritized recommendations to help you focus on the most impactful changes."
+            title="Valores"
+            description="En ADMINISTRACIÓN SEGURA, entendemos que la confianza es la base de cada relación. Por eso, nuestros procesos y la manera en que nos conectamos con nuestros clientes están guiados por una serie de valores fundamentales que definen quiénes somos y cómo trabajamos."
             features={[
-              { text: "Up to 40+ actionable fixes" },
-              { text: "Top 5 priority fixes list" },
-              { text: "Insights for CRO, AOV and UX improvements" },
+              { text: "Confianza" },
+              { text: "Eficiencia" },
+              { text: "Responsabilidad" },
+              { text: "Integridad" },
             ]}
           />
         </div>

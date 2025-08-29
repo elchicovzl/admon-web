@@ -7,7 +7,7 @@ import { Typewriter } from 'react-simple-typewriter'
 
 export default function HeroSection() {
   return (
-    <section className="relative py-20 overflow-hidden bg-white" style={{ fontFamily: "Reckless, serif" }}>
+    <section className="relative py-20 overflow-hidden bg-white">
       {/* Grid Background */}
       <div className="absolute inset-0 opacity-60">
         <div
@@ -109,7 +109,7 @@ export default function HeroSection() {
               <div className="absolute bottom-8 right-4 bg-purple-600 text-white rounded-full px-4 py-2 shadow-lg">
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 text-white">✦</div>
-                  <span className="font-medium">Administración Segura</span>
+                  <span className="font-medium font-serif">ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span></span>
                 </div>
               </div>
             </div>

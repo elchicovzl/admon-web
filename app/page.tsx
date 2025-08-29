@@ -5,13 +5,14 @@ import TrustedBrandsSection from '@/components/sections/trusted-brands-section'
 import BenefitsSection from '@/components/sections/benefits-section'
 import TestimonialsSection from '@/components/sections/testimonials-section'
 import ProcessSection from '@/components/sections/process-section'
-import PricingSection from '@/components/pricing-section'
+import ServicesSection from '@/components/services-section'
 import ActionPlanSection from '@/components/action-plan-section'
 import FAQSection from '@/components/faq-section'
+import ContactSection from '@/components/sections/contact-section'
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "Reckless, serif" }}>
+    <div className="min-h-screen bg-white">
       <Header />
       
       <main>
@@ -20,9 +21,10 @@ export default function HomePage() {
         <BenefitsSection />
         <TestimonialsSection />
         <ProcessSection />
-        <PricingSection />
+        <ServicesSection />
         <ActionPlanSection />
         <FAQSection />
+        <ContactSection />
       </main>
 
       <Footer />

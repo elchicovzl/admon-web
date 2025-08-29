@@ -2,14 +2,14 @@ import { processSteps } from '@/data/features'
 
 export default function ProcessSection() {
   return (
-    <section className="py-20 bg-white border-t border-gray-200" id="process" style={{ fontFamily: "Reckless, serif" }}>
+    <section className="py-20 bg-white border-t border-gray-200" id="process">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-4">
             <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>CÓMO FUNCIONA
           </span>
           <h2 className="text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
-            3 pasos para mejores conversiones
+            3 pasos para tu tranquilidad
           </h2>
         </div>
 

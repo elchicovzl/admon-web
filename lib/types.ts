@@ -1,3 +1,5 @@
+import type React from "react"
+
 export interface SiteConfig {
   name: string
   title: string
@@ -81,4 +83,22 @@ export interface FAQItem {
   question: string
   answer: string
   category?: string
+}
+
+export interface ServiceCategory {
+  id: string
+  name: string
+  description: string
+  icon: React.ReactNode
+  services: string[]
+  bgColor: string
+  textColor: string
+  isPopular?: boolean
+}
+
+export interface Service {
+  id: string
+  name: string
+  category: string
+  description?: string
 }

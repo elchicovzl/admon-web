@@ -40,24 +40,24 @@ export const processSteps = [
   {
     id: 'step-1',
     step: 1,
-    title: 'Inicia tu optimización',
-    description: 'Solicita tu auditoría CRO y completa un formulario de incorporación breve. Esto nos ayuda a entender tu marca, objetivos y audiencia objetivo, asegurando un enfoque personalizado para tu auditoría.',
+    title: 'Cuéntanos tu situación',
+    description: 'El primer paso es una conversación. Ya sea por teléfono o en persona en nuestra oficina, nos reuniremos para entender tu caso y los desafíos que enfrentas. Este es el momento de escucharte y conocer tus necesidades específicas.',
     color: '#FFD700',
     backgroundColor: '#FFD700'
   },
   {
     id: 'step-2',
     step: 2,
-    title: 'Descubre oportunidades ocultas',
-    description: 'Nuestro equipo creará tu auditoría analizando el journey del usuario de tu sitio web para identificar puntos problemáticos y revelar estrategias para impulsar las conversiones.',
+    title: 'Recibe tu solución personalizada',
+    description: 'Basados en lo que nos has contado, te presentaremos una solución clara y el servicio más adecuado para ti. Te explicaremos el proceso completo, los beneficios y los pasos a seguir para resolver tu situación.',
     color: '#1E40AF',
     backgroundColor: '#E0F2F7'
   },
   {
     id: 'step-3',
     step: 3,
-    title: 'Recibe tu auditoría CRO accionable',
-    description: 'En dos semanas, recibirás una auditoría personalizada llena de insights y recomendaciones para optimizar tu sitio web.',
+    title: 'Finalizamos tu proceso',
+    description: 'Una vez que decidas avanzar, nuestro equipo se encarga de todo el proceso de afiliación o trámite. Te acompañaremos de cerca hasta la finalización, asegurando que cada paso se cumpla de manera correcta y eficiente.',
     color: '#7C3AED',
     backgroundColor: '#E6E0FF'
   }

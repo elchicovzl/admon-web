@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Menu, X } from 'lucide-react'
 import { siteConfig } from '@/data/site-config'
@@ -18,13 +19,23 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
-    <header className="border-b border-gray-200 bg-white sticky top-0 z-50" style={{ fontFamily: "Reckless, serif" }}>
+    <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <div className="flex items-center">
-            <Link href="/" className="text-xl font-bold text-gray-900">
-              {siteConfig.name}
+          <div className="flex items-center space-x-3">
+            <Link href="/" className="flex items-center space-x-3">
+              <Image
+                src="/images/logo.png"
+                alt="Administración Segura Logo"
+                width={80}
+                height={80}
+                className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
+                priority
+              />
+              <span className="text-xl font-bold text-gray-900 font-serif">
+                ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span>
+              </span>
             </Link>
           </div>
 

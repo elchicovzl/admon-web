@@ -118,6 +118,29 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+  }
+  
+  /* Font family utilities */
+  .font-serif {
+    font-family: 'Playfair Display', serif !important;
+  }
+  
+  .font-sans {
+    font-family: 'Inter', sans-serif !important;
+  }
+  
+  /* Headings use serif font by default */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif !important;
+    font-weight: 700;
+  }
+  
+  /* Paragraph text uses Inter */
+  p, span, div, li, td, th {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
   }
 }
 
