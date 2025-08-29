@@ -28,11 +28,11 @@ export default function HeroSection() {
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
-          <div className="relative z-10">
-            <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
+          <div className="relative z-10 text-center lg:text-left">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-6 leading-tight">
               Soluciones en Seguridad Social para Empresas e Independientes{" "}
             </h1>
-            <p className="text-2xl text-gray-600 mb-8 max-w-lg">
+            <p className="text-lg md:text-2xl text-gray-600 mb-8 max-w-lg mx-auto lg:mx-0">
               Afiliacion a {' '}
               <span className="font-semibold text-orange-400">
                 <Typewriter
@@ -51,10 +51,10 @@ export default function HeroSection() {
                 />
               </span>{' '}
             </p>
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center sm:justify-start">
               <Button
                 size="lg"
-                className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-4 text-lg font-medium"
+                className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-4 text-lg font-medium w-full sm:w-auto"
               >
                 Asesorias GRATIS
                 <ArrowRight className="ml-2 w-5 h-5" />
@@ -62,9 +62,9 @@ export default function HeroSection() {
               <Button
                 size="lg"
                 variant="outline"
-                className="rounded-full px-8 py-4 text-lg font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent"
+                className="rounded-full px-8 py-4 text-lg font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent w-full sm:w-auto"
               >
-                Ver Precios
+                Servicios
                 <Eye className="ml-2 w-5 h-5" />
               </Button>
             </div>

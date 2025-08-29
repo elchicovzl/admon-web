@@ -54,18 +54,18 @@ export default function TestimonialSlider() {
   return (
     <div className="relative w-full overflow-hidden">
       {/* Slider container - full width */}
-      <div className="relative h-64 flex items-center justify-center">
-        {/* Left gradient overlay */}
-        <div className="absolute left-0 top-0 w-40 h-full bg-gradient-to-r from-white via-white/90 to-transparent z-10 pointer-events-none" />
+      <div className="relative h-64 md:h-64 flex items-center justify-center">
+        {/* Left gradient overlay - hidden on mobile */}
+        <div className="absolute left-0 top-0 w-40 h-full bg-gradient-to-r from-white via-white/90 to-transparent z-10 pointer-events-none hidden md:block" />
         
-        {/* Right gradient overlay */}
-        <div className="absolute right-0 top-0 w-40 h-full bg-gradient-to-l from-white via-white/90 to-transparent z-10 pointer-events-none" />
+        {/* Right gradient overlay - hidden on mobile */}
+        <div className="absolute right-0 top-0 w-40 h-full bg-gradient-to-l from-white via-white/90 to-transparent z-10 pointer-events-none hidden md:block" />
 
         {/* Fixed position containers for each card */}
         <div className="flex items-center justify-center w-full relative">
           
-          {/* Previous card (left, fixed position) */}
-          <div className="absolute left-8 w-80 transform transition-all duration-700 ease-in-out opacity-40 scale-95">
+          {/* Previous card (left, fixed position) - hidden on mobile */}
+          <div className="absolute left-8 w-80 transform transition-all duration-700 ease-in-out opacity-40 scale-95 hidden md:block">
             <div className={cn(
               "p-6 rounded-2xl shadow-sm h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
               prev.bgColor
@@ -83,12 +83,12 @@ export default function TestimonialSlider() {
           </div>
 
           {/* Current card (center, fixed position) */}
-          <div className="w-[600px] transform transition-all duration-700 ease-in-out opacity-100 scale-100 z-10">
+          <div className="w-full max-w-[600px] px-4 md:px-0 md:w-[600px] transform transition-all duration-700 ease-in-out opacity-100 scale-100 z-10">
             <div className={cn(
-              "p-8 rounded-2xl shadow-lg h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
+              "p-6 md:p-8 rounded-2xl shadow-lg h-auto md:h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
               current.bgColor
             )}>
-              <p className="text-xl font-medium text-gray-800 leading-relaxed text-center">
+              <p className="text-base md:text-md font-medium text-gray-800 leading-relaxed text-center">
                 "{current.quote}"
               </p>
               <div className="flex items-center justify-center mt-4">
@@ -100,8 +100,8 @@ export default function TestimonialSlider() {
             </div>
           </div>
 
-          {/* Next card (right, fixed position) */}
-          <div className="absolute right-8 w-80 transform transition-all duration-700 ease-in-out opacity-40 scale-95">
+          {/* Next card (right, fixed position) - hidden on mobile */}
+          <div className="absolute right-8 w-80 transform transition-all duration-700 ease-in-out opacity-40 scale-95 hidden md:block">
             <div className={cn(
               "p-6 rounded-2xl shadow-sm h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
               next.bgColor

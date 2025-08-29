@@ -41,7 +41,7 @@ export default function ContactSection() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
           {/* Left side - Contact Form */}
           <div>
-            <h2 className="text-4xl lg:text-5xl font-bold mb-8">
+            <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-8">
               Envíanos un mensaje
             </h2>
             
@@ -141,7 +141,7 @@ export default function ContactSection() {
 
           {/* Right side - Contact Information */}
           <div className="lg:text-right lg:pl-12">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-8">
+            <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-8">
               Encuéntranos
             </h2>
 

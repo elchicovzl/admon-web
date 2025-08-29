@@ -24,7 +24,7 @@ export default function HomePage() {
                 Testimonials
               </a>
               <a href="#" className="text-gray-700 hover:text-gray-900 font-medium">
-                What's included
+                Quienes somos
               </a>
               <a href="#" className="text-gray-700 hover:text-gray-900 font-medium">
                 How it works

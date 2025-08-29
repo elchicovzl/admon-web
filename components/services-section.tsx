@@ -8,7 +8,7 @@ export default function ServicesSection() {
       {/* Light green background */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16">
-          <h2 className="text-4xl lg:text-5xl font-normal text-gray-900 leading-tight mb-4 md:mb-0">
+          <h2 className="text-2xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight mb-4 md:mb-0">
             Nuestros Servicios Especializados
           </h2>
           <p className="text-lg text-gray-600 max-w-md">

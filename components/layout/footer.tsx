@@ -12,7 +12,7 @@ export default function Footer() {
           {/* Left side - Main content */}
           <div className="space-y-8">
             <div>
-              <h2 className="text-4xl lg:text-5xl font-bold text-white leading-tight mb-6">
+              <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white leading-tight mb-6">
                 Tu tranquilidad en seguridad social es nuestro compromiso.
               </h2>
             </div>
@@ -28,7 +28,7 @@ export default function Footer() {
                   className="w-8 h-8 object-contain"
                 />
               </div>
-              <span className="text-2xl font-bold font-serif">ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span></span>
+              <span className="text-xl md:text-2xl font-bold font-serif">ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span></span>
             </div>
           </div>
 

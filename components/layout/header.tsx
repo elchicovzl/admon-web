@@ -5,14 +5,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Menu, X } from 'lucide-react'
-import { siteConfig } from '@/data/site-config'
 
 const navigation = [
   { label: 'Beneficios', href: '#benefits' },
   { label: 'Testimonios', href: '#testimonials' },
-  { label: 'Qué incluye', href: '#features' },
+  { label: 'Cotizador', href: '#features' },
   { label: 'Cómo funciona', href: '#process' },
-  { label: 'Precios', href: '#pricing' },
+  { label: 'Nosotros', href: '#nosotros' },
 ]
 
 export default function Header() {
@@ -45,7 +44,7 @@ export default function Header() {
               <a
                 key={item.label}
                 href={item.href}
-                className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
+                className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm"
               >
                 {item.label}
               </a>
@@ -55,10 +54,10 @@ export default function Header() {
           {/* CTA Button */}
           <div className="hidden md:block">
             <Button 
-              className="bg-black text-white hover:bg-gray-800 rounded-full px-6"
+              className="bg-black text-white hover:bg-gray-800 rounded-full px-6 text-sm"
               asChild
             >
-              <Link href="#cta">Auditoría GRATIS</Link>
+              <Link href="#cta">Contáctanos</Link>
             </Button>
           </div>
 
@@ -87,7 +86,7 @@ export default function Header() {
                 <a
                   key={item.label}
                   href={item.href}
-                  className="text-gray-700 hover:text-gray-900 font-medium transition-colors"
+                  className="text-gray-700 hover:text-orange-500 font-medium transition-colors px-4 py-2 rounded hover:bg-orange-50"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   {item.label}
@@ -98,7 +97,7 @@ export default function Header() {
                 asChild
               >
                 <Link href="#cta" onClick={() => setMobileMenuOpen(false)}>
-                  Auditoría GRATIS
+                  Contáctanos
                 </Link>
               </Button>
             </nav>

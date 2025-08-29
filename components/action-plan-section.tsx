@@ -128,25 +128,25 @@ export default function ActionPlanSection() {
   )
 
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 bg-white" id="nosotros">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center mb-16">
           <div className="lg:pr-12">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-4">
-              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>WHAT'S INCLUDED
+              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>Quienes somos
             </span>
             <h2
-              className="text-5xl lg:text-6xl font-normal text-gray-900 leading-tight"
+              className="text-3xl md:text-5xl lg:text-6xl font-normal text-gray-900 leading-tight"
             >
-              Valores
+              Nosotros
             </h2>
           </div>
           <div className="flex items-center">
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
               <ArrowRight className="w-8 h-8 text-green-600" />
             </div>
-            <p className="text-xl text-gray-600 ml-6">
+            <p className="text-lg md:text-xl text-gray-600 ml-6">
               Administración segura es una empresa que ofrece servicios de trámites y
               afiliaciones a trabajadores independientes y empresas a la SEGURIDAD SOCIAL
               INTEGRAL
