@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Menu, X } from 'lucide-react'
+import { useSmoothScroll } from '@/hooks/use-smooth-scroll'
 
 const navigation = [
   { label: 'Beneficios', href: '#benefits' },
@@ -16,6 +17,12 @@ const navigation = [
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const { scrollToSection } = useSmoothScroll()
+
+  const handleNavClick = (href: string) => {
+    const sectionId = href.replace('#', '')
+    scrollToSection(sectionId)
+  }
 
   return (
     <header className="border-b border-gray-200 bg-white sticky top-0 z-50">
@@ -41,23 +48,23 @@ export default function Header() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex space-x-8">
             {navigation.map((item) => (
-              <a
+              <button
                 key={item.label}
-                href={item.href}
+                onClick={() => handleNavClick(item.href)}
                 className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm"
               >
                 {item.label}
-              </a>
+              </button>
             ))}
           </nav>
 
           {/* CTA Button */}
           <div className="hidden md:block">
-            <Button 
+            <Button
               className="bg-black text-white hover:bg-gray-800 rounded-full px-6 text-sm"
-              asChild
+              onClick={() => handleNavClick('#contacto')}
             >
-              <Link href="#cta">Contáctanos</Link>
+              Contáctanos
             </Button>
           </div>
 
@@ -83,22 +90,25 @@ export default function Header() {
           <div className="md:hidden py-4 border-t border-gray-200">
             <nav className="flex flex-col space-y-4">
               {navigation.map((item) => (
-                <a
+                <button
                   key={item.label}
-                  href={item.href}
-                  className="text-gray-700 hover:text-orange-500 font-medium transition-colors px-4 py-2 rounded hover:bg-orange-50"
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => {
+                    handleNavClick(item.href)
+                    setMobileMenuOpen(false)
+                  }}
+                  className="text-gray-700 hover:text-orange-500 font-medium transition-colors px-4 py-2 rounded hover:bg-orange-50 text-left"
                 >
                   {item.label}
-                </a>
+                </button>
               ))}
-              <Button 
+              <Button
                 className="bg-black text-white hover:bg-gray-800 rounded-full w-full mt-4"
-                asChild
+                onClick={() => {
+                  handleNavClick('#contacto')
+                  setMobileMenuOpen(false)
+                }}
               >
-                <Link href="#cta" onClick={() => setMobileMenuOpen(false)}>
-                  Contáctanos
-                </Link>
+                Contáctanos
               </Button>
             </nav>
           </div>

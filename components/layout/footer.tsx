@@ -1,9 +1,18 @@
+'use client'
+
 import Link from 'next/link'
 import Image from 'next/image'
 import { siteConfig } from '@/data/site-config'
+import { useSmoothScroll } from '@/hooks/use-smooth-scroll'
 
 export default function Footer() {
   const currentYear = new Date().getFullYear()
+  const { scrollToSection } = useSmoothScroll()
+
+  const handleNavClick = (href: string) => {
+    const sectionId = href.replace('#', '')
+    scrollToSection(sectionId)
+  }
 
   return (
     <footer className="bg-black text-white">
@@ -36,24 +45,24 @@ export default function Footer() {
           <div className="flex flex-col space-y-8 lg:items-end">
             {/* Navigation Links */}
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-8 text-lg">
-              <Link 
-                href="#servicios" 
-                className="text-gray-300 hover:text-white transition-colors"
+              <button
+                onClick={() => handleNavClick('#servicios')}
+                className="text-gray-300 hover:text-white transition-colors text-left"
               >
                 Nuestros Servicios
-              </Link>
-              <Link 
-                href="#proceso" 
-                className="text-gray-300 hover:text-white transition-colors"
+              </button>
+              <button
+                onClick={() => handleNavClick('#proceso')}
+                className="text-gray-300 hover:text-white transition-colors text-left"
               >
                 Cómo Trabajamos
-              </Link>
-              <Link 
-                href="#contacto" 
-                className="text-gray-300 hover:text-white transition-colors"
+              </button>
+              <button
+                onClick={() => handleNavClick('#contacto')}
+                className="text-gray-300 hover:text-white transition-colors text-left"
               >
                 Contacto
-              </Link>
+              </button>
             </div>
 
             {/* Social Links */}

@@ -1,9 +1,13 @@
+'use client'
+
 import ServiceCard from "./service-card"
 import { serviceCategoriesData } from "@/data/services"
+import { useSmoothScroll } from "@/hooks/use-smooth-scroll"
 
 export default function ServicesSection() {
+  const { scrollToSection } = useSmoothScroll()
   return (
-    <section className="py-20 bg-[#F0FFE0]">
+    <section className="py-20 bg-[#F0FFE0]" id="features">
       {" "}
       {/* Light green background */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -25,9 +29,12 @@ export default function ServicesSection() {
 
         <div className="text-center mt-16 text-gray-600 text-lg">
           ¿Necesitas una cotización personalizada o quieres conocer más detalles?{" "}
-          <a href="#" className="text-gray-900 underline">
+          <button
+            onClick={() => scrollToSection('contacto')}
+            className="text-gray-900 underline hover:text-gray-700 transition-colors"
+          >
             Contáctanos
-          </a>
+          </button>
         </div>
       </div>
     </section>
