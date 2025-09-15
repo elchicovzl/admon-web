@@ -6,7 +6,7 @@ import BenefitsSection from '@/components/sections/benefits-section'
 import TestimonialsSection from '@/components/sections/testimonials-section'
 import ProcessSection from '@/components/sections/process-section'
 import ServicesSection from '@/components/services-section'
-import ActionPlanSection from '@/components/action-plan-section'
+import { AboutSection } from '@/components/sections/about-section'
 import FAQSection from '@/components/faq-section'
 import ContactSection from '@/components/sections/contact-section'
 
@@ -22,7 +22,7 @@ export default function HomePage() {
         <TestimonialsSection />
         <ProcessSection />
         <ServicesSection />
-        <ActionPlanSection />
+        <AboutSection />
         <FAQSection />
         <ContactSection />
       </main>

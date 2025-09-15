@@ -1,192 +1,243 @@
 "use client"
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { ArrowRight } from 'lucide-react'
+import type React from "react"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { MapPin, Mail, Phone, Clock } from "lucide-react"
 
 export default function ContactSection() {
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    subject: '',
-    phone: '',
-    message: '',
-    agreeToTerms: false
+    fullName: "",
+    email: "",
+    subject: "",
+    phone: "",
+    message: "",
+    acceptTerms: false,
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }))
-  }
-
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      agreeToTerms: e.target.checked
-    }))
+    setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle form submission here
-    console.log('Form submitted:', formData)
+    console.log("Form submitted:", formData)
   }
 
   return (
-    <section className="py-20 bg-gray-900 text-white" id="contacto">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          {/* Left side - Contact Form */}
-          <div>
-            <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-8">
-              Envíanos un mensaje
-            </h2>
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Name and Email Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <section className="bg-slate-900 text-white py-16 px-4" id="contacto">
+      <div className="max-w-6xl mx-auto">
+        {/* Interactive Map - Full Width */}
+        <div className="mb-16">
+          <div className="bg-slate-800 rounded-xl overflow-hidden shadow-2xl">
+            <div className="relative h-80 w-full">
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3966.061!2d-75.56924158850391!3d6.234085693983!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zNsKwMTQnMDIuNyJOIDc1wrAzNCcwOS4zIlc!5e0!3m2!1ses!2sco!4v1609459200000!5m2!1ses!2sco"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                className="absolute inset-0"
+              />
+            </div>
+
+            <div className="p-6 bg-slate-800">
+              <div className="flex items-center justify-between">
                 <div>
-                  <input
-                    type="text"
+                  <h4 className="font-semibold text-lg">Administración Segura</h4>
+                  <p className="text-slate-400 text-sm">Cra 43 # 33 - 57 local 156 plazuelas de san diego</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent"
+                  onClick={() =>
+                    window.open("https://maps.google.com/?q=6.234085693983,-75.56924158850391", "_blank")
+                  }
+                >
+                  Ver en Google Maps
+                </Button>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-700">
+                <div className="flex items-center space-x-4 text-sm text-slate-400">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span>Abierto ahora</span>
+                  </div>
+                  <div>•</div>
+                  <div>Cierra a las 5:00 PM</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Contact Info and Form - Two Columns */}
+        <div className="grid lg:grid-cols-2 gap-12">
+          {/* Contact Info - Left Column */}
+          <div>
+            <h2 className="text-3xl font-bold mb-8 text-balance">Encuéntranos</h2>
+
+            <div className="space-y-8">
+              <div className="flex items-start space-x-4">
+                <div className="bg-blue-600 p-3 rounded-lg">
+                  <MapPin className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">Nuestra Ubicación</h3>
+                  <p className="text-slate-300 leading-relaxed">
+                    Cra 43 # 33 - 57 local 156 plazuelas de san diego
+                    <br />
+                    Medellín, Colombia
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="bg-blue-600 p-3 rounded-lg">
+                  <Mail className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">Correo Electrónico</h3>
+                  <a
+                    href="mailto:info@administracionsegura.com"
+                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    info@administracionsegura.com
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="bg-blue-600 p-3 rounded-lg">
+                  <Phone className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">Número de Teléfono</h3>
+                  <a href="tel:+573197941064" className="text-blue-400 hover:text-blue-300 transition-colors">
+                    +57 (319) 794-1064
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="bg-blue-600 p-3 rounded-lg">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold mb-2">Horarios de Atención</h3>
+                  <div className="text-slate-300 space-y-1">
+                    <p>Lunes a Viernes: 8:00 AM - 5:00 PM</p>
+                    <p>Sábado y Domingo: Cerrado</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 grid grid-cols-2 gap-4">
+              <Button
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
+                onClick={() => window.open("https://wa.me/573197941064", "_blank")}
+              >
+                WhatsApp
+              </Button>
+              <Button
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
+                onClick={() => window.open("tel:+573197941064")}
+              >
+                Llamar Ahora
+              </Button>
+            </div>
+          </div>
+
+          {/* Contact Form - Right Column */}
+          <div>
+            <h2 className="text-3xl font-bold mb-8 text-balance">Envíanos un mensaje</h2>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Input
                     name="fullName"
                     placeholder="Nombre completo"
                     value={formData.fullName}
                     onChange={handleInputChange}
-                    required
-                    className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 text-white placeholder-gray-400 focus:border-white focus:outline-none transition-colors"
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
-                  <input
-                    type="email"
+                  <Input
                     name="email"
+                    type="email"
                     placeholder="Correo electrónico"
                     value={formData.email}
                     onChange={handleInputChange}
-                    required
-                    className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 text-white placeholder-gray-400 focus:border-white focus:outline-none transition-colors"
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
-              {/* Subject and Phone Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <input
-                    type="text"
+                  <Input
                     name="subject"
                     placeholder="Asunto"
                     value={formData.subject}
                     onChange={handleInputChange}
-                    required
-                    className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 text-white placeholder-gray-400 focus:border-white focus:outline-none transition-colors"
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
                   />
                 </div>
                 <div>
-                  <input
-                    type="tel"
+                  <Input
                     name="phone"
                     placeholder="Número de teléfono"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 text-white placeholder-gray-400 focus:border-white focus:outline-none transition-colors"
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
-              {/* Message */}
               <div>
-                <textarea
+                <Textarea
                   name="message"
                   placeholder="Mensaje"
-                  rows={6}
                   value={formData.message}
                   onChange={handleInputChange}
-                  required
-                  className="w-full px-0 py-3 bg-transparent border-0 border-b-2 border-gray-600 text-white placeholder-gray-400 focus:border-white focus:outline-none transition-colors resize-none"
+                  rows={4}
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 resize-none"
                 />
               </div>
 
-              {/* Terms and Submit */}
-              <div className="space-y-6">
-                <div className="flex items-start space-x-3">
-                  <input
-                    type="checkbox"
-                    id="terms"
-                    checked={formData.agreeToTerms}
-                    onChange={handleCheckboxChange}
-                    required
-                    className="mt-1 w-4 h-4 rounded border-gray-600 bg-transparent focus:ring-blue-500 focus:ring-2"
-                  />
-                  <label htmlFor="terms" className="text-gray-300 text-sm">
-                    Al marcar esta casilla, aceptas el uso de nuestros términos del "Formulario" 
-                    y consientes el uso de cookies en el navegador.
-                  </label>
-                </div>
+              <div className="flex items-start space-x-3">
+                <Checkbox
+                  id="terms"
+                  checked={formData.acceptTerms}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, acceptTerms: checked as boolean }))}
+                  className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                />
+                <label htmlFor="terms" className="text-sm text-slate-300 leading-relaxed">
+                  Al marcar esta casilla, aceptas el uso de nuestros términos del "Formulario" y consientes el uso de
+                  cookies en el navegador.
+                </label>
+              </div>
 
-                <Button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-semibold flex items-center justify-center space-x-2 transition-colors w-full sm:w-auto"
-                  disabled={!formData.agreeToTerms}
-                >
-                  <span>Enviar Mensaje</span>
-                  <ArrowRight className="w-5 h-5" />
+              <div>
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 w-full">
+                  Enviar Mensaje →
                 </Button>
               </div>
             </form>
-          </div>
-
-          {/* Right side - Contact Information */}
-          <div className="lg:text-right lg:pl-12">
-            <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-8">
-              Encuéntranos
-            </h2>
-
-            <div className="space-y-8">
-              {/* Location */}
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Nuestra Ubicación</h3>
-                <p className="text-gray-300 leading-relaxed">
-                  Calle 50 #25-30, Oficina 201<br />
-                  Bucaramanga, Santander, Colombia
-                </p>
-              </div>
-
-              {/* Email */}
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Correo Electrónico</h3>
-                <a 
-                  href="mailto:info@administracionsegura.com" 
-                  className="text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  info@administracionsegura.com
-                </a>
-              </div>
-
-              {/* Phone */}
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Número de Teléfono</h3>
-                <a 
-                  href="tel:+576076543210" 
-                  className="text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  +57 (607) 654-3210
-                </a>
-              </div>
-
-              {/* Office Hours */}
-              <div>
-                <h3 className="text-xl font-semibold mb-3">Horarios de Atención</h3>
-                <div className="text-gray-300 space-y-1">
-                  <p>Lunes a Viernes: 8:00 AM - 6:00 PM</p>
-                  <p>Sábados: 9:00 AM - 1:00 PM</p>
-                  <p>Domingos: Cerrado</p>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

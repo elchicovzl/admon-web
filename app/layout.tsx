@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import WhatsAppWidget from '@/components/ui/whatsapp-widget'
 
 export const metadata: Metadata = {
   title: 'v0 App',
@@ -18,11 +19,18 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Figtree:wght@300;400;500;600;700;800;900&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <WhatsAppWidget
+          phoneNumber="573197941064"
+          message="Hola, me gustaría obtener información sobre sus servicios de seguridad social. Vengo desde su página web."
+          companyName="Administración Segura"
+        />
+      </body>
     </html>
   )
 }
