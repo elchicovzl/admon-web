@@ -1,0 +1,189 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ClientType, IdentificationType } from '@prisma/client'
+import type { SafeClient } from '@/lib/types/client.types'
+import { toggleClientStatus } from '@/lib/actions'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { MoreHorizontal, Eye, Edit, Ban, CheckCircle, FileText } from 'lucide-react'
+import { toast } from 'sonner'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
+
+interface ClientsTableProps {
+  clients: SafeClient[]
+  onClientUpdated?: (clientId: string, updates: Partial<SafeClient>) => void
+  onEditClient?: (client: SafeClient) => void
+}
+
+export function ClientsTable({ clients, onClientUpdated, onEditClient }: ClientsTableProps) {
+  const router = useRouter()
+  const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+
+  const getIdentificationTypeLabel = (type: IdentificationType) => {
+    const labels = {
+      CEDULA: 'Cédula',
+      CEDULA_EXTRANJERIA: 'Cédula Extranjería',
+      PPT: 'PPT',
+      NIT: 'NIT',
+    }
+    return labels[type]
+  }
+
+  const getClientTypeLabel = (type: ClientType) => {
+    const labels = {
+      EMPLEADO: 'Empleado',
+      EMPRESA: 'Empresa',
+      INDEPENDIENTE: 'Independiente',
+    }
+    return labels[type]
+  }
+
+  const getClientTypeBadgeVariant = (type: ClientType) => {
+    const variants = {
+      EMPLEADO: 'default',
+      EMPRESA: 'secondary',
+      INDEPENDIENTE: 'outline',
+    }
+    return variants[type] as 'default' | 'secondary' | 'outline'
+  }
+
+  const handleToggleStatus = async (client: SafeClient) => {
+    setIsTogglingStatus(true)
+
+    try {
+      const result = await toggleClientStatus(client.id, !client.isActive)
+
+      if (result.success) {
+        toast.success(result.message || 'Status actualizado exitosamente')
+        onClientUpdated?.(client.id, { isActive: !client.isActive })
+      } else {
+        toast.error(result.error || 'Error al cambiar status')
+      }
+    } catch (error) {
+      console.error('Toggle status error:', error)
+      toast.error('Error inesperado al cambiar status')
+    } finally {
+      setIsTogglingStatus(false)
+    }
+  }
+
+  const handleViewDetails = (client: SafeClient) => {
+    router.push(`/dashboard/clients/${client.id}`)
+  }
+
+  return (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Nombre</TableHead>
+            <TableHead>Identificación</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Teléfono</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Fecha de Registro</TableHead>
+            <TableHead className="text-right">Acciones</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {clients.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={8} className="text-center text-muted-foreground">
+                No hay clientes registrados
+              </TableCell>
+            </TableRow>
+          ) : (
+            clients.map((client) => (
+              <TableRow key={client.id}>
+                <TableCell className="font-medium">{client.fullName}</TableCell>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground">
+                      {getIdentificationTypeLabel(client.identificationType)}
+                    </span>
+                    <span className="font-mono text-sm">{client.identificationNumber}</span>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={getClientTypeBadgeVariant(client.clientType)}>
+                    {getClientTypeLabel(client.clientType)}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm">{client.email}</TableCell>
+                <TableCell className="text-sm">{client.phone}</TableCell>
+                <TableCell>
+                  <Badge variant={client.isActive ? 'default' : 'destructive'}>
+                    {client.isActive ? 'Activo' : 'Inactivo'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {format(new Date(client.createdAt), "d 'de' MMMM, yyyy", {
+                    locale: es,
+                  })}
+                </TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Abrir menú</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={() => handleViewDetails(client)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Ver Detalles
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEditClient?.(client)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => handleToggleStatus(client)}
+                        disabled={isTogglingStatus}
+                      >
+                        {client.isActive ? (
+                          <>
+                            <Ban className="mr-2 h-4 w-4" />
+                            Desactivar
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Activar
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
