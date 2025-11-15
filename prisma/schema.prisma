@@ -44,6 +44,10 @@ model User {
   uploadedDocuments   ClientDocument[]   @relation("DocumentUploadedBy")
   createdCredentials  ClientCredential[] @relation("CredentialCreatedBy")
 
+  // Disability relations
+  createdDisabilities       Disability[]            @relation("DisabilityCreatedBy")
+  disabilityObservations    DisabilityObservation[] @relation("DisabilityObservationCreatedBy")
+
   @@map("users")
 }
 
@@ -124,6 +128,10 @@ model Client {
   documents   ClientDocument[]
   credentials ClientCredential[]
 
+  // Disability relations (both as client and employee)
+  disabilitiesAsClient   Disability[] @relation("DisabilityClient")
+  disabilitiesAsEmployee Disability[] @relation("DisabilityEmployee")
+
   @@map("clients")
 }
 
@@ -194,4 +202,85 @@ model ClientCredential {
 
   @@map("client_credentials")
   @@index([clientId])
+}
+
+// Disability Management Enums
+enum DisabilityStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  CLOSED
+  URGENT
+}
+
+enum HealthAdministrator {
+  EPS_SURA
+  PORVENIR
+  NUEVA_EPS
+  ARL_SURA
+  SALUD_TOTAL
+  SAVIA_SALUD
+}
+
+// Disability model (Incapacidades)
+model Disability {
+  id               String              @id @default(cuid())
+  receptionDate    DateTime            // Fecha de recepción
+  status           DisabilityStatus
+
+  // Client and Employee relations
+  clientId         String
+  client           Client              @relation("DisabilityClient", fields: [clientId], references: [id])
+  employeeId       String
+  employee         Client              @relation("DisabilityEmployee", fields: [employeeId], references: [id])
+
+  // Administrator
+  administrator    HealthAdministrator
+
+  // Dates
+  startDate        DateTime            // Fecha inicio incapacidad
+  endDate          DateTime            // Fecha finalización
+
+  // Additional fields
+  bankRegistry     Boolean             @default(false) // Registro banco
+  transcription    String              @db.Text        // Transcripción
+  filing           String              @db.Text        // Radicación
+
+  // Proof file (comprobante)
+  proofFileUrl     String?
+  proofS3Key       String?
+
+  // Soft delete
+  isActive         Boolean             @default(true)
+
+  // Timestamps
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  // Audit trail
+  createdById      String
+  createdBy        User                @relation("DisabilityCreatedBy", fields: [createdById], references: [id])
+
+  // Relations
+  observations     DisabilityObservation[]
+
+  @@map("disabilities")
+  @@index([clientId])
+  @@index([employeeId])
+  @@index([status])
+}
+
+// Disability Observation model
+model DisabilityObservation {
+  id           String     @id @default(cuid())
+  content      String     @db.Text
+  disabilityId String
+  disability   Disability @relation(fields: [disabilityId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User       @relation("DisabilityObservationCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("disability_observations")
+  @@index([disabilityId])
 }

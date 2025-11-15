@@ -47,3 +47,15 @@ export {
   deleteCredential,
   revealCredentialPassword,
 } from './credential.actions'
+
+// Disability actions
+export {
+  getDisabilities,
+  getDisabilityById,
+  createDisability,
+  updateDisability,
+  toggleDisabilityStatus,
+  addDisabilityObservation,
+  deleteDisabilityObservation,
+  getDisabilitiesCount,
+} from './disability.actions'
