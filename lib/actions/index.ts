@@ -29,6 +29,10 @@ export {
   addClientNote,
   deleteClientNote,
   getClientsCount,
+  assignEmployeeToCompany,
+  removeEmployeeFromCompany,
+  getAvailableEmployees,
+  getCompanyEmployees,
 } from './client.actions'
 
 // Document actions

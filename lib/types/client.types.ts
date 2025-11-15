@@ -13,6 +13,7 @@ export interface Client {
   createdAt: Date
   updatedAt: Date
   createdById: string
+  companyId?: string | null
 }
 
 export interface SafeClient {
@@ -27,6 +28,7 @@ export interface SafeClient {
   isActive: boolean
   createdAt: Date
   updatedAt: Date
+  companyId?: string | null
 }
 
 export interface ClientWithRelations extends SafeClient {
@@ -38,6 +40,9 @@ export interface ClientWithRelations extends SafeClient {
     name: string | null
     email: string
   }
+  // Company-Employee relations
+  company?: SafeClient | null
+  employees?: SafeClient[]
 }
 
 export interface ClientNote {

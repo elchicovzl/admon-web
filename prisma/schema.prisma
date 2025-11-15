@@ -128,11 +128,17 @@ model Client {
   documents   ClientDocument[]
   credentials ClientCredential[]
 
+  // Company-Employee relationship (self-referential)
+  companyId String?
+  company   Client?  @relation("CompanyEmployees", fields: [companyId], references: [id], onDelete: SetNull)
+  employees Client[] @relation("CompanyEmployees")
+
   // Disability relations (both as client and employee)
   disabilitiesAsClient   Disability[] @relation("DisabilityClient")
   disabilitiesAsEmployee Disability[] @relation("DisabilityEmployee")
 
   @@map("clients")
+  @@index([companyId])
 }
 
 // Client Note model

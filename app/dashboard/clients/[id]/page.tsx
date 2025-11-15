@@ -12,9 +12,11 @@ import { ArrowLeft, Mail, Phone, FileText, Calendar, User, CreditCard } from 'lu
 import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-section'
 import { ClientDocumentsGallery } from '@/components/dashboard/clients/client-documents-gallery'
 import { ClientCredentialsSection } from '@/components/dashboard/clients/client-credentials-section'
+import { CompanyEmployeesSection } from '@/components/dashboard/clients/company-employees-section'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ClientType, IdentificationType } from '@prisma/client'
+import Link from 'next/link'
 
 export default function ClientDetailPage() {
   const router = useRouter()
@@ -164,6 +166,22 @@ export default function ClientDetailPage() {
                 <p className="text-sm text-muted-foreground">{client.status}</p>
               </div>
             </div>
+
+            {/* Company info for employees */}
+            {client.clientType === ClientType.EMPLEADO && client.company && (
+              <div className="flex items-start gap-3 pt-2 border-t">
+                <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Empresa</p>
+                  <Link
+                    href={`/dashboard/clients/${client.company.id}`}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    {client.company.fullName}
+                  </Link>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -213,6 +231,14 @@ export default function ClientDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Employees Section (only for companies) */}
+      {client.clientType === ClientType.EMPRESA && (
+        <CompanyEmployeesSection
+          companyId={client.id}
+          initialEmployees={client.employees || []}
+        />
+      )}
 
       {/* Credentials Section */}
       <ClientCredentialsSection
