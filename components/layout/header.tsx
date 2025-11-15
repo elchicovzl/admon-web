@@ -8,9 +8,9 @@ import { Menu, X } from 'lucide-react'
 import { useSmoothScroll } from '@/hooks/use-smooth-scroll'
 
 const navigation = [
+  { label: 'Servicios', href: '#features' },
   { label: 'Beneficios', href: '#benefits' },
   { label: 'Testimonios', href: '#testimonials' },
-  { label: 'Cotizador', href: '#features' },
   { label: 'Cómo funciona', href: '#process' },
   { label: 'Nosotros', href: '#nosotros' },
 ]

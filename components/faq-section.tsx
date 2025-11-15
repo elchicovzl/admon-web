@@ -8,7 +8,7 @@ export default function FAQSection() {
     <section className="py-20" style={{ backgroundColor: "#F8F5F0", fontFamily: "Reckless, serif" }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
         <div className="md:sticky md:top-20 max-w-xs">
-          <h2 className="text-5xl font-normal text-gray-900 leading-tight text-left">
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight text-left">
             ¿Tienes más preguntas?
           </h2>
         </div>

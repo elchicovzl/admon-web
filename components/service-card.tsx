@@ -1,7 +1,10 @@
+'use client'
+
 import type React from "react"
-import { CheckCircle, ArrowRight, Clock, TrendingUp, Star } from "lucide-react"
+import { CheckCircle, ArrowRight, Clock, TrendingUp, Star, Shield, FileText, Heart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useSmoothScroll } from "@/hooks/use-smooth-scroll"
 
 interface ServiceCardProps {
   name: string
@@ -10,7 +13,7 @@ interface ServiceCardProps {
   isPopular?: boolean
   bgColor: string
   textColor: string
-  iconType: 'clock' | 'chart' | 'star'
+  iconType: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart'
 }
 
 export default function ServiceCard({
@@ -22,9 +25,10 @@ export default function ServiceCard({
   textColor,
   iconType,
 }: ServiceCardProps) {
-  const getIcon = (type: 'clock' | 'chart' | 'star') => {
+  const { scrollToSection } = useSmoothScroll()
+  const getIcon = (type: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart') => {
     const iconProps = { size: 32, className: "text-gray-900" }
-    
+
     switch (type) {
       case 'clock':
         return <Clock {...iconProps} />
@@ -32,6 +36,12 @@ export default function ServiceCard({
         return <TrendingUp {...iconProps} />
       case 'star':
         return <Star {...iconProps} />
+      case 'shield':
+        return <Shield {...iconProps} />
+      case 'file':
+        return <FileText {...iconProps} />
+      case 'heart':
+        return <Heart {...iconProps} />
       default:
         return <Clock {...iconProps} />
     }
@@ -58,6 +68,7 @@ export default function ServiceCard({
         </Button>
         <Button
           variant="outline"
+          onClick={() => scrollToSection('contacto')}
           className="rounded-full px-6 py-3 text-base font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent text-gray-900"
         >
           Solicitar Cotización
