@@ -63,3 +63,12 @@ export {
   deleteDisabilityObservation,
   getDisabilitiesCount,
 } from './disability.actions'
+
+// Client Info actions (address, additional info, beneficiaries)
+export {
+  createOrUpdateClientAddress,
+  createOrUpdateClientAdditionalInfo,
+  addClientBeneficiary,
+  updateClientBeneficiary,
+  deleteClientBeneficiary,
+} from './client-info.actions'

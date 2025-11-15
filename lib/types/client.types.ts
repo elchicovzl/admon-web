@@ -43,6 +43,10 @@ export interface ClientWithRelations extends SafeClient {
   // Company-Employee relations
   company?: SafeClient | null
   employees?: SafeClient[]
+  // Address and additional info
+  address?: ClientAddress | null
+  additionalInfo?: ClientAdditionalInfo | null
+  beneficiaries?: ClientBeneficiary[]
 }
 
 export interface ClientNote {
@@ -120,4 +124,39 @@ export interface SafeClientCredential {
 
 export interface ClientCredentialWithPassword extends SafeClientCredential {
   password: string
+}
+
+// Client Address
+export interface ClientAddress {
+  id: string
+  clientId: string
+  departamento: string
+  municipio: string
+  ciudad?: string | null
+  direccion: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Client Additional Info
+export interface ClientAdditionalInfo {
+  id: string
+  clientId: string
+  actividadComercial?: string | null
+  salario?: number | null
+  novedadesIngreso: string[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Client Beneficiary
+export interface ClientBeneficiary {
+  id: string
+  clientId: string
+  tipoRelacion: string
+  nombreCompleto: string
+  identificationType: IdentificationType
+  identificationNumber: string
+  createdAt: Date
+  updatedAt: Date
 }

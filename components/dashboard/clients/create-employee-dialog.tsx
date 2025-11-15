@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient, assignEmployeeToCompany } from '@/lib/actions'
@@ -47,6 +48,7 @@ export function CreateEmployeeDialog({
   onClose,
   onEmployeeCreated,
 }: CreateEmployeeDialogProps) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
   const form = useForm<CreateClientInput>({
@@ -90,6 +92,9 @@ export function CreateEmployeeDialog({
       onEmployeeCreated(newEmployee)
       form.reset()
       onClose()
+
+      // Redirect to employee detail
+      router.push(`/dashboard/clients/${newEmployee.id}`)
     } catch (error) {
       console.error('Create employee error:', error)
       toast.error('Error inesperado al crear empleado')

@@ -137,6 +137,11 @@ model Client {
   disabilitiesAsClient   Disability[] @relation("DisabilityClient")
   disabilitiesAsEmployee Disability[] @relation("DisabilityEmployee")
 
+  // Address and additional info
+  address        ClientAddress?
+  additionalInfo ClientAdditionalInfo?
+  beneficiaries  ClientBeneficiary[]
+
   @@map("clients")
   @@index([companyId])
 }
@@ -289,4 +294,64 @@ model DisabilityObservation {
 
   @@map("disability_observations")
   @@index([disabilityId])
+}
+
+// Client Address model
+model ClientAddress {
+  id           String   @id @default(cuid())
+  clientId     String   @unique
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Geographic information
+  departamento String
+  municipio    String
+  ciudad       String?
+  direccion    String   @db.Text
+
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("client_addresses")
+}
+
+// Client Additional Info model
+model ClientAdditionalInfo {
+  id                 String   @id @default(cuid())
+  clientId           String   @unique
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Employment information
+  actividadComercial String?
+  salario            Decimal? @db.Decimal(12, 2)
+
+  // Income novelties (stored as JSON array)
+  novedadesIngreso   String[] @default([])
+
+  // Timestamps
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("client_additional_info")
+}
+
+// Client Beneficiary model
+model ClientBeneficiary {
+  id                   String             @id @default(cuid())
+  clientId             String
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Beneficiary information
+  tipoRelacion         String             // "hijo", "padre", "conyuge", "otro"
+  nombreCompleto       String
+  identificationType   IdentificationType
+  identificationNumber String
+
+  // Timestamps
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("client_beneficiaries")
+  @@index([clientId])
+  @@unique([clientId, identificationNumber])
 }

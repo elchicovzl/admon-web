@@ -13,6 +13,9 @@ import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-
 import { ClientDocumentsGallery } from '@/components/dashboard/clients/client-documents-gallery'
 import { ClientCredentialsSection } from '@/components/dashboard/clients/client-credentials-section'
 import { CompanyEmployeesSection } from '@/components/dashboard/clients/company-employees-section'
+import { ClientAddressSection } from '@/components/dashboard/clients/client-address-section'
+import { ClientAdditionalInfoSection } from '@/components/dashboard/clients/client-additional-info-section'
+import { ClientBeneficiariesSection } from '@/components/dashboard/clients/client-beneficiaries-section'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ClientType, IdentificationType } from '@prisma/client'
@@ -231,6 +234,21 @@ export default function ClientDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Address Section */}
+      <ClientAddressSection clientId={client.id} initialAddress={client.address} />
+
+      {/* Additional Info Section */}
+      <ClientAdditionalInfoSection
+        clientId={client.id}
+        initialInfo={client.additionalInfo}
+      />
+
+      {/* Beneficiaries Section */}
+      <ClientBeneficiariesSection
+        clientId={client.id}
+        initialBeneficiaries={client.beneficiaries || []}
+      />
 
       {/* Employees Section (only for companies) */}
       {client.clientType === ClientType.EMPRESA && (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient, updateClient } from '@/lib/actions'
@@ -40,6 +41,7 @@ interface ClientFormDialogProps {
   onClientCreated?: (client: SafeClient) => void
   onClientUpdated?: (clientId: string, updates: Partial<SafeClient>) => void
   editClient?: SafeClient | null
+  redirectOnCreate?: boolean
 }
 
 export function ClientFormDialog({
@@ -48,7 +50,9 @@ export function ClientFormDialog({
   onClientCreated,
   onClientUpdated,
   editClient,
+  redirectOnCreate = true,
 }: ClientFormDialogProps) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const isEditMode = !!editClient
 
@@ -114,6 +118,14 @@ export function ClientFormDialog({
           toast.success(result.message || 'Cliente creado exitosamente')
           if (result.data) {
             onClientCreated?.(result.data)
+
+            // Redirect to client detail if enabled
+            if (redirectOnCreate) {
+              form.reset()
+              onOpenChange(false)
+              router.push(`/dashboard/clients/${result.data.id}`)
+              return
+            }
           }
         } else {
           toast.error(result.error || 'Error al crear cliente')

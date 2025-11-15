@@ -214,6 +214,14 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
             createdAt: 'desc',
           },
         },
+        // Address and additional info
+        address: true,
+        additionalInfo: true,
+        beneficiaries: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
       },
     })
 
