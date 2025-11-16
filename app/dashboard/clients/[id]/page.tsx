@@ -235,6 +235,72 @@ export default function ClientDetailPage() {
         </Card>
       </div>
 
+      {/* Legal Representative Section (only for companies) */}
+      {client.clientType === ClientType.EMPRESA && client.legalRepresentative && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Representante Legal</CardTitle>
+            <CardDescription>
+              Información del representante legal de la empresa
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="flex items-start gap-3">
+                <User className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Nombre Completo</p>
+                  <p className="text-sm text-muted-foreground">
+                    {client.legalRepresentative.fullName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <CreditCard className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Identificación</p>
+                  <p className="text-sm text-muted-foreground">
+                    {getIdentificationTypeLabel(client.legalRepresentative.identificationType)}:{' '}
+                    {client.legalRepresentative.identificationNumber}
+                  </p>
+                </div>
+              </div>
+
+              {client.legalRepresentative.email && (
+                <div className="flex items-start gap-3">
+                  <Mail className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Email</p>
+                    <a
+                      href={`mailto:${client.legalRepresentative.email}`}
+                      className="text-sm text-muted-foreground hover:text-primary underline"
+                    >
+                      {client.legalRepresentative.email}
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {client.legalRepresentative.phone && (
+                <div className="flex items-start gap-3">
+                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Teléfono</p>
+                    <a
+                      href={`tel:${client.legalRepresentative.phone}`}
+                      className="text-sm text-muted-foreground hover:text-primary underline"
+                    >
+                      {client.legalRepresentative.phone}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Address Section */}
       <ClientAddressSection clientId={client.id} initialAddress={client.address} />
 

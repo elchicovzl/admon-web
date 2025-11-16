@@ -1,38 +1,84 @@
 import { z } from 'zod'
-import { ClientType, IdentificationType } from '@prisma/client'
+import { ClientType, IdentificationType, DocumentCategory } from '@prisma/client'
 
-// Create client schema
-export const createClientSchema = z.object({
+// Legal Representative schema (for companies)
+export const legalRepresentativeSchema = z.object({
   fullName: z
     .string()
-    .min(1, 'El nombre completo es requerido')
+    .min(1, 'El nombre del representante legal es requerido')
     .min(3, 'El nombre debe tener al menos 3 caracteres')
     .max(100, 'El nombre no puede exceder 100 caracteres'),
   identificationType: z.nativeEnum(IdentificationType, {
-    required_error: 'El tipo de identificación es requerido',
+    required_error: 'El tipo de identificación del representante es requerido',
   }),
   identificationNumber: z
     .string()
-    .min(1, 'El número de identificación es requerido')
+    .min(1, 'El número de identificación del representante es requerido')
     .min(5, 'El número de identificación debe tener al menos 5 caracteres')
     .max(20, 'El número de identificación no puede exceder 20 caracteres'),
-  clientType: z.nativeEnum(ClientType, {
-    required_error: 'El tipo de cliente es requerido',
-  }),
   email: z
     .string()
-    .min(1, 'El email es requerido')
-    .email('Email inválido'),
+    .email('Email inválido')
+    .optional()
+    .or(z.literal('')),
   phone: z
     .string()
-    .min(1, 'El teléfono es requerido')
     .min(7, 'El teléfono debe tener al menos 7 caracteres')
-    .max(20, 'El teléfono no puede exceder 20 caracteres'),
-  status: z
-    .string()
-    .default('ACTIVO')
-    .optional(),
+    .max(20, 'El teléfono no puede exceder 20 caracteres')
+    .optional()
+    .or(z.literal('')),
 })
+
+export type LegalRepresentativeInput = z.infer<typeof legalRepresentativeSchema>
+
+// Create client schema
+export const createClientSchema = z
+  .object({
+    fullName: z
+      .string()
+      .min(1, 'El nombre completo es requerido')
+      .min(3, 'El nombre debe tener al menos 3 caracteres')
+      .max(100, 'El nombre no puede exceder 100 caracteres'),
+    identificationType: z.nativeEnum(IdentificationType, {
+      required_error: 'El tipo de identificación es requerido',
+    }),
+    identificationNumber: z
+      .string()
+      .min(1, 'El número de identificación es requerido')
+      .min(5, 'El número de identificación debe tener al menos 5 caracteres')
+      .max(20, 'El número de identificación no puede exceder 20 caracteres'),
+    clientType: z.nativeEnum(ClientType, {
+      required_error: 'El tipo de cliente es requerido',
+    }),
+    email: z
+      .string()
+      .min(1, 'El email es requerido')
+      .email('Email inválido'),
+    phone: z
+      .string()
+      .min(1, 'El teléfono es requerido')
+      .min(7, 'El teléfono debe tener al menos 7 caracteres')
+      .max(20, 'El teléfono no puede exceder 20 caracteres'),
+    status: z
+      .string()
+      .default('ACTIVO')
+      .optional(),
+    // Legal representative (conditional - required for companies)
+    legalRepresentative: legalRepresentativeSchema.optional(),
+  })
+  .refine(
+    (data) => {
+      // If clientType is EMPRESA, legalRepresentative is required
+      if (data.clientType === ClientType.EMPRESA) {
+        return !!data.legalRepresentative
+      }
+      return true
+    },
+    {
+      message: 'El representante legal es requerido para empresas',
+      path: ['legalRepresentative'],
+    }
+  )
 
 export type CreateClientInput = z.infer<typeof createClientSchema>
 
@@ -110,6 +156,10 @@ export const uploadDocumentSchema = z.object({
     .number()
     .min(1, 'El tamaño del archivo debe ser mayor a 0')
     .max(10485760, 'El archivo no puede exceder 10MB'), // 10MB limit
+  category: z
+    .nativeEnum(DocumentCategory)
+    .default(DocumentCategory.GENERAL)
+    .optional(),
 })
 
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>

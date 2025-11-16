@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole } from '@prisma/client'
+import { UserRole, ClientType } from '@prisma/client'
 import {
   createClientSchema,
   updateClientSchema,
@@ -176,6 +176,7 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
             fileType: true,
             fileSize: true,
             s3Key: true,
+            category: true,
             clientId: true,
             uploadedById: true,
             createdAt: true,
@@ -216,12 +217,23 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
         },
         // Address and additional info
         address: true,
-        additionalInfo: true,
+        additionalInfo: {
+          select: {
+            id: true,
+            clientId: true,
+            actividadComercial: true,
+            salario: true,
+            novedadesIngreso: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         beneficiaries: {
           orderBy: {
             createdAt: 'desc',
           },
         },
+        legalRepresentative: true,
       },
     })
 
@@ -232,9 +244,20 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
       }
     }
 
+    // Convert Decimal to number for additionalInfo.salario
+    const clientData = {
+      ...client,
+      additionalInfo: client.additionalInfo
+        ? {
+            ...client.additionalInfo,
+            salario: client.additionalInfo.salario ? Number(client.additionalInfo.salario) : null,
+          }
+        : null,
+    }
+
     return {
       success: true,
-      data: client as ClientWithRelations,
+      data: clientData as ClientWithRelations,
     }
   } catch (error) {
     console.error('Get client error:', error)
@@ -266,7 +289,7 @@ export async function createClient(
       }
     }
 
-    const { fullName, identificationType, identificationNumber, clientType, email, phone, status } = validatedFields.data
+    const { fullName, identificationType, identificationNumber, clientType, email, phone, status, legalRepresentative } = validatedFields.data
 
     // Check if identification number already exists
     const existingClient = await prisma.client.findUnique({
@@ -280,7 +303,7 @@ export async function createClient(
       }
     }
 
-    // Create client
+    // Create client with legal representative if it's a company
     const client = await prisma.client.create({
       data: {
         fullName,
@@ -291,6 +314,18 @@ export async function createClient(
         phone,
         status: status || 'ACTIVO',
         createdById: authCheck.userId!,
+        // Create legal representative if client is a company
+        ...(clientType === ClientType.EMPRESA && legalRepresentative && {
+          legalRepresentative: {
+            create: {
+              fullName: legalRepresentative.fullName,
+              identificationType: legalRepresentative.identificationType,
+              identificationNumber: legalRepresentative.identificationNumber,
+              email: legalRepresentative.email || null,
+              phone: legalRepresentative.phone || null,
+            },
+          },
+        }),
       },
       select: {
         id: true,

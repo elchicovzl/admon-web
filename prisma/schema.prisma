@@ -107,6 +107,14 @@ enum ClientType {
   INDEPENDIENTE
 }
 
+enum DocumentCategory {
+  GENERAL
+  ARL
+  EPS
+  AFP
+  OTROS
+}
+
 // Client model
 model Client {
   id                   String             @id @default(cuid())
@@ -138,9 +146,10 @@ model Client {
   disabilitiesAsEmployee Disability[] @relation("DisabilityEmployee")
 
   // Address and additional info
-  address        ClientAddress?
-  additionalInfo ClientAdditionalInfo?
-  beneficiaries  ClientBeneficiary[]
+  address             ClientAddress?
+  additionalInfo      ClientAdditionalInfo?
+  beneficiaries       ClientBeneficiary[]
+  legalRepresentative LegalRepresentative?
 
   @@map("clients")
   @@index([companyId])
@@ -162,19 +171,21 @@ model ClientNote {
 
 // Client Document model
 model ClientDocument {
-  id           String   @id @default(cuid())
+  id           String           @id @default(cuid())
   fileName     String
   fileUrl      String
   fileType     String
   fileSize     Int
   s3Key        String
+  category     DocumentCategory @default(GENERAL)
   clientId     String
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   uploadedById String
-  uploadedBy   User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
+  uploadedBy   User             @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime         @default(now())
 
   @@map("client_documents")
+  @@index([clientId, category])
 }
 
 // Administrator type enum
@@ -354,4 +365,24 @@ model ClientBeneficiary {
   @@map("client_beneficiaries")
   @@index([clientId])
   @@unique([clientId, identificationNumber])
+}
+
+// Legal Representative model (for companies)
+model LegalRepresentative {
+  id                   String             @id @default(cuid())
+  clientId             String             @unique
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Representative information
+  fullName             String
+  identificationType   IdentificationType
+  identificationNumber String
+  email                String?
+  phone                String?
+
+  // Timestamps
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("legal_representatives")
 }

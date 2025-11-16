@@ -1,4 +1,4 @@
-import { ClientType, IdentificationType, AdministratorType } from '@prisma/client'
+import { ClientType, IdentificationType, AdministratorType, DocumentCategory } from '@prisma/client'
 
 export interface Client {
   id: string
@@ -47,6 +47,7 @@ export interface ClientWithRelations extends SafeClient {
   address?: ClientAddress | null
   additionalInfo?: ClientAdditionalInfo | null
   beneficiaries?: ClientBeneficiary[]
+  legalRepresentative?: LegalRepresentative | null
 }
 
 export interface ClientNote {
@@ -70,6 +71,7 @@ export interface ClientDocument {
   fileType: string
   fileSize: number
   s3Key: string
+  category: DocumentCategory
   clientId: string
   uploadedById: string
   createdAt: Date
@@ -84,6 +86,7 @@ export interface UploadDocumentData {
   fileName: string
   fileType: string
   fileSize: number
+  category?: DocumentCategory
 }
 
 export interface ClientCredential {
@@ -157,6 +160,19 @@ export interface ClientBeneficiary {
   nombreCompleto: string
   identificationType: IdentificationType
   identificationNumber: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Legal Representative (for companies)
+export interface LegalRepresentative {
+  id: string
+  clientId: string
+  fullName: string
+  identificationType: IdentificationType
+  identificationNumber: string
+  email?: string | null
+  phone?: string | null
   createdAt: Date
   updatedAt: Date
 }
