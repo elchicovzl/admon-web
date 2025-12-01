@@ -128,6 +128,21 @@ importers:
       embla-carousel-react:
         specifier: 8.5.1
         version: 8.5.1(react@19.1.1)
+      filepond:
+        specifier: ^4.32.10
+        version: 4.32.10
+      filepond-plugin-file-validate-size:
+        specifier: ^2.2.8
+        version: 2.2.8(filepond@4.32.10)
+      filepond-plugin-file-validate-type:
+        specifier: ^1.2.9
+        version: 1.2.9(filepond@4.32.10)
+      filepond-plugin-image-preview:
+        specifier: ^4.6.12
+        version: 4.6.12(filepond@4.32.10)
+      filepond-plugin-pdf-preview:
+        specifier: ^1.0.4
+        version: 1.0.4(filepond@4.32.10)
       geist:
         specifier: ^1.3.1
         version: 1.5.1(next@15.2.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1))
@@ -167,6 +182,9 @@ importers:
       react-dropzone:
         specifier: ^14.3.8
         version: 14.3.8(react@19.1.1)
+      react-filepond:
+        specifier: ^7.1.3
+        version: 7.1.3(filepond@4.32.10)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       react-hook-form:
         specifier: ^7.60.0
         version: 7.62.0(react@19.1.1)
@@ -2076,6 +2094,29 @@ packages:
     resolution: {integrity: sha512-QgXo+mXTe8ljeqUFaX3QVHc5osSItJ/Km+xpocx0aSqWGMSCf6qYs/VnzZgS864Pjn5iceMRFigeAV7AfTlaig==}
     engines: {node: '>= 12'}
 
+  filepond-plugin-file-validate-size@2.2.8:
+    resolution: {integrity: sha512-yzb8scATmkWqPTP7oKQz6L8WwJm6Xmgc/fuq6DFGRaLz0I7372BUvBsxagBk/hypMIjvieNzhggm33Y60x3rcw==}
+    peerDependencies:
+      filepond: '>=3.1.2 <5.x'
+
+  filepond-plugin-file-validate-type@1.2.9:
+    resolution: {integrity: sha512-Tzv07aNdZvjUXDRA3XL16QMEvh6llDrXlcZ6W0eTHQ+taHaVg/JKJTFs/AViO+6ZcpPCcQStbhYEL2HoS+vldw==}
+    peerDependencies:
+      filepond: '>=1.x <5.x'
+
+  filepond-plugin-image-preview@4.6.12:
+    resolution: {integrity: sha512-Y8ETX5QVV0mbPB0586UH8AUmG9tZg8PuN5bdEAIlZVJFTct5ebViJ7+Am94/VhTPjLqZjBf1zmDq5JU6XRsZKw==}
+    peerDependencies:
+      filepond: '>=4.x <5.x'
+
+  filepond-plugin-pdf-preview@1.0.4:
+    resolution: {integrity: sha512-i1sMTfPMTirm5LWYfAihmbr/Ef9UWRNWNL3aKtmluZ+iTAtcNsJJOnXtbptRrF2ngrbr9vpXF5q9/bnCKkbuTA==}
+    peerDependencies:
+      filepond: '>=4.x <5.x'
+
+  filepond@4.32.10:
+    resolution: {integrity: sha512-uflpIL+rfAgsYk7HgXugh7ELlHNHLTPtIHfvuq0gv3x2qNfVxdGA6T7RPxMh9Vji8ysXstXkDHVXQ4hY38MPTQ==}
+
   fraction.js@4.3.7:
     resolution: {integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==}
 
@@ -2408,6 +2449,13 @@ packages:
     engines: {node: '>= 10.13'}
     peerDependencies:
       react: '>= 16.8 || 18.0.0'
+
+  react-filepond@7.1.3:
+    resolution: {integrity: sha512-uQOCZt+YXnBfYn6OxK6vsgSoUROkBu/ZahcfIJnK94c1ZeSAS84L/XKDADq/8Adx/Lz88VtVWvUpTXnNpmjHFQ==}
+    peerDependencies:
+      filepond: '>=3.7.x < 5.x'
+      react: 16 - 19
+      react-dom: 16 - 19
 
   react-hook-form@7.62.0:
     resolution: {integrity: sha512-7KWFejc98xqG/F4bAxpL41NB3o1nnvQO1RWZT3TqRZYL8RryQETGfEdVnJN2fy1crCiBLLjkRBVK05j24FxJGA==}
@@ -4829,6 +4877,24 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  filepond-plugin-file-validate-size@2.2.8(filepond@4.32.10):
+    dependencies:
+      filepond: 4.32.10
+
+  filepond-plugin-file-validate-type@1.2.9(filepond@4.32.10):
+    dependencies:
+      filepond: 4.32.10
+
+  filepond-plugin-image-preview@4.6.12(filepond@4.32.10):
+    dependencies:
+      filepond: 4.32.10
+
+  filepond-plugin-pdf-preview@1.0.4(filepond@4.32.10):
+    dependencies:
+      filepond: 4.32.10
+
+  filepond@4.32.10: {}
+
   fraction.js@4.3.7: {}
 
   framer-motion@12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
@@ -5097,6 +5163,12 @@ snapshots:
       file-selector: 2.1.2
       prop-types: 15.8.1
       react: 19.1.1
+
+  react-filepond@7.1.3(filepond@4.32.10)(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+    dependencies:
+      filepond: 4.32.10
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
   react-hook-form@7.62.0(react@19.1.1):
     dependencies:

@@ -2,13 +2,16 @@
 
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole } from '@prisma/client'
+import { UserRole, ClientType } from '@prisma/client'
 import {
   createClientSchema,
   updateClientSchema,
   toggleClientStatusSchema,
   addClientNoteSchema,
   deleteClientNoteSchema,
+  assignEmployeeToCompanySchema,
+  removeEmployeeFromCompanySchema,
+  getCompanyEmployeesSchema,
   type CreateClientInput,
   type UpdateClientInput,
 } from '@/lib/validations/client.schema'
@@ -56,6 +59,7 @@ export async function getClients(): Promise<ActionResponse<SafeClient[]>> {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        companyId: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -99,11 +103,49 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        companyId: true,
         createdBy: {
           select: {
             id: true,
             name: true,
             email: true,
+          },
+        },
+        // Company relation (for employees)
+        company: {
+          select: {
+            id: true,
+            fullName: true,
+            identificationType: true,
+            identificationNumber: true,
+            clientType: true,
+            email: true,
+            phone: true,
+            status: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+            companyId: true,
+          },
+        },
+        // Employees relation (for companies)
+        employees: {
+          select: {
+            id: true,
+            fullName: true,
+            identificationType: true,
+            identificationNumber: true,
+            clientType: true,
+            email: true,
+            phone: true,
+            status: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+            companyId: true,
+          },
+          orderBy: {
+            fullName: 'asc',
           },
         },
         notes: {
@@ -134,6 +176,7 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
             fileType: true,
             fileSize: true,
             s3Key: true,
+            category: true,
             clientId: true,
             uploadedById: true,
             createdAt: true,
@@ -172,6 +215,25 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
             createdAt: 'desc',
           },
         },
+        // Address and additional info
+        address: true,
+        additionalInfo: {
+          select: {
+            id: true,
+            clientId: true,
+            actividadComercial: true,
+            salario: true,
+            novedadesIngreso: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        beneficiaries: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+        legalRepresentative: true,
       },
     })
 
@@ -182,9 +244,20 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
       }
     }
 
+    // Convert Decimal to number for additionalInfo.salario
+    const clientData = {
+      ...client,
+      additionalInfo: client.additionalInfo
+        ? {
+            ...client.additionalInfo,
+            salario: client.additionalInfo.salario ? Number(client.additionalInfo.salario) : null,
+          }
+        : null,
+    }
+
     return {
       success: true,
-      data: client,
+      data: clientData as ClientWithRelations,
     }
   } catch (error) {
     console.error('Get client error:', error)
@@ -216,7 +289,7 @@ export async function createClient(
       }
     }
 
-    const { fullName, identificationType, identificationNumber, clientType, email, phone, status } = validatedFields.data
+    const { fullName, identificationType, identificationNumber, clientType, email, phone, status, legalRepresentative } = validatedFields.data
 
     // Check if identification number already exists
     const existingClient = await prisma.client.findUnique({
@@ -230,7 +303,7 @@ export async function createClient(
       }
     }
 
-    // Create client
+    // Create client with legal representative if it's a company
     const client = await prisma.client.create({
       data: {
         fullName,
@@ -241,6 +314,18 @@ export async function createClient(
         phone,
         status: status || 'ACTIVO',
         createdById: authCheck.userId!,
+        // Create legal representative if client is a company
+        ...(clientType === ClientType.EMPRESA && legalRepresentative && {
+          legalRepresentative: {
+            create: {
+              fullName: legalRepresentative.fullName,
+              identificationType: legalRepresentative.identificationType,
+              identificationNumber: legalRepresentative.identificationNumber,
+              email: legalRepresentative.email || null,
+              phone: legalRepresentative.phone || null,
+            },
+          },
+        }),
       },
       select: {
         id: true,
@@ -254,6 +339,7 @@ export async function createClient(
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        companyId: true,
       },
     })
 
@@ -337,6 +423,7 @@ export async function updateClient(
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        companyId: true,
       },
     })
 
@@ -554,6 +641,233 @@ export async function getClientsCount(): Promise<
     return {
       success: false,
       error: 'Error al obtener conteo de clientes',
+    }
+  }
+}
+
+/**
+ * Assign employee to company
+ */
+export async function assignEmployeeToCompany(
+  employeeId: string,
+  companyId: string
+): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    // Validate input
+    const validatedFields = assignEmployeeToCompanySchema.safeParse({ employeeId, companyId })
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    // Check if employee exists
+    const employee = await prisma.client.findUnique({ where: { id: employeeId } })
+    if (!employee) {
+      return { success: false, error: 'Empleado no encontrado' }
+    }
+
+    // Check if employee is actually an employee type
+    if (employee.clientType !== 'EMPLEADO') {
+      return { success: false, error: 'Solo clientes tipo EMPLEADO pueden ser asignados a una empresa' }
+    }
+
+    // Check if employee already has a company
+    if (employee.companyId) {
+      return { success: false, error: 'El empleado ya está asignado a una empresa' }
+    }
+
+    // Check if company exists
+    const company = await prisma.client.findUnique({ where: { id: companyId } })
+    if (!company) {
+      return { success: false, error: 'Empresa no encontrada' }
+    }
+
+    // Check if company is actually a company type
+    if (company.clientType !== 'EMPRESA') {
+      return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados asignados' }
+    }
+
+    // Assign employee to company
+    await prisma.client.update({
+      where: { id: employeeId },
+      data: { companyId },
+    })
+
+    revalidatePath('/dashboard/clients')
+    revalidatePath(`/dashboard/clients/${employeeId}`)
+    revalidatePath(`/dashboard/clients/${companyId}`)
+
+    return {
+      success: true,
+      message: 'Empleado asignado exitosamente a la empresa',
+    }
+  } catch (error) {
+    console.error('Assign employee to company error:', error)
+    return { success: false, error: 'Error al asignar empleado a la empresa' }
+  }
+}
+
+/**
+ * Remove employee from company
+ */
+export async function removeEmployeeFromCompany(employeeId: string): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    // Validate input
+    const validatedFields = removeEmployeeFromCompanySchema.safeParse({ employeeId })
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    // Check if employee exists
+    const employee = await prisma.client.findUnique({ where: { id: employeeId } })
+    if (!employee) {
+      return { success: false, error: 'Empleado no encontrado' }
+    }
+
+    // Check if employee has a company
+    if (!employee.companyId) {
+      return { success: false, error: 'El empleado no está asignado a ninguna empresa' }
+    }
+
+    const companyId = employee.companyId
+
+    // Remove employee from company
+    await prisma.client.update({
+      where: { id: employeeId },
+      data: { companyId: null },
+    })
+
+    revalidatePath('/dashboard/clients')
+    revalidatePath(`/dashboard/clients/${employeeId}`)
+    revalidatePath(`/dashboard/clients/${companyId}`)
+
+    return {
+      success: true,
+      message: 'Empleado desasignado exitosamente de la empresa',
+    }
+  } catch (error) {
+    console.error('Remove employee from company error:', error)
+    return { success: false, error: 'Error al desasignar empleado de la empresa' }
+  }
+}
+
+/**
+ * Get available employees (not assigned to any company)
+ */
+export async function getAvailableEmployees(): Promise<ActionResponse<SafeClient[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const employees = await prisma.client.findMany({
+      where: {
+        clientType: 'EMPLEADO',
+        companyId: null,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        identificationType: true,
+        identificationNumber: true,
+        clientType: true,
+        email: true,
+        phone: true,
+        status: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        companyId: true,
+      },
+      orderBy: {
+        fullName: 'asc',
+      },
+    })
+
+    return {
+      success: true,
+      data: employees,
+    }
+  } catch (error) {
+    console.error('Get available employees error:', error)
+    return {
+      success: false,
+      error: 'Error al obtener empleados disponibles',
+    }
+  }
+}
+
+/**
+ * Get company employees
+ */
+export async function getCompanyEmployees(companyId: string): Promise<ActionResponse<SafeClient[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    // Validate input
+    const validatedFields = getCompanyEmployeesSchema.safeParse({ companyId })
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    // Check if company exists
+    const company = await prisma.client.findUnique({ where: { id: companyId } })
+    if (!company) {
+      return { success: false, error: 'Empresa no encontrada' }
+    }
+
+    // Check if company is actually a company type
+    if (company.clientType !== 'EMPRESA') {
+      return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados' }
+    }
+
+    const employees = await prisma.client.findMany({
+      where: {
+        companyId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        identificationType: true,
+        identificationNumber: true,
+        clientType: true,
+        email: true,
+        phone: true,
+        status: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        companyId: true,
+      },
+      orderBy: {
+        fullName: 'asc',
+      },
+    })
+
+    return {
+      success: true,
+      data: employees,
+    }
+  } catch (error) {
+    console.error('Get company employees error:', error)
+    return {
+      success: false,
+      error: 'Error al obtener empleados de la empresa',
     }
   }
 }

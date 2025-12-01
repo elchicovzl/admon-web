@@ -48,6 +48,13 @@ model User {
   createdDisabilities       Disability[]            @relation("DisabilityCreatedBy")
   disabilityObservations    DisabilityObservation[] @relation("DisabilityObservationCreatedBy")
 
+  // Affiliation relations
+  createdAffiliations            Affiliation[]            @relation("AffiliationCreatedBy")
+  assignedSubProcesses           AffiliationSubProcess[]  @relation("SubProcessAssignedTo")
+  uploadedAffiliationDocuments   AffiliationDocument[]    @relation("AffiliationDocumentUploadedBy")
+  affiliationObservations        AffiliationObservation[] @relation("AffiliationObservationCreatedBy")
+  affiliationStatusLogs          AffiliationStatusLog[]   @relation("StatusLogChangedBy")
+
   @@map("users")
 }
 
@@ -107,6 +114,14 @@ enum ClientType {
   INDEPENDIENTE
 }
 
+enum DocumentCategory {
+  GENERAL
+  ARL
+  EPS
+  AFP
+  OTROS
+}
+
 // Client model
 model Client {
   id                   String             @id @default(cuid())
@@ -128,11 +143,26 @@ model Client {
   documents   ClientDocument[]
   credentials ClientCredential[]
 
+  // Company-Employee relationship (self-referential)
+  companyId String?
+  company   Client?  @relation("CompanyEmployees", fields: [companyId], references: [id], onDelete: SetNull)
+  employees Client[] @relation("CompanyEmployees")
+
   // Disability relations (both as client and employee)
   disabilitiesAsClient   Disability[] @relation("DisabilityClient")
   disabilitiesAsEmployee Disability[] @relation("DisabilityEmployee")
 
+  // Affiliation relations
+  affiliations Affiliation[]
+
+  // Address and additional info
+  address             ClientAddress?
+  additionalInfo      ClientAdditionalInfo?
+  beneficiaries       ClientBeneficiary[]
+  legalRepresentative LegalRepresentative?
+
   @@map("clients")
+  @@index([companyId])
 }
 
 // Client Note model
@@ -151,19 +181,21 @@ model ClientNote {
 
 // Client Document model
 model ClientDocument {
-  id           String   @id @default(cuid())
+  id           String           @id @default(cuid())
   fileName     String
   fileUrl      String
   fileType     String
   fileSize     Int
   s3Key        String
+  category     DocumentCategory @default(GENERAL)
   clientId     String
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client       Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
   uploadedById String
-  uploadedBy   User     @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
+  uploadedBy   User             @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  createdAt    DateTime         @default(now())
 
   @@map("client_documents")
+  @@index([clientId, category])
 }
 
 // Administrator type enum
@@ -283,4 +315,241 @@ model DisabilityObservation {
 
   @@map("disability_observations")
   @@index([disabilityId])
+}
+
+// Client Address model
+model ClientAddress {
+  id           String   @id @default(cuid())
+  clientId     String   @unique
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Geographic information
+  departamento String
+  municipio    String
+  ciudad       String?
+  direccion    String   @db.Text
+
+  // Timestamps
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("client_addresses")
+}
+
+// Client Additional Info model
+model ClientAdditionalInfo {
+  id                 String   @id @default(cuid())
+  clientId           String   @unique
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Employment information
+  actividadComercial String?
+  salario            Decimal? @db.Decimal(12, 2)
+
+  // Income novelties (stored as JSON array)
+  novedadesIngreso   String[] @default([])
+
+  // Timestamps
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("client_additional_info")
+}
+
+// Client Beneficiary model
+model ClientBeneficiary {
+  id                   String             @id @default(cuid())
+  clientId             String
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Beneficiary information
+  tipoRelacion         String             // "hijo", "padre", "conyuge", "otro"
+  nombreCompleto       String
+  identificationType   IdentificationType
+  identificationNumber String
+
+  // Timestamps
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("client_beneficiaries")
+  @@index([clientId])
+  @@unique([clientId, identificationNumber])
+}
+
+// Legal Representative model (for companies)
+model LegalRepresentative {
+  id                   String             @id @default(cuid())
+  clientId             String             @unique
+  client               Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Representative information
+  fullName             String
+  identificationType   IdentificationType
+  identificationNumber String
+  email                String?
+  phone                String?
+
+  // Timestamps
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@map("legal_representatives")
+}
+
+// ========================================
+// AFFILIATION MODULE (Afiliaciones a Seguridad Social)
+// ========================================
+
+// Sub-process types
+enum AffiliationSubProcessType {
+  ARL   // Administradora de Riesgos Laborales
+  EPS   // Entidad Promotora de Salud
+  AFP   // Administradora de Fondos de Pensiones
+  CCF   // Caja de Compensación Familiar
+}
+
+// Sub-process status states
+enum AffiliationSubProcessStatus {
+  NOT_STARTED      // Sin iniciar
+  IN_PROGRESS      // En proceso
+  PENDING_SUPPORT  // Pendiente de soporte
+  IN_REVIEW        // En revisión
+  COMPLETED        // Terminado
+  RETURNED         // Devuelto/Rechazado
+}
+
+// Document categories for affiliation documents
+enum AffiliationDocumentCategory {
+  ARL_DOCS
+  EPS_DOCS
+  AFP_DOCS
+  CCF_DOCS
+  GENERAL
+}
+
+// Main Affiliation model
+model Affiliation {
+  id               String                  @id @default(cuid())
+  clientId         String
+  client           Client                  @relation(fields: [clientId], references: [id])
+
+  // Audit trail
+  createdById      String
+  createdBy        User                    @relation("AffiliationCreatedBy", fields: [createdById], references: [id])
+
+  // Soft delete
+  isActive         Boolean                 @default(true)
+
+  // Timestamps
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  // Relations
+  subProcesses     AffiliationSubProcess[]
+
+  @@map("affiliations")
+  @@index([clientId])
+  @@index([createdById])
+}
+
+// Sub-process model (ARL, EPS, AFP, CCF)
+model AffiliationSubProcess {
+  id                String                        @id @default(cuid())
+  affiliationId     String
+  affiliation       Affiliation                   @relation(fields: [affiliationId], references: [id], onDelete: Cascade)
+
+  // Sub-process configuration
+  type              AffiliationSubProcessType
+  status            AffiliationSubProcessStatus   @default(NOT_STARTED)
+
+  // Manager assignment (nullable - can be unassigned)
+  assignedToId      String?
+  assignedTo        User?                         @relation("SubProcessAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  // Status change reason (for RETURNED status)
+  statusReason      String?                       @db.Text
+
+  // Timestamps
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+
+  // Relations
+  documents         AffiliationDocument[]
+  observations      AffiliationObservation[]
+  statusLogs        AffiliationStatusLog[]
+
+  @@map("affiliation_subprocesses")
+  @@index([affiliationId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([type])
+}
+
+// Document model for sub-process documents
+model AffiliationDocument {
+  id             String                        @id @default(cuid())
+  subProcessId   String
+  subProcess     AffiliationSubProcess         @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+
+  // File metadata
+  fileName       String
+  fileUrl        String
+  fileType       String
+  fileSize       Int
+  s3Key          String
+  category       AffiliationDocumentCategory   @default(GENERAL)
+
+  // Audit trail
+  uploadedById   String
+  uploadedBy     User                          @relation("AffiliationDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  // Timestamps
+  createdAt      DateTime                      @default(now())
+
+  @@map("affiliation_documents")
+  @@index([subProcessId])
+  @@index([category])
+}
+
+// Observation/Note model for sub-processes
+model AffiliationObservation {
+  id            String                  @id @default(cuid())
+  content       String                  @db.Text
+  subProcessId  String
+  subProcess    AffiliationSubProcess   @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+
+  // Audit trail
+  createdById   String
+  createdBy     User                    @relation("AffiliationObservationCreatedBy", fields: [createdById], references: [id])
+
+  // Timestamps
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  @@map("affiliation_observations")
+  @@index([subProcessId])
+}
+
+// Status change log for audit trail
+model AffiliationStatusLog {
+  id                String                        @id @default(cuid())
+  subProcessId      String
+  subProcess        AffiliationSubProcess         @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+
+  // Status change details
+  fromStatus        AffiliationSubProcessStatus?  // Null for initial status
+  toStatus          AffiliationSubProcessStatus
+  reason            String?                       @db.Text
+
+  // Audit trail
+  changedById       String
+  changedBy         User                          @relation("StatusLogChangedBy", fields: [changedById], references: [id])
+
+  // Timestamp
+  createdAt         DateTime                      @default(now())
+
+  @@map("affiliation_status_logs")
+  @@index([subProcessId])
+  @@index([createdAt])
 }

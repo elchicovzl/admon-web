@@ -115,7 +115,12 @@ export function ClientsTable({ clients, onClientUpdated, onEditClient }: Clients
           ) : (
             clients.map((client) => (
               <TableRow key={client.id}>
-                <TableCell className="font-medium">{client.fullName}</TableCell>
+                <TableCell
+                  className="font-medium cursor-pointer hover:text-primary hover:underline transition-colors"
+                  onClick={() => handleViewDetails(client)}
+                >
+                  {client.fullName}
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-col">
                     <span className="text-xs text-muted-foreground">

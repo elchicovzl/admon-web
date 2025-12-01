@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole } from '@prisma/client'
+import { UserRole, DocumentCategory } from '@prisma/client'
 import {
   uploadDocumentSchema,
   deleteDocumentSchema,
@@ -31,19 +31,20 @@ async function requireManagerOrAdmin() {
 }
 
 /**
- * Initialize S3 Client
+ * Initialize S3 Client for Cloudflare R2
  */
-function getS3Client() {
-  const region = process.env.AWS_REGION
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY
+function getR2Client() {
+  const accountId = process.env.R2_ACCOUNT_ID
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
 
-  if (!region || !accessKeyId || !secretAccessKey) {
-    throw new Error('AWS credentials not configured')
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error('Cloudflare R2 credentials not configured')
   }
 
   return new S3Client({
-    region,
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId,
       secretAccessKey,
@@ -52,13 +53,28 @@ function getS3Client() {
 }
 
 /**
- * Generate a presigned URL for uploading a file to S3
+ * Get category folder name
+ */
+function getCategoryFolder(category: DocumentCategory): string {
+  const folders = {
+    [DocumentCategory.GENERAL]: 'general',
+    [DocumentCategory.ARL]: 'procesos/arl',
+    [DocumentCategory.EPS]: 'procesos/eps',
+    [DocumentCategory.AFP]: 'procesos/afp',
+    [DocumentCategory.OTROS]: 'procesos/otros',
+  }
+  return folders[category]
+}
+
+/**
+ * Generate a presigned URL for uploading a file to Cloudflare R2
  */
 export async function generateUploadUrl(
   clientId: string,
   fileName: string,
   fileType: string,
-  fileSize: number
+  fileSize: number,
+  category: DocumentCategory = DocumentCategory.GENERAL
 ): Promise<ActionResponse<{ uploadUrl: string; s3Key: string }>> {
   try {
     const authCheck = await requireManagerOrAdmin()
@@ -72,6 +88,7 @@ export async function generateUploadUrl(
       fileName,
       fileType,
       fileSize,
+      category,
     })
 
     if (!validatedFields.success) {
@@ -87,28 +104,29 @@ export async function generateUploadUrl(
       return { success: false, error: 'Cliente no encontrado' }
     }
 
-    // Check AWS credentials
-    if (!process.env.AWS_S3_BUCKET) {
+    // Check R2 credentials
+    if (!process.env.R2_BUCKET_NAME) {
       return {
         success: false,
-        error: 'Configuración de S3 no disponible',
+        error: 'Configuración de R2 no disponible',
       }
     }
 
-    // Generate unique S3 key
+    // Generate unique R2 key with category folder structure
     const timestamp = Date.now()
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_')
-    const s3Key = `clients/${clientId}/${timestamp}-${sanitizedFileName}`
+    const categoryFolder = getCategoryFolder(category)
+    const s3Key = `clients/${clientId}/${categoryFolder}/${timestamp}-${sanitizedFileName}`
 
-    // Create S3 client and generate presigned URL
-    const s3Client = getS3Client()
+    // Create R2 client and generate presigned URL
+    const r2Client = getR2Client()
     const command = new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET,
+      Bucket: process.env.R2_BUCKET_NAME,
       Key: s3Key,
       ContentType: fileType,
     })
 
-    const uploadUrl = await getSignedUrl(s3Client, command, {
+    const uploadUrl = await getSignedUrl(r2Client, command, {
       expiresIn: 300, // 5 minutes
     })
 
@@ -136,7 +154,8 @@ export async function confirmUpload(
   fileName: string,
   fileType: string,
   fileSize: number,
-  s3Key: string
+  s3Key: string,
+  category: DocumentCategory = DocumentCategory.GENERAL
 ): Promise<ActionResponse<ClientDocument>> {
   try {
     const authCheck = await requireManagerOrAdmin()
@@ -150,6 +169,7 @@ export async function confirmUpload(
       fileName,
       fileType,
       fileSize,
+      category,
     })
 
     if (!validatedFields.success) {
@@ -165,10 +185,15 @@ export async function confirmUpload(
       return { success: false, error: 'Cliente no encontrado' }
     }
 
-    // Generate file URL
-    const region = process.env.AWS_REGION
-    const bucket = process.env.AWS_S3_BUCKET
-    const fileUrl = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`
+    // Generate file URL for R2
+    const publicUrl = process.env.R2_PUBLIC_URL
+    const bucket = process.env.R2_BUCKET_NAME
+    const accountId = process.env.R2_ACCOUNT_ID
+
+    // Use public URL if configured, otherwise use R2 endpoint
+    const fileUrl = publicUrl
+      ? `${publicUrl}/${s3Key}`
+      : `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${s3Key}`
 
     // Save document metadata to database
     const document = await prisma.clientDocument.create({
@@ -178,6 +203,7 @@ export async function confirmUpload(
         fileType,
         fileSize,
         s3Key,
+        category,
         clientId,
         uploadedById: authCheck.userId!,
       },
@@ -188,6 +214,7 @@ export async function confirmUpload(
         fileType: true,
         fileSize: true,
         s3Key: true,
+        category: true,
         clientId: true,
         uploadedById: true,
         createdAt: true,
@@ -218,7 +245,7 @@ export async function confirmUpload(
 }
 
 /**
- * Delete a document from S3 and database
+ * Delete a document from R2 and database
  */
 export async function deleteDocument(documentId: string): Promise<ActionResponse> {
   try {
@@ -242,17 +269,17 @@ export async function deleteDocument(documentId: string): Promise<ActionResponse
       return { success: false, error: 'Documento no encontrado' }
     }
 
-    // Delete from S3
+    // Delete from R2
     try {
-      const s3Client = getS3Client()
+      const r2Client = getR2Client()
       const command = new DeleteObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET!,
+        Bucket: process.env.R2_BUCKET_NAME!,
         Key: document.s3Key,
       })
-      await s3Client.send(command)
-    } catch (s3Error) {
-      console.error('S3 deletion error:', s3Error)
-      // Continue with database deletion even if S3 deletion fails
+      await r2Client.send(command)
+    } catch (r2Error) {
+      console.error('R2 deletion error:', r2Error)
+      // Continue with database deletion even if R2 deletion fails
     }
 
     // Delete from database
@@ -279,7 +306,8 @@ export async function deleteDocument(documentId: string): Promise<ActionResponse
  * Get documents for a client
  */
 export async function getClientDocuments(
-  clientId: string
+  clientId: string,
+  category?: DocumentCategory
 ): Promise<ActionResponse<ClientDocument[]>> {
   try {
     const authCheck = await requireManagerOrAdmin()
@@ -288,7 +316,10 @@ export async function getClientDocuments(
     }
 
     const documents = await prisma.clientDocument.findMany({
-      where: { clientId },
+      where: {
+        clientId,
+        ...(category && { category }),
+      },
       select: {
         id: true,
         fileName: true,
@@ -296,6 +327,7 @@ export async function getClientDocuments(
         fileType: true,
         fileSize: true,
         s3Key: true,
+        category: true,
         clientId: true,
         uploadedById: true,
         createdAt: true,

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   UserCircle,
   FileText,
+  ClipboardList,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -71,6 +72,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
       title: 'Clientes',
       href: '/dashboard/clients',
       icon: UserCircle,
+      roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
+    },
+    {
+      title: 'Afiliaciones',
+      href: '/dashboard/affiliations',
+      icon: ClipboardList,
       roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
     },
     {
