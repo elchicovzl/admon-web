@@ -171,7 +171,7 @@ export default function ActionPlanSection() {
             ]}
           />
           <ActionPlanCard
-            iconBgColor="bg-orange-50"
+            iconBgColor="bg-[#F1AD32]/10"
             icon={conversionRedesignsIcon}
             title="Visión"
             description="Ser una empresa reconocida a nivel regional y lograr la confianza y credibilidad de

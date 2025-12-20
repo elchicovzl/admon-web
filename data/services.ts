@@ -38,6 +38,7 @@ export interface FeatureItem {
   title: string
   description: string
   included: string[]
+  image?: string
 }
 
 export interface BenefitItem {
@@ -374,7 +375,8 @@ export const servicePages: ServicePageData[] = [
           'Gestión completa del proceso de traslado',
           'Asesoría para elegir la mejor EPS',
           'Si no logramos el traslado, le devolvemos su dinero'
-        ]
+        ],
+        image: '/images/services/signing.png'
       },
       {
         title: 'Inclusión de Beneficiarios',
@@ -465,7 +467,8 @@ export const servicePages: ServicePageData[] = [
           'Órdenes Judiciales (J)',
           'Correcciones (N)',
           'Liquidación masiva para grandes empresas'
-        ]
+        ],
+        image: '/images/services/support.png'
       },
       {
         title: 'Validación UGPP',
@@ -474,7 +477,8 @@ export const servicePages: ServicePageData[] = [
           'Validación de documentación',
           'Verificación del estado de seguridad social',
           'Prevención de requerimientos y multas'
-        ]
+        ],
+        image: '/images/services/chart.png'
       }
     ],
     benefits: [

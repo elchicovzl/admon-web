@@ -19,7 +19,8 @@ export function WhyChooseUsSection() {
       description: "La tranquilidad de estar siempre al día. Evita dolores de cabeza y posibles sanciones de entidades como la UGPP, Ministerios, EPS, ARL, CCF y Fondos de Pensiones.",
       color: "bg-blue-500",
       iconColor: "text-blue-500",
-      bgColor: "bg-blue-50/50"
+      bgColor: "bg-blue-50/50",
+      image: "/images/benefits/compliance.png"
     },
     {
       icon: Clock,
@@ -27,7 +28,8 @@ export function WhyChooseUsSection() {
       description: "¡Libérate de cargas administrativas! Deja la burocracia en nuestras manos y dedica tu tiempo y energía a lo que realmente importa: tu trabajo o el núcleo de tu negocio.",
       color: "bg-green-500",
       iconColor: "text-green-500",
-      bgColor: "bg-green-50/50"
+      bgColor: "bg-green-50/50",
+      image: "/images/benefits/time.png"
     },
     {
       icon: CheckCircle2,
@@ -35,7 +37,8 @@ export function WhyChooseUsSection() {
       description: "Somos expertos en el sistema de Seguridad Social colombiano. Realizamos las afiliaciones y te entregamos las planillas PILA listas para su pago, de forma correcta y puntual.",
       color: "bg-purple-500",
       iconColor: "text-purple-500",
-      bgColor: "bg-purple-50/50"
+      bgColor: "bg-purple-50/50",
+      image: "/images/benefits/efficiency.png"
     },
     {
       icon: AlertTriangle,
@@ -43,7 +46,8 @@ export function WhyChooseUsSection() {
       description: "Una gestión incorrecta puede acarrear multas, intereses por mora y problemas en la prestación de servicios de salud o en tu futura pensión. Con nosotros, ese riesgo desaparece.",
       color: "bg-red-500",
       iconColor: "text-red-500",
-      bgColor: "bg-red-50/50"
+      bgColor: "bg-red-50/50",
+      image: "/images/benefits/risk.png"
     },
     {
       icon: Lightbulb,
@@ -51,7 +55,8 @@ export function WhyChooseUsSection() {
       description: "No solo gestionamos tus afiliaciones, te asesoramos para que tomes siempre las mejores decisiones sobre tu cobertura y la de tu familia o equipo de trabajo.",
       color: "bg-amber-500",
       iconColor: "text-amber-500",
-      bgColor: "bg-amber-50/50"
+      bgColor: "bg-amber-50/50",
+      image: "/images/benefits/advice.png"
     }
   ]
 
@@ -110,6 +115,12 @@ export function WhyChooseUsSection() {
                   <h3 className="text-xl font-bold text-gray-900 mb-4 leading-tight">
                     {benefit.title}
                   </h3>
+                  {/* Optional Image */}
+                  {benefit.image && (
+                    <div className="mb-4 rounded-xl overflow-hidden h-32 w-full relative">
+                      <img src={benefit.image} alt={benefit.title} className="object-cover w-full h-full" />
+                    </div>
+                  )}
                   <p className="text-gray-600 leading-relaxed flex-grow">
                     {benefit.description}
                   </p>

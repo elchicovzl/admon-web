@@ -30,7 +30,7 @@ export default function HeroSection() {
             </h1>
             <p className="text-lg md:text-2xl text-gray-600 mb-8 max-w-lg">
               Afiliacion a {' '}
-              <span className="font-semibold text-orange-400">
+              <span className="font-semibold text-[#F1AD32]">
                 <Typewriter
                   words={[
                     'EPS (Salud)',
@@ -48,21 +48,25 @@ export default function HeroSection() {
               </span>{' '}
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
-              <Button
-                size="lg"
-                className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-4 text-lg font-medium w-full sm:w-auto"
-              >
-                Asesorias GRATIS
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="rounded-full px-8 py-4 text-lg font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent w-full sm:w-auto"
-              >
-                Servicios
-                <Eye className="ml-2 w-5 h-5" />
-              </Button>
+              <a href="#contacto" className="cursor-pointer">
+                <Button
+                  size="lg"
+                  className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-4 text-lg font-medium w-full sm:w-auto cursor-pointer"
+                >
+                  Asesorias GRATIS
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </a>
+              <a href="#features" className="cursor-pointer">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full px-8 py-4 text-lg font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent w-full sm:w-auto cursor-pointer"
+                >
+                  Servicios
+                  <Eye className="ml-2 w-5 h-5" />
+                </Button>
+              </a>
             </div>
           </div>
 
@@ -81,7 +85,7 @@ export default function HeroSection() {
 
               {/* Floating UI elements */}
               {/* +18% Increase CRO card */}
-              <div className="absolute -top-4 right-8 bg-blue-100 border border-blue-200 rounded-lg p-3 shadow-lg z-10">
+              {/* <div className="absolute -top-4 right-8 bg-blue-100 border border-blue-200 rounded-lg p-3 shadow-lg z-10">
                 <div className="text-2xl font-bold text-blue-900">+18%</div>
                 <div className="text-sm text-blue-700">Aumento CRO</div>
                 <div className="flex items-center mt-1">
@@ -95,15 +99,15 @@ export default function HeroSection() {
                     <div className="w-1 h-5 bg-gray-800 rounded"></div>
                   </div>
                 </div>
-              </div>
+              </div> */}
 
               {/* Brand badge */}
-              <div className="absolute bottom-8 right-4 bg-purple-600 text-white rounded-full px-4 py-2 shadow-lg z-10">
+              {/* <div className="absolute bottom-9 right-4 bg-purple-600 text-white rounded-full px-4 py-2 shadow-lg z-10">
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 text-white">✦</div>
-                  <span className="font-medium font-serif">ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span></span>
+                  <span className="font-medium font-serif">ADMINISTRACIÓN <span className="text-[#F1AD32] font-serif">SEGURA</span></span>
                 </div>
-              </div>
+              </div> */}
             </div>
           </div>
         </div>
@@ -116,7 +120,7 @@ export default function HeroSection() {
             </h1>
             <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
               Afiliacion a {' '}
-              <span className="font-semibold text-orange-400">
+              <span className="font-semibold text-[#F1AD32]">
                 <Typewriter
                   words={[
                     'EPS (Salud)',
@@ -134,21 +138,25 @@ export default function HeroSection() {
               </span>
             </p>
             <div className="flex flex-col gap-4 max-w-md mx-auto">
-              <Button
-                size="lg"
-                className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-4 text-lg font-medium w-full"
-              >
-                Asesorias GRATIS
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="rounded-full px-8 py-4 text-lg font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent w-full"
-              >
-                Servicios
-                <Eye className="ml-2 w-5 h-5" />
-              </Button>
+              <a href="#contacto" className="cursor-pointer">
+                <Button
+                  size="lg"
+                  className="bg-black text-white hover:bg-gray-800 rounded-full px-8 py-4 text-lg font-medium w-full cursor-pointer"
+                >
+                  Asesorias GRATIS
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Button>
+              </a>
+              <a href="#features" className="cursor-pointer">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="rounded-full px-8 py-4 text-lg font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent w-full cursor-pointer"
+                >
+                  Servicios
+                  <Eye className="ml-2 w-5 h-5" />
+                </Button>
+              </a>
             </div>
           </div>
         </div>

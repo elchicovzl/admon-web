@@ -1,23 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { ControlledMenu, MenuItem, SubMenu, useHover, useMenuState } from '@szhsin/react-menu'
+import '@szhsin/react-menu/dist/index.css'
+import '@szhsin/react-menu/dist/transitions/slide.css'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Menu, X, ChevronDown, Shield, FileText, Heart, Car, Stethoscope, Umbrella, PawPrint, Building2, Package } from 'lucide-react'
+import { Menu as MenuIcon, X, ChevronDown, Shield, FileText, Heart, Car, Stethoscope, Umbrella, PawPrint, Building2, Package } from 'lucide-react'
 import { useSmoothScroll } from '@/hooks/use-smooth-scroll'
 import { cn } from '@/lib/utils'
 
@@ -67,10 +63,20 @@ export default function Header() {
   const [servicesOpen, setServicesOpen] = useState(false)
   const [insuranceOpen, setInsuranceOpen] = useState(false)
   const { scrollToSection } = useSmoothScroll()
+  const pathname = usePathname()
+
+  // Hover menu state
+  const menuRef = useRef<HTMLButtonElement>(null!)
+  const [menuState, toggleMenu] = useMenuState({ transition: true })
+  const { anchorProps, hoverProps } = useHover(menuState.state, toggleMenu)
 
   const handleNavClick = (href: string) => {
-    const sectionId = href.replace('#', '')
-    scrollToSection(sectionId)
+    if (pathname !== '/') {
+      window.location.href = '/' + href
+    } else {
+      const sectionId = href.replace('#', '')
+      scrollToSection(sectionId)
+    }
     setMobileMenuOpen(false)
   }
 
@@ -79,82 +85,96 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <div className="flex items-center space-x-3">
-            <Link href="/" className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <Link href="/" className="flex items-center space-x-2">
               <Image
-                src="/images/logo.png"
+                src="/images/logoadmon2.webp"
                 alt="Administración Segura Logo"
                 width={80}
                 height={80}
                 className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
                 priority
               />
-              <span className="text-xl font-bold text-gray-900 font-serif">
-                ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span>
+              <span className="text-xl text-gray-900" style={{ fontFamily: 'Anton, sans-serif' }}>
+                ADMINISTRACIÓN
               </span>
+              <span className="bg-[#F1AD32] text-white px-1 py-0.5 font-bold text-xs">SEGURA</span>
             </Link>
           </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center space-x-1">
-            {/* Services Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm">
-                  Servicios
-                  <ChevronDown className="ml-1 h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[480px] p-4">
-                {/* Main Services */}
-                <DropdownMenuLabel className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Servicios Principales
-                </DropdownMenuLabel>
-                {mainServices.map((service) => (
-                  <DropdownMenuItem key={service.href} asChild>
+            {/* Services Dropdown with hover */}
+            <button
+              ref={menuRef}
+              className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm cursor-pointer"
+              {...anchorProps}
+            >
+              Servicios
+              <ChevronDown className="ml-1 h-4 w-4" />
+            </button>
+
+            <ControlledMenu
+              {...hoverProps}
+              {...menuState}
+              anchorRef={menuRef}
+              onClose={() => toggleMenu(false)}
+              menuClassName="!bg-white !border !border-gray-200 !rounded-xl !shadow-xl !p-2 !min-w-[280px]"
+            >
+              {/* Main Services */}
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Servicios Principales
+              </div>
+              {mainServices.map((service) => (
+                <MenuItem key={service.href} className="!p-0 !rounded-lg hover:!bg-gray-50">
+                  <Link
+                    href={service.href}
+                    className="flex items-start gap-3 p-3 w-full"
+                  >
+                    <div className={`p-2 rounded-lg bg-gray-100 ${service.color}`}>
+                      <service.icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">{service.title}</div>
+                      <p className="text-sm text-gray-500">{service.description}</p>
+                    </div>
+                  </Link>
+                </MenuItem>
+              ))}
+
+              <hr className="my-2 border-gray-200" />
+
+              {/* Insurance SubMenu */}
+              <SubMenu
+                label={
+                  <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Car className="w-4 h-4 text-amber-500" />
+                    Seguros
+                  </span>
+                }
+                className="!rounded-lg"
+                menuClassName="!bg-white !border !border-gray-200 !rounded-xl !shadow-xl !p-2"
+              >
+                {insuranceServices.map((service) => (
+                  <MenuItem key={service.href} className="!p-0 !rounded-lg hover:!bg-amber-50">
                     <Link
                       href={service.href}
-                      className="flex items-start gap-3 p-3 rounded-lg cursor-pointer"
+                      className="flex items-center gap-2 p-2 w-full text-sm"
                     >
-                      <div className={`p-2 rounded-lg bg-gray-100 ${service.color}`}>
-                        <service.icon className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900">{service.title}</div>
-                        <p className="text-sm text-gray-500">{service.description}</p>
-                      </div>
+                      <service.icon className="w-4 h-4 text-amber-500" />
+                      <span className="text-gray-700">{service.title}</span>
                     </Link>
-                  </DropdownMenuItem>
+                  </MenuItem>
                 ))}
-
-                <DropdownMenuSeparator className="my-3" />
-
-                {/* Insurance Services */}
-                <DropdownMenuLabel className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Seguros
-                </DropdownMenuLabel>
-                <div className="grid grid-cols-2 gap-1">
-                  {insuranceServices.map((service) => (
-                    <DropdownMenuItem key={service.href} asChild>
-                      <Link
-                        href={service.href}
-                        className="flex items-center gap-2 p-2 rounded-lg cursor-pointer text-sm"
-                      >
-                        <service.icon className="w-4 h-4 text-amber-500" />
-                        <span className="text-gray-700">{service.title}</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  ))}
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </SubMenu>
+            </ControlledMenu>
 
             {/* Other nav items */}
             {navigation.map((item) => (
               <button
                 key={item.label}
                 onClick={() => handleNavClick(item.href)}
-                className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm"
+                className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm cursor-pointer"
               >
                 {item.label}
               </button>
@@ -164,7 +184,7 @@ export default function Header() {
           {/* CTA Button */}
           <div className="hidden lg:block">
             <Button
-              className="bg-black text-white hover:bg-gray-800 rounded-full px-6 text-sm"
+              className="bg-black text-white hover:bg-gray-800 rounded-full px-6 text-sm cursor-pointer"
               onClick={() => handleNavClick('#contacto')}
             >
               Contáctanos
@@ -182,7 +202,7 @@ export default function Header() {
               {mobileMenuOpen ? (
                 <X className="h-6 w-6" />
               ) : (
-                <Menu className="h-6 w-6" />
+                <MenuIcon className="h-6 w-6" />
               )}
             </Button>
           </div>
@@ -194,7 +214,7 @@ export default function Header() {
             <nav className="flex flex-col space-y-2">
               {/* Services Collapsible */}
               <Collapsible open={servicesOpen} onOpenChange={setServicesOpen}>
-                <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-700 hover:text-orange-500 font-medium transition-colors px-4 py-3 rounded hover:bg-orange-50">
+                <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-700 hover:text-[#F1AD32] font-medium transition-colors px-4 py-3 rounded hover:bg-[#F1AD32]/10 cursor-pointer">
                   <span>Servicios</span>
                   <ChevronDown className={cn("h-4 w-4 transition-transform", servicesOpen && "rotate-180")} />
                 </CollapsibleTrigger>
@@ -217,7 +237,7 @@ export default function Header() {
 
                   {/* Insurance Collapsible */}
                   <Collapsible open={insuranceOpen} onOpenChange={setInsuranceOpen}>
-                    <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-600 hover:text-orange-500 font-medium transition-colors px-4 py-2 rounded hover:bg-orange-50">
+                    <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-600 hover:text-[#F1AD32] font-medium transition-colors px-4 py-2 rounded hover:bg-[#F1AD32]/10 cursor-pointer">
                       <span className="text-sm">Seguros</span>
                       <ChevronDown className={cn("h-3 w-3 transition-transform", insuranceOpen && "rotate-180")} />
                     </CollapsibleTrigger>
@@ -243,14 +263,14 @@ export default function Header() {
                 <button
                   key={item.label}
                   onClick={() => handleNavClick(item.href)}
-                  className="text-gray-700 hover:text-orange-500 font-medium transition-colors px-4 py-3 rounded hover:bg-orange-50 text-left"
+                  className="text-gray-700 hover:text-[#F1AD32] font-medium transition-colors px-4 py-3 rounded hover:bg-[#F1AD32]/10 text-left cursor-pointer"
                 >
                   {item.label}
                 </button>
               ))}
 
               <Button
-                className="bg-black text-white hover:bg-gray-800 rounded-full w-full mt-4"
+                className="bg-black text-white hover:bg-gray-800 rounded-full w-full mt-4 cursor-pointer"
                 onClick={() => handleNavClick('#contacto')}
               >
                 Contáctanos

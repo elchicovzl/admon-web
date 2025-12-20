@@ -10,6 +10,7 @@ export interface CarouselItem {
   description: string
   id: number
   icon: React.ReactNode
+  image?: string
 }
 
 export interface CarouselProps {
@@ -27,31 +28,36 @@ const DEFAULT_ITEMS: CarouselItem[] = [
     title: 'EPS (Salud)',
     description: 'Afiliación a entidades promotoras de salud para trabajadores.',
     id: 1,
-    icon: <Hospital className="h-[16px] w-[16px] text-white" />
+    icon: <Hospital className="h-[16px] w-[16px] text-white" />,
+    image: '/images/slider/eps.png'
   },
   {
     title: 'Pensión',
     description: 'Gestión de afiliaciones a fondos de pensiones obligatorias.',
     id: 2,
-    icon: <PiggyBank className="h-[16px] w-[16px] text-white" />
+    icon: <PiggyBank className="h-[16px] w-[16px] text-white" />,
+    image: '/images/slider/pension.png'
   },
   {
     title: 'ARL (Riesgos Laborales)',
     description: 'Protección contra accidentes laborales y enfermedades profesionales.',
     id: 3,
-    icon: <HardHat className="h-[16px] w-[16px] text-white" />
+    icon: <HardHat className="h-[16px] w-[16px] text-white" />,
+    image: '/images/slider/arl.png'
   },
   {
     title: 'Caja de Compensación',
     description: 'Servicios de bienestar y subsidios para trabajadores y familias.',
     id: 4,
-    icon: <Home className="h-[16px] w-[16px] text-white" />
+    icon: <Home className="h-[16px] w-[16px] text-white" />,
+    image: '/images/slider/caja.png'
   },
   {
     title: 'Asesoría Integral',
     description: 'Acompañamiento completo en seguridad social para empresas.',
     id: 5,
-    icon: <Users2 className="h-[16px] w-[16px] text-white" />
+    icon: <Users2 className="h-[16px] w-[16px] text-white" />,
+    image: '/images/slider/asesoria.png'
   }
 ]
 
@@ -144,18 +150,17 @@ export default function MotionCarousel({
   const dragProps = loop
     ? {}
     : {
-        dragConstraints: {
-          left: -trackItemOffset * (carouselItems.length - 1),
-          right: 0
-        }
+      dragConstraints: {
+        left: -trackItemOffset * (carouselItems.length - 1),
+        right: 0
       }
+    }
 
   return (
     <div
       ref={containerRef}
-      className={`relative overflow-hidden p-4 ${
-        round ? 'rounded-full border border-border' : 'rounded-[24px] border border-border'
-      }`}
+      className={`relative overflow-hidden p-4 ${round ? 'rounded-full border border-border' : 'rounded-[24px] border border-border'
+        }`}
       style={{
         width: `${baseWidth}px`,
         ...(round && { height: `${baseWidth}px` })
@@ -184,11 +189,10 @@ export default function MotionCarousel({
           return (
             <motion.div
               key={index}
-              className={`relative shrink-0 flex flex-col ${
-                round
-                  ? 'items-center justify-center text-center bg-primary border-0'
-                  : 'items-start justify-between bg-card border border-border rounded-[12px]'
-              } overflow-hidden cursor-grab active:cursor-grabbing`}
+              className={`relative shrink-0 flex flex-col ${round
+                ? 'items-center justify-center text-center bg-primary border-0'
+                : 'items-start justify-between bg-card border border-border rounded-[12px]'
+                } overflow-hidden cursor-grab active:cursor-grabbing`}
               style={{
                 width: itemWidth,
                 height: round ? itemWidth : '100%',
@@ -197,15 +201,52 @@ export default function MotionCarousel({
               }}
               transition={effectiveTransition}
             >
-              <div className={`${round ? 'p-0 m-0' : 'mb-4 p-5'}`}>
-                <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-primary">
-                  {item.icon}
-                </span>
-              </div>
-              <div className="p-5">
-                <div className="mb-1 font-black text-lg text-primary-foreground">{item.title}</div>
-                <p className="text-sm text-primary-foreground/80">{item.description}</p>
-              </div>
+              {round && item.image ? (
+                <>
+                  <div className="absolute inset-0 z-0">
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/50" />
+                  </div>
+                  <div className="relative z-10 flex flex-col items-center justify-center p-6 h-full text-white">
+                    <div className="mb-4 p-3 rounded-full bg-white/10 backdrop-blur-md border border-white/20">
+                      {/* Clone icon with distinct color if needed, or just render. The icon is ReactNode, usually generic. 
+                            The original code used a wrapper with bg-primary. Here we use glassmorphism.
+                        */}
+                      {React.isValidElement(item.icon) ? React.cloneElement(item.icon, { className: "h-6 w-6 text-white" } as any) : item.icon}
+                    </div>
+                    <div className="mb-2 font-black text-xl text-white tracking-tight">{item.title}</div>
+                    <p className="text-sm font-medium text-white/90 leading-relaxed max-w-[200px] mx-auto">{item.description}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={`${round ? 'p-0 m-0' : 'mb-4 p-0'}`}>
+                    {item.image ? (
+                      <div className="w-full h-40 relative rounded-t-[12px] overflow-hidden mb-4">
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="p-5">
+                        <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-primary">
+                          {item.icon}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <div className="mb-1 font-black text-lg text-primary-foreground">{item.title}</div>
+                    <p className="text-sm text-primary-foreground/80">{item.description}</p>
+                  </div>
+                </>
+              )}
             </motion.div>
           )
         })}
@@ -215,15 +256,14 @@ export default function MotionCarousel({
           {items.map((_, index) => (
             <motion.div
               key={index}
-              className={`h-2 w-2 rounded-full cursor-pointer transition-colors duration-150 ${
-                currentIndex % items.length === index
-                  ? round
-                    ? 'bg-white'
-                    : 'bg-primary'
-                  : round
-                    ? 'bg-muted-foreground/40'
-                    : 'bg-muted-foreground/40'
-              }`}
+              className={`h-2 w-2 rounded-full cursor-pointer transition-colors duration-150 ${currentIndex % items.length === index
+                ? round
+                  ? 'bg-white'
+                  : 'bg-primary'
+                : round
+                  ? 'bg-muted-foreground/40'
+                  : 'bg-muted-foreground/40'
+                }`}
               animate={{
                 scale: currentIndex % items.length === index ? 1.2 : 1
               }}

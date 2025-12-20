@@ -22,7 +22,7 @@ export function AboutSection() {
   ]
 
   const visionItems = [
-    { icon: Award, text: "Liderazgo Regional", gradient: "from-orange-400 to-orange-600", glowColor: "rgba(251, 146, 60, 0.3)" },
+    { icon: Award, text: "Liderazgo Regional", gradient: "from-[#F1AD32] to-[#d99a2b]", glowColor: "rgba(241, 173, 50, 0.3)" },
     { icon: Target, text: "Procesos Ágiles", gradient: "from-cyan-400 to-cyan-600", glowColor: "rgba(34, 211, 238, 0.3)" },
     { icon: CheckCircle, text: "Transparencia Legal", gradient: "from-emerald-400 to-emerald-600", glowColor: "rgba(52, 211, 153, 0.3)" },
   ]
@@ -44,7 +44,7 @@ export function AboutSection() {
           style={{ animationDelay: "2s" }}
         />
         <div
-          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-orange-400/10 to-pink-400/10 rounded-full blur-3xl animate-float"
+          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-br from-[#F1AD32]/10 to-pink-400/10 rounded-full blur-3xl animate-float"
           style={{ animationDelay: "4s" }}
         />
 
@@ -171,15 +171,15 @@ export function AboutSection() {
           >
             <Card className="relative overflow-hidden border-0 bg-white/80 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-all duration-500 h-full">
               {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 via-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-gradient-to-br from-[#F1AD32]/5 via-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
               <CardContent className="p-8 lg:p-10 relative z-10">
                 {/* Glass effect icon */}
                 <div className="flex items-center gap-4 mb-8">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500 to-pink-600 rounded-2xl blur-xl opacity-50 animate-pulse-glow" />
+                    <div className="absolute inset-0 bg-gradient-to-br from-[#F1AD32] to-[#d99a2b] rounded-2xl blur-xl opacity-50 animate-pulse-glow" />
                     <div className="relative glass-effect-strong p-4 rounded-2xl">
-                      <Eye className="w-8 h-8 text-orange-600" />
+                      <Eye className="w-8 h-8 text-[#F1AD32]" />
                     </div>
                   </div>
                   <h2 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">

@@ -2,73 +2,70 @@ import { FAQItem } from '@/lib/types'
 
 export const faqs: FAQItem[] = [
   {
-    id: 'que-es-auditoria-cro',
-    question: '¿Qué es una auditoría CRO?',
-    answer: 'Una auditoría de Optimización de Tasa de Conversión (CRO) es un análisis integral de tu sitio web diseñado para identificar áreas donde los usuarios pueden estar encontrando fricción o abandonando el proceso, y proporcionar recomendaciones accionables para mejorar las tasas de conversión de tu sitio web (ventas, registros, leads).',
+    id: 'que-es-seguridad-social',
+    question: '¿Qué es la seguridad social en Colombia?',
+    answer: 'La seguridad social es un sistema integral que protege a los trabajadores y sus familias. Incluye salud (EPS), pensión, riesgos laborales (ARL) y caja de compensación familiar. Es obligatoria para todos los trabajadores dependientes e independientes con ingresos iguales o superiores a un salario mínimo.',
     category: 'general'
   },
   {
-    id: 'por-que-importantes-auditorias-cro',
-    question: '¿Por qué son importantes las auditorías CRO?',
-    answer: 'Las auditorías CRO son cruciales porque te ayudan a maximizar el valor del tráfico existente de tu sitio web. En lugar de gastar más en anuncios para conseguir nuevos visitantes, una auditoría CRO te ayuda a convertir más de los visitantes que ya tienes, generando mayores ingresos y un mejor retorno de inversión.',
-    category: 'beneficios'
+    id: 'quienes-deben-afiliarse',
+    question: '¿Quiénes deben afiliarse a la seguridad social?',
+    answer: 'Deben afiliarse todos los trabajadores dependientes (empleados con contrato laboral), trabajadores independientes con ingresos de un salario mínimo o más, contratistas, y pensionados. Las empresas tienen la obligación de afiliar a sus empleados desde el primer día de trabajo.',
+    category: 'general'
   },
   {
-    id: 'tiempo-entrega-auditoria',
-    question: '¿Cuánto tiempo tardaré en recibir mi auditoría?',
-    answer: 'El tiempo de entrega varía según el paquete de auditoría que elijas. Nuestra Auditoría Gratuita se entrega en 2 días, la Auditoría CRO Básica en 3-4 días, y la Auditoría CRO Esencial en 2 semanas.',
+    id: 'tiempo-afiliacion',
+    question: '¿Cuánto tiempo toma realizar una afiliación?',
+    answer: 'El proceso de afiliación generalmente toma entre 1 a 3 días hábiles dependiendo de la entidad. Con nuestro servicio, nos encargamos de toda la gestión para que el proceso sea rápido y sin complicaciones. Usted solo debe proporcionar los documentos requeridos.',
     category: 'proceso'
   },
   {
-    id: 'que-incluye-auditoria',
-    question: '¿Qué incluye la auditoría?',
-    answer: 'Cada paquete de auditoría incluye diferentes entregables. Por ejemplo, la Auditoría CRO Esencial incluye una revisión profunda del sitio web, 10 rediseños de secciones, una lista de verificación de más de 40 mejoras accionables, un reporte en PDF de más de 25 páginas, y acceso a archivos de diseño amigables para desarrolladores.',
+    id: 'documentos-necesarios',
+    question: '¿Qué documentos necesito para afiliarme?',
+    answer: 'Los documentos básicos son: cédula de ciudadanía, formulario de afiliación diligenciado, y certificado de ingresos o contrato laboral. Para beneficiarios adicionales se requiere documento de identidad y registro civil que acredite el parentesco. Nosotros le guiamos en todo el proceso.',
+    category: 'proceso'
+  },
+  {
+    id: 'que-es-pila',
+    question: '¿Qué es la planilla PILA y para qué sirve?',
+    answer: 'La Planilla Integrada de Liquidación de Aportes (PILA) es el mecanismo unificado para pagar los aportes a seguridad social (salud, pensión, ARL) y parafiscales. Permite a empleadores e independientes cumplir con sus obligaciones en un solo pago mensual.',
     category: 'servicios'
   },
   {
-    id: 'implementacion-recomendaciones',
-    question: '¿Pueden implementar las recomendaciones mencionadas en mi auditoría CRO?',
-    answer: 'Nuestro servicio principal es proporcionar la auditoría y las recomendaciones. Aunque no ofrecemos servicios completos de implementación, nuestras recomendaciones están diseñadas para ser claras y accionables, incluyendo a menudo archivos de diseño amigables para desarrolladores para facilitar la implementación por parte de tu equipo o un desarrollador.',
+    id: 'recobro-incapacidades',
+    question: '¿Cómo funciona el recobro de incapacidades?',
+    answer: 'Cuando un trabajador presenta incapacidad médica, la empresa paga inicialmente el salario. Nosotros gestionamos el recobro ante la EPS o ARL según corresponda, recuperando el dinero que legalmente debe asumir la entidad. Este proceso puede tomar entre 30 a 90 días dependiendo de la entidad.',
     category: 'servicios'
   },
   {
-    id: 'tipos-negocios',
-    question: '¿Con qué tipos de negocios trabajan?',
-    answer: 'Nos especializamos en negocios de e-commerce de varios tamaños, desde startups hasta marcas establecidas, que buscan optimizar sus tiendas online para mejores conversiones y crecimiento.',
+    id: 'diferencia-eps-contributiva-subsidiada',
+    question: '¿Cuál es la diferencia entre EPS contributiva y subsidiada?',
+    answer: 'La EPS contributiva es para personas con capacidad de pago (empleados, independientes, pensionados) que aportan mensualmente. La EPS subsidiada es para personas sin capacidad de pago, clasificadas en niveles 1 y 2 del SISBEN, cuya afiliación es financiada por el Estado.',
+    category: 'general'
+  },
+  {
+    id: 'empresas-independientes',
+    question: '¿Atienden tanto a empresas como a independientes?',
+    answer: 'Sí, brindamos servicios tanto a empresas de todos los tamaños como a trabajadores independientes. Para empresas ofrecemos gestión completa de nómina y seguridad social. Para independientes, asesoría personalizada en afiliaciones y liquidación de aportes.',
     category: 'clientes'
   },
   {
-    id: 'construir-tienda-desde-cero',
-    question: '¿Pueden construir mi tienda online desde cero?',
-    answer: 'No, nuestro enfoque está en la Optimización de Tasa de Conversión (CRO) para sitios web de e-commerce existentes. Ayudamos a mejorar el rendimiento de tu tienda actual en lugar de construir nuevas desde cero.',
+    id: 'costos-servicios',
+    question: '¿Cuáles son los costos de sus servicios?',
+    answer: 'Ofrecemos asesorías gratuitas para evaluar su situación. Los costos de nuestros servicios varían según el tipo de gestión requerida. Contáctenos para una cotización personalizada sin compromiso. Nuestro objetivo es ahorrarle tiempo y evitar sanciones costosas.',
     category: 'servicios'
   },
   {
-    id: 'politica-reembolso',
-    question: '¿Cuál es su política de reembolso?',
-    answer: 'Ofrecemos una garantía de devolución de dinero de 30 días en nuestros paquetes de auditoría CRO pagos. Si no estás satisfecho con los insights y recomendaciones proporcionados, puedes solicitar un reembolso completo dentro de los 30 días posteriores a recibir tu auditoría.',
-    category: 'politicas'
-  },
-  {
-    id: 'que-herramientas-usan',
-    question: '¿Qué herramientas utilizan para las auditorías?',
-    answer: 'Utilizamos una combinación de herramientas profesionales de análisis web, pruebas de usabilidad, análisis heurístico, y evaluación manual detallada. Esto incluye análisis de datos de comportamiento del usuario, mapas de calor, y revisión de mejores prácticas de UX/UI específicas para e-commerce.',
-    category: 'proceso'
-  },
-  {
-    id: 'resultados-esperados',
-    question: '¿Qué resultados puedo esperar después de implementar las recomendaciones?',
-    answer: 'Los resultados varían según el sitio web y la implementación, pero nuestros clientes típicamente ven mejoras del 15-30% en sus tasas de conversión. Algunos han logrado aumentos de hasta 50% en conversiones y mejoras significativas en el valor promedio del pedido (AOV).',
-    category: 'resultados'
+    id: 'sanciones-no-afiliacion',
+    question: '¿Qué sanciones existen por no afiliar a los trabajadores?',
+    answer: 'Las empresas que no afilian a sus trabajadores pueden enfrentar multas de hasta 500 salarios mínimos, además de responder directamente por accidentes laborales y enfermedades. También pueden ser sancionadas por evasión de aportes. Nosotros le ayudamos a estar siempre al día.',
+    category: 'general'
   }
 ]
 
 export const faqCategories = [
   { id: 'general', name: 'General', icon: '❓' },
-  { id: 'beneficios', name: 'Beneficios', icon: '💡' },
   { id: 'proceso', name: 'Proceso', icon: '⚙️' },
   { id: 'servicios', name: 'Servicios', icon: '🛠️' },
-  { id: 'clientes', name: 'Clientes', icon: '👥' },
-  { id: 'politicas', name: 'Políticas', icon: '📋' },
-  { id: 'resultados', name: 'Resultados', icon: '📈' }
+  { id: 'clientes', name: 'Clientes', icon: '👥' }
 ]

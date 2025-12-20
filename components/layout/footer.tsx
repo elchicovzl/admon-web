@@ -30,14 +30,14 @@ export default function Footer() {
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
                 <Image
-                  src="/images/logo.png"
+                  src="/images/logoadmon2.webp"
                   alt="Administración Segura Logo"
                   width={32}
                   height={32}
                   className="w-8 h-8 object-contain"
                 />
               </div>
-              <span className="text-xl md:text-2xl font-bold font-serif">ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span></span>
+              <span className="text-xl md:text-2xl" style={{ fontFamily: 'Anton, sans-serif' }}>ADMINISTRACIÓN <span className="bg-[#F1AD32] text-white px-2 py-0.5">SEGURA</span></span>
             </div>
           </div>
 
@@ -96,7 +96,7 @@ export default function Footer() {
         {/* Bottom section */}
         <div className="mt-12 pt-8 border-t border-gray-700">
           <div className="flex flex-col md:flex-row justify-between items-center text-gray-400 text-sm">
-            <p>© <span className="font-serif">ADMINISTRACIÓN <span className="text-orange-400 font-serif">SEGURA</span></span> {currentYear} Una empresa doble makers</p>
+            <p>© <span className="font-serif">ADMINISTRACIÓN <span className="text-[#F1AD32] font-serif">SEGURA</span></span> {currentYear} Una empresa doble makers</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <Link 
                 href="/privacy" 
