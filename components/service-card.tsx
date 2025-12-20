@@ -1,12 +1,14 @@
 'use client'
 
 import type React from "react"
+import Link from "next/link"
 import { CheckCircle, ArrowRight, Clock, TrendingUp, Star, Shield, FileText, Heart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll"
 
 interface ServiceCardProps {
+  id: string
   name: string
   description: string
   services: string[]
@@ -17,6 +19,7 @@ interface ServiceCardProps {
 }
 
 export default function ServiceCard({
+  id,
   name,
   description,
   services,
@@ -62,10 +65,12 @@ export default function ServiceCard({
       </div>
 
       <div className="flex flex-col space-y-3 mb-8">
-        <Button className="bg-black text-white hover:bg-gray-800 rounded-full px-6 py-3 text-base font-medium">
-          Conocer Más
-          <ArrowRight className="ml-2 w-4 h-4" />
-        </Button>
+        <Link href={`/servicios/${id}`}>
+          <Button className="bg-black text-white hover:bg-gray-800 rounded-full px-6 py-3 text-base font-medium w-full">
+            Conocer Más
+            <ArrowRight className="ml-2 w-4 h-4" />
+          </Button>
+        </Link>
         <Button
           variant="outline"
           onClick={() => scrollToSection('contacto')}
