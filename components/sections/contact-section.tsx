@@ -220,14 +220,14 @@ export default function ContactSection() {
             <div className="mt-8 grid grid-cols-2 gap-4">
               <Button
                 variant="outline"
-                className="border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white bg-transparent"
                 onClick={() => window.open("https://wa.me/573197941064", "_blank")}
               >
                 WhatsApp
               </Button>
               <Button
                 variant="outline"
-                className="border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white bg-transparent"
                 onClick={() => window.open("tel:+573197941064")}
               >
                 Llamar Ahora
