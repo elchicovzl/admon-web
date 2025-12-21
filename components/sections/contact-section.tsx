@@ -1,15 +1,20 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MapPin, Mail, Phone, Clock } from "lucide-react"
+import { MapPin, Mail, Phone, Clock, Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { submitContactForm } from "@/lib/actions/contact.actions"
 
 export default function ContactSection() {
+  const [isPending, startTransition] = useTransition()
+  const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({
+    type: 'idle',
+    message: '',
+  })
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -22,11 +27,33 @@ export default function ContactSection() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+    // Clear status when user starts typing
+    if (status.type !== 'idle') {
+      setStatus({ type: 'idle', message: '' })
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Form submitted:", formData)
+
+    startTransition(async () => {
+      const result = await submitContactForm(formData)
+
+      if (result.success) {
+        setStatus({ type: 'success', message: result.message || '¡Mensaje enviado!' })
+        // Reset form on success
+        setFormData({
+          fullName: "",
+          email: "",
+          subject: "",
+          phone: "",
+          message: "",
+          acceptTerms: false,
+        })
+      } else {
+        setStatus({ type: 'error', message: result.error || 'Error al enviar' })
+      }
+    })
   }
 
   return (
@@ -164,6 +191,21 @@ export default function ContactSection() {
           <div>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-8 text-balance">Envíanos un mensaje</h2>
 
+            {/* Status Messages */}
+            {status.type === 'success' && (
+              <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                <p className="text-green-400">{status.message}</p>
+              </div>
+            )}
+
+            {status.type === 'error' && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <p className="text-red-400">{status.message}</p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -172,7 +214,8 @@ export default function ContactSection() {
                     placeholder="Nombre completo"
                     value={formData.fullName}
                     onChange={handleInputChange}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
+                    disabled={isPending}
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -182,7 +225,8 @@ export default function ContactSection() {
                     placeholder="Correo electrónico"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
+                    disabled={isPending}
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -194,7 +238,8 @@ export default function ContactSection() {
                     placeholder="Asunto"
                     value={formData.subject}
                     onChange={handleInputChange}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
+                    disabled={isPending}
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -203,7 +248,8 @@ export default function ContactSection() {
                     placeholder="Número de teléfono"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
+                    disabled={isPending}
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -214,8 +260,9 @@ export default function ContactSection() {
                   placeholder="Mensaje"
                   value={formData.message}
                   onChange={handleInputChange}
+                  disabled={isPending}
                   rows={4}
-                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 resize-none"
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 resize-none disabled:opacity-50"
                 />
               </div>
 
@@ -224,6 +271,7 @@ export default function ContactSection() {
                   id="terms"
                   checked={formData.acceptTerms}
                   onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, acceptTerms: checked as boolean }))}
+                  disabled={isPending}
                   className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                 />
                 <label htmlFor="terms" className="text-sm text-slate-300 leading-relaxed">
@@ -233,8 +281,19 @@ export default function ContactSection() {
               </div>
 
               <div>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 w-full">
-                  Enviar Mensaje →
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 w-full disabled:opacity-50"
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    'Enviar Mensaje →'
+                  )}
                 </Button>
               </div>
             </form>
