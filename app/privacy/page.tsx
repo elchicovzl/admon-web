@@ -4,9 +4,39 @@ import WhatsAppWidget from '@/components/ui/whatsapp-widget'
 import { Metadata } from 'next'
 import Link from 'next/link'
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+
 export const metadata: Metadata = {
   title: 'Política de Privacidad | Administración Segura',
   description: 'Política de privacidad y tratamiento de datos personales de Administración Segura. Conoce cómo protegemos tu información.',
+  alternates: {
+    canonical: `${BASE_URL}/privacy`,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    title: 'Política de Privacidad | Administración Segura',
+    description: 'Política de privacidad y tratamiento de datos personales de Administración Segura.',
+    url: `${BASE_URL}/privacy`,
+    siteName: 'Administración Segura',
+    locale: 'es_CO',
+    type: 'website',
+    images: [
+      {
+        url: `${BASE_URL}/images/logoadmon2.webp`,
+        width: 512,
+        height: 512,
+        alt: 'Administración Segura Logo',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Política de Privacidad | Administración Segura',
+    description: 'Política de privacidad y tratamiento de datos personales.',
+  },
 }
 
 export default function PrivacyPage() {

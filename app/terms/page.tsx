@@ -4,9 +4,39 @@ import WhatsAppWidget from '@/components/ui/whatsapp-widget'
 import { Metadata } from 'next'
 import Link from 'next/link'
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+
 export const metadata: Metadata = {
   title: 'Términos de Servicio | Administración Segura',
   description: 'Términos y condiciones de uso de los servicios de Administración Segura. Conoce tus derechos y obligaciones.',
+  alternates: {
+    canonical: `${BASE_URL}/terms`,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    title: 'Términos de Servicio | Administración Segura',
+    description: 'Términos y condiciones de uso de los servicios de Administración Segura.',
+    url: `${BASE_URL}/terms`,
+    siteName: 'Administración Segura',
+    locale: 'es_CO',
+    type: 'website',
+    images: [
+      {
+        url: `${BASE_URL}/images/logoadmon2.webp`,
+        width: 512,
+        height: 512,
+        alt: 'Administración Segura Logo',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Términos de Servicio | Administración Segura',
+    description: 'Términos y condiciones de los servicios.',
+  },
 }
 
 export default function TermsPage() {

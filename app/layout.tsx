@@ -4,9 +4,13 @@ import './globals.css'
 import WhatsAppWidget from '@/components/ui/whatsapp-widget'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: 'Administración Segura | Expertos en Seguridad Social',
+  description: 'Afiliaciones a seguridad social, gestión de planilla PILA, recobro de incapacidades y asesoría en seguros. Tu tranquilidad es nuestro compromiso.',
+  icons: {
+    icon: '/images/favicon.ico',
+    shortcut: '/images/favicon.ico',
+    apple: '/images/favicon-32x32.png',
+  },
 }
 
 export default function RootLayout({
