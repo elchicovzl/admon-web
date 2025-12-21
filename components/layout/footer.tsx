@@ -96,7 +96,7 @@ export default function Footer() {
         {/* Bottom section */}
         <div className="mt-12 pt-8 border-t border-gray-700">
           <div className="flex flex-col md:flex-row justify-between items-center text-gray-400 text-sm">
-            <p>© <span className="font-serif">ADMINISTRACIÓN <span className="text-[#F1AD32] font-serif">SEGURA</span></span> {currentYear} Una empresa doble makers</p>
+            <p>© <span className="font-serif">ADMINISTRACIÓN <span className="text-[#F1AD32] font-serif">SEGURA</span></span> {currentYear}</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <Link 
                 href="/privacy" 
