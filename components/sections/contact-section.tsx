@@ -22,6 +22,7 @@ export default function ContactSection() {
     phone: "",
     message: "",
     acceptTerms: false,
+    website: "", // Honeypot field - should remain empty
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -49,6 +50,7 @@ export default function ContactSection() {
           phone: "",
           message: "",
           acceptTerms: false,
+          website: "",
         })
       } else {
         setStatus({ type: 'error', message: result.error || 'Error al enviar' })
@@ -207,6 +209,20 @@ export default function ContactSection() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Honeypot field - hidden from users, bots will fill it */}
+              <div className="absolute -left-[9999px]" aria-hidden="true">
+                <label htmlFor="website">Website</label>
+                <input
+                  type="text"
+                  id="website"
+                  name="website"
+                  value={formData.website}
+                  onChange={handleInputChange}
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Input

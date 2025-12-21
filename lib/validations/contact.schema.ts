@@ -29,6 +29,8 @@ export const contactSchema = z.object({
     .refine((val) => val === true, {
       message: 'Debes aceptar los términos y condiciones',
     }),
+  // Honeypot field - should always be empty (bots fill this)
+  website: z.string().max(0, 'Invalid submission').optional(),
 })
 
 export type ContactInput = z.infer<typeof contactSchema>
