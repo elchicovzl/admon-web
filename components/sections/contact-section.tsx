@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -9,8 +9,43 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { MapPin, Mail, Phone, Clock, Loader2, CheckCircle, AlertCircle } from "lucide-react"
 import { submitContactForm } from "@/lib/actions/contact.actions"
 
+// Business hours configuration
+const BUSINESS_HOURS = {
+  open: 8, // 8:00 AM
+  close: 17, // 5:00 PM (17:00)
+  timezone: 'America/Bogota',
+}
+
+function getBusinessStatus(): { isOpen: boolean; message: string } {
+  const now = new Date()
+
+  // Get current time in Colombia timezone
+  const colombiaTime = new Date(now.toLocaleString('en-US', { timeZone: BUSINESS_HOURS.timezone }))
+  const day = colombiaTime.getDay() // 0 = Sunday, 6 = Saturday
+  const hour = colombiaTime.getHours()
+
+  // Check if weekend
+  if (day === 0 || day === 6) {
+    return { isOpen: false, message: 'Cerrado - Fin de semana' }
+  }
+
+  // Check business hours (Monday to Friday)
+  if (hour >= BUSINESS_HOURS.open && hour < BUSINESS_HOURS.close) {
+    return { isOpen: true, message: 'Cierra a las 5:00 PM' }
+  }
+
+  // Before opening
+  if (hour < BUSINESS_HOURS.open) {
+    return { isOpen: false, message: 'Abre a las 8:00 AM' }
+  }
+
+  // After closing
+  return { isOpen: false, message: 'Abre mañana a las 8:00 AM' }
+}
+
 export default function ContactSection() {
   const [isPending, startTransition] = useTransition()
+  const [businessStatus, setBusinessStatus] = useState({ isOpen: false, message: '' })
   const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({
     type: 'idle',
     message: '',
@@ -24,6 +59,17 @@ export default function ContactSection() {
     acceptTerms: false,
     website: "", // Honeypot field - should remain empty
   })
+
+  // Update business status on mount and every minute
+  useEffect(() => {
+    setBusinessStatus(getBusinessStatus())
+
+    const interval = setInterval(() => {
+      setBusinessStatus(getBusinessStatus())
+    }, 60000) // Update every minute
+
+    return () => clearInterval(interval)
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -98,11 +144,11 @@ export default function ContactSection() {
               <div className="mt-4 pt-4 border-t border-slate-700">
                 <div className="flex items-center space-x-4 text-sm text-slate-400">
                   <div className="flex items-center space-x-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>Abierto ahora</span>
+                    <div className={`w-2 h-2 rounded-full ${businessStatus.isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span>{businessStatus.isOpen ? 'Abierto ahora' : 'Cerrado'}</span>
                   </div>
                   <div>•</div>
-                  <div>Cierra a las 5:00 PM</div>
+                  <div>{businessStatus.message}</div>
                 </div>
               </div>
             </div>
@@ -137,10 +183,10 @@ export default function ContactSection() {
                 <div>
                   <h3 className="text-xl font-semibold mb-2">Correo Electrónico</h3>
                   <a
-                    href="mailto:info@administracionsegura.com"
+                    href="mailto:admon.segura.med@gmail.com"
                     className="text-blue-400 hover:text-blue-300 transition-colors"
                   >
-                    info@administracionsegura.com
+                    admon.segura.med@gmail.com
                   </a>
                 </div>
               </div>
@@ -227,7 +273,7 @@ export default function ContactSection() {
                 <div>
                   <Input
                     name="fullName"
-                    placeholder="Nombre completo"
+                    placeholder="Nombre completo *"
                     value={formData.fullName}
                     onChange={handleInputChange}
                     disabled={isPending}
@@ -238,7 +284,7 @@ export default function ContactSection() {
                   <Input
                     name="email"
                     type="email"
-                    placeholder="Correo electrónico"
+                    placeholder="Correo electrónico *"
                     value={formData.email}
                     onChange={handleInputChange}
                     disabled={isPending}
@@ -251,7 +297,7 @@ export default function ContactSection() {
                 <div>
                   <Input
                     name="subject"
-                    placeholder="Asunto"
+                    placeholder="Asunto *"
                     value={formData.subject}
                     onChange={handleInputChange}
                     disabled={isPending}
@@ -261,7 +307,7 @@ export default function ContactSection() {
                 <div>
                   <Input
                     name="phone"
-                    placeholder="Número de teléfono"
+                    placeholder="Número de teléfono *"
                     value={formData.phone}
                     onChange={handleInputChange}
                     disabled={isPending}
@@ -273,7 +319,7 @@ export default function ContactSection() {
               <div>
                 <Textarea
                   name="message"
-                  placeholder="Mensaje"
+                  placeholder="Mensaje *"
                   value={formData.message}
                   onChange={handleInputChange}
                   disabled={isPending}
