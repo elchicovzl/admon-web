@@ -61,13 +61,13 @@ export function WhyChooseUsSection() {
   ]
 
   return (
-    <section className="relative py-20 lg:py-28 bg-white overflow-hidden" id="beneficios">
+    <section className="relative py-20 lg:py-28 bg-gradient-to-br from-white via-orange-50/30 to-blue-50/20 overflow-hidden" id="beneficios">
       {/* Background pattern */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(0,0,0,0.05) 1px, transparent 0)`,
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(37, 99, 235, 0.06) 1px, transparent 0)`,
             backgroundSize: "32px 32px",
           }}
         />
@@ -146,16 +146,16 @@ export function WhyChooseUsSection() {
           className={`mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 ${isVisible ? "animate-fade-in-up" : "opacity-0"}`}
           style={{ animationDelay: "0.6s" }}
         >
-          <div className="text-center p-6 bg-gradient-to-br from-primary/5 to-primary/10 rounded-2xl">
-            <div className="text-4xl font-bold text-primary mb-2">10+</div>
+          <div className="text-center p-6 bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-2xl border border-blue-200/30 shadow-sm">
+            <div className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-500 bg-clip-text text-transparent mb-2">10+</div>
             <div className="text-gray-600 font-medium">Años de experiencia</div>
           </div>
-          <div className="text-center p-6 bg-gradient-to-br from-secondary/5 to-secondary/10 rounded-2xl">
-            <div className="text-4xl font-bold text-primary mb-2">1,000+</div>
+          <div className="text-center p-6 bg-gradient-to-br from-[#F1AD32]/15 to-[#F1AD32]/5 rounded-2xl border border-[#F1AD32]/20 shadow-sm">
+            <div className="text-4xl font-bold text-[#F1AD32] mb-2">1,000+</div>
             <div className="text-gray-600 font-medium">Clientes satisfechos</div>
           </div>
-          <div className="text-center p-6 bg-gradient-to-br from-accent/5 to-accent/10 rounded-2xl">
-            <div className="text-4xl font-bold text-primary mb-2">100%</div>
+          <div className="text-center p-6 bg-gradient-to-br from-green-500/10 to-green-600/5 rounded-2xl border border-green-200/30 shadow-sm">
+            <div className="text-4xl font-bold bg-gradient-to-r from-green-600 to-green-500 bg-clip-text text-transparent mb-2">100%</div>
             <div className="text-gray-600 font-medium">Cumplimiento normativo</div>
           </div>
         </div>

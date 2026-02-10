@@ -4,14 +4,20 @@ import ScrollStack, { ScrollStackItem } from '@/components/ui/scroll-stack'
 
 export default function ProcessSection() {
   return (
-    <section className="py-20 bg-white border-t border-gray-200" id="process">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative py-20 bg-gradient-to-b from-white via-blue-50/40 to-white border-t border-blue-100/50" id="process">
+      {/* Decorative Blobs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-[#F1AD32]/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Desktop Layout */}
         <div className="hidden lg:grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
           <div className="text-left">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-4">
-              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>CÓMO FUNCIONA
+            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 mb-4 shadow-sm border border-blue-200/50">
+              <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full mr-2"></span>CÓMO FUNCIONA
             </span>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
               3 pasos para tu tranquilidad
@@ -57,8 +63,8 @@ export default function ProcessSection() {
         <div className="lg:hidden">
           {/* Mobile Header */}
           <div className="text-center mb-12">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-4">
-              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>CÓMO FUNCIONA
+            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 mb-4 shadow-sm border border-blue-200/50">
+              <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full mr-2"></span>CÓMO FUNCIONA
             </span>
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
               3 pasos para tu tranquilidad

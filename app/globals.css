@@ -5,6 +5,12 @@
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
+
+  /* Brand Colors - Landing Page */
+  --brand-orange: #F1AD32;
+  --brand-orange-light: #FEF3C7;
+  --brand-blue: #2563EB;
+  --brand-blue-light: #EFF6FF;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -322,4 +328,20 @@
   background: linear-gradient(var(--card), var(--card)) padding-box,
               linear-gradient(135deg, #667eea 0%, #764ba2 100%) border-box;
   border: 2px solid transparent;
+}
+
+/* Subtle glow animation for decorative blobs */
+@keyframes subtle-glow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.animate-subtle-glow {
+  animation: subtle-glow 4s ease-in-out infinite;
 }

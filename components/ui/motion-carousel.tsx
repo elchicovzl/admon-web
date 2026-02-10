@@ -159,7 +159,7 @@ export default function MotionCarousel({
   return (
     <div
       ref={containerRef}
-      className={`relative overflow-hidden p-4 ${round ? 'rounded-full border border-border' : 'rounded-[24px] border border-border'
+      className={`relative overflow-hidden p-4 ${round ? 'rounded-full border border-white/10 bg-white/5 backdrop-blur-sm' : 'rounded-[24px] border border-border'
         }`}
       style={{
         width: `${baseWidth}px`,
@@ -190,7 +190,7 @@ export default function MotionCarousel({
             <motion.div
               key={index}
               className={`relative shrink-0 flex flex-col ${round
-                ? 'items-center justify-center text-center bg-primary border-0'
+                ? 'items-center justify-center text-center bg-slate-900/50 backdrop-blur-md border border-white/10'
                 : 'items-start justify-between bg-card border border-border rounded-[12px]'
                 } overflow-hidden cursor-grab active:cursor-grabbing`}
               style={{
