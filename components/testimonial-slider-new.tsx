@@ -2,12 +2,12 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { User } from "lucide-react"
+import { User, Quote } from "lucide-react"
 
 interface Testimonial {
   quote: string
   name: string
-  bgColor: string
+  role?: string
 }
 
 const testimonials: Testimonial[] = [
@@ -15,19 +15,19 @@ const testimonials: Testimonial[] = [
     quote:
       "Excelente servicio de afiliaciones a la seguridad social. Nos ayudaron con todas las EPS, ARL y fondos de pensión de manera muy eficiente. Altamente recomendado para empresas.",
     name: "María González",
-    bgColor: "bg-blue-100",
+    role: "Directora de RH",
   },
   {
     quote:
       "Los servicios de liquidación PILA han sido fundamentales para nuestro negocio. Manejan todas las planillas sin errores y siempre a tiempo. Un alivio tener profesionales confiables.",
     name: "Carlos Rodríguez",
-    bgColor: "bg-green-100",
+    role: "Gerente General",
   },
   {
     quote:
       "El servicio de recobro de incapacidades nos ha ahorrado tiempo y dinero. Su equipo conoce perfectamente el proceso ante EPS y ARL. Excelente atención y resultados.",
     name: "Ana Martínez",
-    bgColor: "bg-purple-100",
+    role: "Contadora",
   },
 ]
 
@@ -41,7 +41,7 @@ export default function TestimonialSlider() {
   const getVisibleTestimonials = () => {
     const prevIndex = currentIndex === 0 ? testimonials.length - 1 : currentIndex - 1
     const nextIndex = currentIndex === testimonials.length - 1 ? 0 : currentIndex + 1
-    
+
     return {
       prev: testimonials[prevIndex],
       current: testimonials[currentIndex],
@@ -52,68 +52,76 @@ export default function TestimonialSlider() {
   const { prev, current, next } = getVisibleTestimonials()
 
   return (
-    <div className="relative w-full overflow-hidden">
-      {/* Slider container - full width */}
-      <div className="relative h-64 md:h-64 flex items-center justify-center">
-        {/* Left gradient overlay - hidden on mobile */}
-        <div className="absolute left-0 top-0 w-40 h-full bg-gradient-to-r from-white via-white/90 to-transparent z-10 pointer-events-none hidden md:block" />
+    <div className="relative w-full px-4">
+      {/* Slider container */}
+      <div className="relative h-auto flex items-center justify-center py-8">
         
-        {/* Right gradient overlay - hidden on mobile */}
-        <div className="absolute right-0 top-0 w-40 h-full bg-gradient-to-l from-white via-white/90 to-transparent z-10 pointer-events-none hidden md:block" />
-
+       
         {/* Fixed position containers for each card */}
         <div className="flex items-center justify-center w-full relative">
-          
+
           {/* Previous card (left, fixed position) - hidden on mobile */}
-          <div className="absolute left-8 w-80 transform transition-all duration-700 ease-in-out opacity-40 scale-95 hidden md:block">
-            <div className={cn(
-              "p-6 rounded-2xl shadow-sm h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
-              prev.bgColor
-            )}>
-              <p className="text-base font-medium text-gray-800 leading-relaxed line-clamp-3">
+          <div className="absolute left-8 w-96 transform transition-all duration-700 ease-in-out opacity-50 scale-95 hidden md:block">
+            <div className="group p-6 rounded-2xl bg-white border border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 h-64 flex flex-col justify-between">
+              {/* Quote icon */}
+              <Quote className="w-8 h-8 text-gray-400 mb-2" />
+
+              <p className="text-sm font-medium text-gray-700 leading-relaxed line-clamp-3">
                 "{prev.quote}"
               </p>
-              <div className="flex items-center mt-3">
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                  <User className="w-4 h-4 text-gray-600" />
+
+              <div className="flex items-center mt-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-orange-200 to-blue-200 rounded-full flex items-center justify-center mr-3 shadow-md">
+                  <User className="w-5 h-5 text-gray-700" />
                 </div>
-                <p className="font-medium text-gray-900 text-sm">{prev.name}</p>
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">{prev.name}</p>
+                  {prev.role && <p className="text-xs text-gray-600">{prev.role}</p>}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Current card (center, fixed position) */}
-          <div className="w-full max-w-[600px] px-4 md:px-0 md:w-[600px] transform transition-all duration-700 ease-in-out opacity-100 scale-100 z-10">
-            <div className={cn(
-              "p-6 md:p-8 rounded-2xl shadow-lg h-auto md:h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
-              current.bgColor
-            )}>
-              <p className="text-base md:text-md font-medium text-gray-800 leading-relaxed text-center">
+          <div className="w-full max-w-[700px] px-4 md:px-0 md:w-[700px] transform transition-all duration-700 ease-in-out opacity-100 scale-100 z-10">
+            <div className="group p-8 md:p-10 rounded-3xl bg-white border border-gray-200 shadow-2xl hover:shadow-3xl transition-all duration-300 min-h-[280px] flex flex-col justify-between" style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.3)' }}>
+              {/* Quote icon */}
+              <Quote className="w-12 h-12 text-orange-500 mb-4" />
+
+              <p className="text-lg md:text-xl font-medium text-gray-800 leading-relaxed text-center">
                 "{current.quote}"
               </p>
-              <div className="flex items-center justify-center mt-4">
-                <div className="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                  <User className="w-5 h-5 text-gray-600" />
+
+              <div className="flex items-center justify-center mt-6">
+                <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-blue-400 rounded-full flex items-center justify-center mr-4 shadow-lg">
+                  <User className="w-7 h-7 text-white" />
                 </div>
-                <p className="font-semibold text-gray-900">{current.name}</p>
+                <div className="text-left">
+                  <p className="font-bold text-gray-900 text-lg">{current.name}</p>
+                  {current.role && <p className="text-sm text-gray-600">{current.role}</p>}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Next card (right, fixed position) - hidden on mobile */}
-          <div className="absolute right-8 w-80 transform transition-all duration-700 ease-in-out opacity-40 scale-95 hidden md:block">
-            <div className={cn(
-              "p-6 rounded-2xl shadow-sm h-48 flex flex-col justify-between transition-colors duration-700 ease-in-out",
-              next.bgColor
-            )}>
-              <p className="text-base font-medium text-gray-800 leading-relaxed line-clamp-3">
+          <div className="absolute right-8 w-96 transform transition-all duration-700 ease-in-out opacity-50 scale-95 hidden md:block">
+            <div className="group p-6 rounded-2xl bg-white border border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 h-64 flex flex-col justify-between">
+              {/* Quote icon */}
+              <Quote className="w-8 h-8 text-gray-400 mb-2" />
+
+              <p className="text-sm font-medium text-gray-700 leading-relaxed line-clamp-3">
                 "{next.quote}"
               </p>
-              <div className="flex items-center mt-3">
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-3">
-                  <User className="w-4 h-4 text-gray-600" />
+
+              <div className="flex items-center mt-4">
+                <div className="w-10 h-10 bg-gradient-to-br from-orange-200 to-blue-200 rounded-full flex items-center justify-center mr-3 shadow-md">
+                  <User className="w-5 h-5 text-gray-700" />
                 </div>
-                <p className="font-medium text-gray-900 text-sm">{next.name}</p>
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">{next.name}</p>
+                  {next.role && <p className="text-xs text-gray-600">{next.role}</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -127,9 +135,9 @@ export default function TestimonialSlider() {
           <button
             key={index}
             className={cn(
-              "w-3 h-3 rounded-full transition-all duration-300 hover:scale-110",
-              index === currentIndex 
-                ? "bg-gray-800" 
+              "w-3 h-3 rounded-full transition-all duration-300 hover:scale-125",
+              index === currentIndex
+                ? "bg-gradient-to-r from-orange-500 to-blue-600 scale-110"
                 : "bg-gray-300 hover:bg-gray-400",
             )}
             onClick={() => goToSlide(index)}
