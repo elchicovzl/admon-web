@@ -5,6 +5,78 @@ import { ArrowRight, Eye, TrendingUp } from 'lucide-react'
 import { Typewriter } from 'react-simple-typewriter'
 import ServicesSlider from '@/components/ui/services-slider'
 import Squares from '@/components/ui/squares-background'
+import { memo } from 'react'
+
+// Memoized hero content component to avoid duplication
+const HeroContent = memo(({ isMobile }: { isMobile?: boolean }) => {
+  const typewriterWords = [
+    'EPS (Salud)',
+    'ARL (Riesgos Laborales)',
+    'Fondos de Pensiones',
+    'CCF Caja de Compensación'
+  ]
+
+  return (
+    <>
+      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-200 text-sm font-medium mb-6 backdrop-blur-sm ${isMobile ? 'justify-center' : ''}`}>
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+        </span>
+        Soluciones Integrales 2024
+      </div>
+
+      <h1 className={`text-4xl md:text-5xl ${isMobile ? '' : 'lg:text-7xl'} font-bold text-white mb-6 leading-tight ${isMobile ? '' : 'tracking-tight'}`}>
+        Soluciones en {isMobile && <br />}<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-white">Seguridad Social</span> {!isMobile && 'para tu Futuro'}
+      </h1>
+
+      <p className={`text-lg ${isMobile ? 'md:text-xl' : 'md:text-2xl'} text-blue-100/90 mb-8 ${isMobile ? 'max-w-2xl mx-auto' : 'max-w-lg'} leading-relaxed min-h-[${isMobile ? '60px' : '72px'}] ${isMobile ? 'md:min-h-[72px]' : 'md:min-h-[120px]'}`}>
+        {isMobile ? 'Afiliacion a' : 'Expertos en afiliacion a'}{' '}
+        <span className="font-semibold text-[#F1AD32] inline-block min-h-[1.5em]">
+          <Typewriter
+            words={typewriterWords}
+            loop={0}
+            cursor
+            cursorStyle="_"
+            typeSpeed={70}
+            deleteSpeed={50}
+            delaySpeed={1000}
+          />
+        </span>
+      </p>
+
+      <div className={`flex flex-col ${isMobile ? 'gap-4 max-w-md mx-auto' : 'sm:flex-row gap-4'}`}>
+        <a href="#contacto" className="cursor-pointer">
+          <Button
+            size="lg"
+            className={`bg-white text-blue-900 hover:bg-blue-50 hover:text-blue-950 rounded-full px-8 ${isMobile ? 'py-4' : 'py-6'} text-lg font-bold w-full ${isMobile ? '' : 'sm:w-auto'} cursor-pointer ${isMobile ? 'shadow-lg hover:shadow-xl' : 'shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] transform hover:-translate-y-1'} transition-all duration-300 border-0`}
+          >
+            Asesorias GRATIS
+            <ArrowRight className="ml-2 w-5 h-5" />
+          </Button>
+        </a>
+        <a href="#features" className="cursor-pointer">
+          <Button
+            size="lg"
+            variant="outline"
+            className={`rounded-full px-8 ${isMobile ? 'py-4' : 'py-6'} text-lg font-medium border border-white/20 bg-white/5 backdrop-blur-sm text-white hover:bg-white/10 hover:border-white/40 w-full ${isMobile ? '' : 'sm:w-auto'} cursor-pointer transition-all duration-300`}
+          >
+            Servicios
+            <Eye className="ml-2 w-5 h-5" />
+          </Button>
+        </a>
+      </div>
+
+      {!isMobile && (
+        <div className="mt-10 flex items-center gap-4 text-blue-200/80 text-sm">
+          <p>Más de <span className="font-bold text-white">500+</span> empresas confían en nosotros</p>
+        </div>
+      )}
+    </>
+  )
+})
+
+HeroContent.displayName = 'HeroContent'
 
 export default function HeroSection() {
   return (
@@ -32,62 +104,7 @@ export default function HeroSection() {
         <div className="hidden lg:grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
           <div className="relative z-10 text-left">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-200 text-sm font-medium mb-6 backdrop-blur-sm">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </span>
-              Soluciones Integrales 2024
-            </div>
-
-            <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold text-white mb-6 leading-tight tracking-tight">
-              Soluciones en <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-white">Seguridad Social</span> para tu Futuro
-            </h1>
-            <p className="text-lg md:text-2xl text-blue-100/90 mb-8 max-w-lg leading-relaxed min-h-[72px] md:min-h-[120px]">
-              Expertos en afiliacion a{' '}
-              <span className="font-semibold text-[#F1AD32] inline-block min-h-[1.5em]">
-                <Typewriter
-                  words={[
-                    'EPS (Salud)',
-                    'ARL (Riesgos Laborales)',
-                    'Fondos de Pensiones',
-                    'CCF Caja de Compensación'
-                  ]}
-                  loop={0}
-                  cursor
-                  cursorStyle="_"
-                  typeSpeed={70}
-                  deleteSpeed={50}
-                  delaySpeed={1000}
-                />
-              </span>
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <a href="#contacto" className="cursor-pointer">
-                <Button
-                  size="lg"
-                  className="bg-white text-blue-900 hover:bg-blue-50 hover:text-blue-950 rounded-full px-8 py-6 text-lg font-bold w-full sm:w-auto cursor-pointer shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_25px_rgba(255,255,255,0.4)] transition-all duration-300 transform hover:-translate-y-1 border-0"
-                >
-                  Asesorias GRATIS
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-              </a>
-              <a href="#features" className="cursor-pointer">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="rounded-full px-8 py-6 text-lg font-medium border border-white/20 bg-white/5 backdrop-blur-sm text-white hover:bg-white/10 hover:border-white/40 w-full sm:w-auto cursor-pointer transition-all duration-300"
-                >
-                  Servicios
-                  <Eye className="ml-2 w-5 h-5" />
-                </Button>
-              </a>
-            </div>
-
-            {/* Trust badge */}
-            <div className="mt-10 flex items-center gap-4 text-blue-200/80 text-sm">
-              <p>Más de <span className="font-bold text-white">500+</span> empresas confían en nosotros</p>
-            </div>
+            <HeroContent />
           </div>
 
           {/* Right side with new services slider */}
@@ -100,64 +117,13 @@ export default function HeroSection() {
               <div className="relative z-10">
                 <ServicesSlider />
               </div>
-
-              
             </div>
           </div>
         </div>
 
         {/* Mobile Layout - Text Only */}
         <div className="lg:hidden text-center relative z-10">
-          <div className="inline-flex items-center justify-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-400/20 text-blue-200 text-sm font-medium mb-6 backdrop-blur-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-            </span>
-            Soluciones Integrales 2024
-          </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
-            Soluciones en <br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-200 to-white">Seguridad Social</span>
-          </h1>
-          <p className="text-lg md:text-xl text-blue-100/90 mb-8 max-w-2xl mx-auto min-h-[60px] md:min-h-[72px]">
-            Afiliacion a {' '}
-            <span className="font-semibold text-[#F1AD32] inline-block min-h-[1.5em]">
-              <Typewriter
-                words={[
-                  'EPS (Salud)',
-                  'ARL (Riesgos Laborales)',
-                  'Fondos de Pensiones',
-                  'CCF Caja de Compensación'
-                ]}
-                loop={0}
-                cursor
-                cursorStyle="_"
-                typeSpeed={70}
-                deleteSpeed={50}
-                delaySpeed={1000}
-              />
-            </span>
-          </p>
-          <div className="flex flex-col gap-4 max-w-md mx-auto">
-            <a href="#contacto" className="cursor-pointer">
-              <Button
-                size="lg"
-                className="bg-white text-blue-900 hover:bg-blue-50 hover:text-blue-950 rounded-full px-8 py-4 text-lg font-bold w-full cursor-pointer shadow-lg hover:shadow-xl transition-all duration-300 border-0"
-              >
-                Asesorias GRATIS
-                <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </a>
-            <a href="#features" className="cursor-pointer">
-              <Button
-                size="lg"
-                variant="outline"
-                className="rounded-full px-8 py-4 text-lg font-medium border border-white/20 bg-white/5 backdrop-blur-sm text-white hover:bg-white/10 hover:border-white/40 w-full cursor-pointer transition-all duration-300"
-              >
-                Servicios
-                <Eye className="ml-2 w-5 h-5" />
-              </Button>
-            </a>
-          </div>
+          <HeroContent isMobile />
         </div>
       </div>
     </section>

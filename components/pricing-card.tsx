@@ -2,6 +2,7 @@ import type React from "react"
 import { CheckCircle, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { memo } from "react"
 
 interface PricingCardProps {
   title: string
@@ -16,9 +17,10 @@ interface PricingCardProps {
   textColor: string
   icon: React.ReactNode
   buttonText: string
+  id?: string
 }
 
-export default function PricingCard({
+const PricingCard = memo(function PricingCard({
   title,
   description,
   price,
@@ -86,4 +88,6 @@ export default function PricingCard({
       </ul>
     </div>
   )
-}
+})
+
+export default PricingCard

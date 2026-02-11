@@ -60,6 +60,7 @@ export default function PricingSection() {
 
   const pricingPlans = [
     {
+      id: "free-audit",
       title: "Free Bite-sized Audit",
       description:
         "Get a quick win. We'll redesign 1 section of your site and provide three insights to improve conversions.",
@@ -77,6 +78,7 @@ export default function PricingSection() {
       buttonText: "Get Your FREE Audit",
     },
     {
+      id: "basic-cro",
       title: "Basic CRO Audit",
       description: "Choose 2x pages on your website and we'll provide insights to help improve conversions.",
       price: "$295",
@@ -96,6 +98,7 @@ export default function PricingSection() {
       buttonText: "Order Basic CRO",
     },
     {
+      id: "essential-cro",
       title: "Essential CRO Audit",
       description: "Receive a comprehensive audit with actionable insights to transform your website's performance.",
       price: "$975",
@@ -133,8 +136,8 @@ export default function PricingSection() {
 
         {/* Pricing Cards Container - can be a slider */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {pricingPlans.map((plan, index) => (
-            <PricingCard key={index} {...plan} />
+          {pricingPlans.map((plan) => (
+            <PricingCard key={plan.id} {...plan} />
           ))}
         </div>
 

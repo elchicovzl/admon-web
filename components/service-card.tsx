@@ -6,6 +6,7 @@ import { CheckCircle, ArrowRight, Clock, TrendingUp, Star, Shield, FileText, Hea
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll"
+import { memo } from "react"
 
 interface ServiceCardProps {
   id: string
@@ -18,7 +19,7 @@ interface ServiceCardProps {
   iconType: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart'
 }
 
-export default function ServiceCard({
+const ServiceCard = memo(function ServiceCard({
   id,
   name,
   description,
@@ -90,4 +91,6 @@ export default function ServiceCard({
       </ul>
     </div>
   )
-}
+})
+
+export default ServiceCard

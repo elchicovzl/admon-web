@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClientType, IdentificationType } from '@prisma/client'
 import type { SafeClient } from '@/lib/types/client.types'
@@ -28,6 +28,35 @@ import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+// Pure helper functions moved outside component for better performance
+const getIdentificationTypeLabel = (type: IdentificationType) => {
+  const labels = {
+    CEDULA: 'Cédula',
+    CEDULA_EXTRANJERIA: 'Cédula Extranjería',
+    PPT: 'PPT',
+    NIT: 'NIT',
+  }
+  return labels[type]
+}
+
+const getClientTypeLabel = (type: ClientType) => {
+  const labels = {
+    EMPLEADO: 'Empleado',
+    EMPRESA: 'Empresa',
+    INDEPENDIENTE: 'Independiente',
+  }
+  return labels[type]
+}
+
+const getClientTypeBadgeVariant = (type: ClientType) => {
+  const variants = {
+    EMPLEADO: 'default',
+    EMPRESA: 'secondary',
+    INDEPENDIENTE: 'outline',
+  }
+  return variants[type] as 'default' | 'secondary' | 'outline'
+}
+
 interface ClientsTableProps {
   clients: SafeClient[]
   onClientUpdated?: (clientId: string, updates: Partial<SafeClient>) => void
@@ -38,35 +67,7 @@ export function ClientsTable({ clients, onClientUpdated, onEditClient }: Clients
   const router = useRouter()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
-  const getIdentificationTypeLabel = (type: IdentificationType) => {
-    const labels = {
-      CEDULA: 'Cédula',
-      CEDULA_EXTRANJERIA: 'Cédula Extranjería',
-      PPT: 'PPT',
-      NIT: 'NIT',
-    }
-    return labels[type]
-  }
-
-  const getClientTypeLabel = (type: ClientType) => {
-    const labels = {
-      EMPLEADO: 'Empleado',
-      EMPRESA: 'Empresa',
-      INDEPENDIENTE: 'Independiente',
-    }
-    return labels[type]
-  }
-
-  const getClientTypeBadgeVariant = (type: ClientType) => {
-    const variants = {
-      EMPLEADO: 'default',
-      EMPRESA: 'secondary',
-      INDEPENDIENTE: 'outline',
-    }
-    return variants[type] as 'default' | 'secondary' | 'outline'
-  }
-
-  const handleToggleStatus = async (client: SafeClient) => {
+  const handleToggleStatus = useCallback(async (client: SafeClient) => {
     setIsTogglingStatus(true)
 
     try {
@@ -84,11 +85,11 @@ export function ClientsTable({ clients, onClientUpdated, onEditClient }: Clients
     } finally {
       setIsTogglingStatus(false)
     }
-  }
+  }, [onClientUpdated])
 
-  const handleViewDetails = (client: SafeClient) => {
+  const handleViewDetails = useCallback((client: SafeClient) => {
     router.push(`/dashboard/clients/${client.id}`)
-  }
+  }, [router])
 
   return (
     <div className="rounded-md border">

@@ -1,6 +1,46 @@
 import { processSteps } from '@/data/features'
 import CardSwap, { Card } from '@/components/ui/card-swap'
 import ScrollStack, { ScrollStackItem } from '@/components/ui/scroll-stack'
+import { memo } from 'react'
+
+// Memoized header component to avoid duplication
+const ProcessHeader = memo(({ isMobile }: { isMobile?: boolean }) => (
+  <div className={isMobile ? 'text-center mb-12' : 'text-left'}>
+    <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 mb-4 shadow-sm border border-blue-200/50">
+      <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full mr-2"></span>CÓMO FUNCIONA
+    </span>
+    <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
+      3 pasos para tu tranquilidad
+    </h2>
+  </div>
+))
+
+ProcessHeader.displayName = 'ProcessHeader'
+
+// Memoized card content component to avoid duplication
+const ProcessStepCard = memo(({ step, isMobile }: { step: typeof processSteps[0]; isMobile?: boolean }) => (
+  <div className={`${isMobile ? 'p-3' : 'p-8'} h-full flex flex-col justify-center bg-gradient-to-br from-gray-50/50 to-white/80 rounded-xl`}>
+    <div
+      className={`w-16 ${isMobile ? 'h-18' : 'h-16'} flex items-center justify-center rounded-xl text-2xl font-bold mb-6 mx-auto shadow-sm`}
+      style={{
+        background: `linear-gradient(135deg, ${step.backgroundColor}, ${step.backgroundColor}dd)`,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+      }}
+    >
+      <span style={{ color: step.color === step.backgroundColor ? '#fff' : step.color }}>
+        {step.step}
+      </span>
+    </div>
+    <h3 className={`text-2xl font-bold text-gray-900 mb-4 text-center ${isMobile ? 'leading-tight' : ''}`}>
+      {step.title}
+    </h3>
+    <p className={`text-gray-600 leading-relaxed text-center ${isMobile ? 'text-sm' : ''}`}>
+      {step.description}
+    </p>
+  </div>
+))
+
+ProcessStepCard.displayName = 'ProcessStepCard'
 
 export default function ProcessSection() {
   return (
@@ -15,14 +55,7 @@ export default function ProcessSection() {
         {/* Desktop Layout */}
         <div className="hidden lg:grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
-          <div className="text-left">
-            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 mb-4 shadow-sm border border-blue-200/50">
-              <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full mr-2"></span>CÓMO FUNCIONA
-            </span>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
-              3 pasos para tu tranquilidad
-            </h2>
-          </div>
+          <ProcessHeader />
 
           {/* Right Content - CardSwap */}
           <div className="relative h-[600px] flex justify-center items-center">
@@ -38,21 +71,7 @@ export default function ProcessSection() {
             >
               {processSteps.map((step) => (
                 <Card key={step.id}>
-                  <div className="p-8 h-full flex flex-col justify-center bg-gradient-to-br from-gray-50/50 to-white/80 rounded-xl">
-                    <div
-                      className="w-16 h-16 flex items-center justify-center rounded-xl text-2xl font-bold mb-6 mx-auto shadow-sm"
-                      style={{
-                        background: `linear-gradient(135deg, ${step.backgroundColor}, ${step.backgroundColor}dd)`,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                      }}
-                    >
-                      <span style={{ color: step.color === step.backgroundColor ? '#fff' : step.color }}>
-                        {step.step}
-                      </span>
-                    </div>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">{step.title}</h3>
-                    <p className="text-gray-600 leading-relaxed text-center">{step.description}</p>
-                  </div>
+                  <ProcessStepCard step={step} />
                 </Card>
               ))}
             </CardSwap>
@@ -62,14 +81,7 @@ export default function ProcessSection() {
         {/* Mobile Layout */}
         <div className="lg:hidden">
           {/* Mobile Header */}
-          <div className="text-center mb-12">
-            <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 mb-4 shadow-sm border border-blue-200/50">
-              <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full mr-2"></span>CÓMO FUNCIONA
-            </span>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
-              3 pasos para tu tranquilidad
-            </h2>
-          </div>
+          <ProcessHeader isMobile />
 
           {/* Mobile ScrollStack */}
           <div className="relative min-h-[150vh] flex justify-center items-start pt-8">
@@ -92,21 +104,7 @@ export default function ProcessSection() {
                 >
                   {processSteps.map((step) => (
                     <ScrollStackItem key={step.id}>
-                      <div className="h-full flex flex-col justify-center bg-gradient-to-br from-gray-50/50 to-white/80 rounded-xl p-3">
-                        <div
-                          className="w-16 h-18 flex items-center justify-center rounded-xl text-2xl font-bold mb-6 mx-auto shadow-sm"
-                          style={{
-                            background: `linear-gradient(135deg, ${step.backgroundColor}, ${step.backgroundColor}dd)`,
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                          }}
-                        >
-                          <span style={{ color: step.color === step.backgroundColor ? '#fff' : step.color }}>
-                            {step.step}
-                          </span>
-                        </div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center leading-tight">{step.title}</h3>
-                        <p className="text-gray-600 leading-relaxed text-center text-sm">{step.description}</p>
-                      </div>
+                      <ProcessStepCard step={step} isMobile />
                     </ScrollStackItem>
                   ))}
                 </ScrollStack>
