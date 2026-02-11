@@ -285,6 +285,7 @@ export interface SubProcessKanbanItem {
   type: AffiliationSubProcessType
   status: AffiliationSubProcessStatus
   affiliationId: string
+  createdAt: Date
   updatedAt: Date
   client: {
     id: string

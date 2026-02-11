@@ -1021,6 +1021,7 @@ export async function getSubProcessesForKanban(): Promise<ActionResponse<SubProc
         type: true,
         status: true,
         affiliationId: true,
+        createdAt: true,
         updatedAt: true,
         affiliation: {
           select: {
@@ -1056,6 +1057,7 @@ export async function getSubProcessesForKanban(): Promise<ActionResponse<SubProc
       type: sp.type,
       status: sp.status,
       affiliationId: sp.affiliationId,
+      createdAt: sp.createdAt,
       updatedAt: sp.updatedAt,
       client: sp.affiliation.client,
       assignedTo: sp.assignedTo,

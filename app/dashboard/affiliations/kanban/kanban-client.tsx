@@ -13,7 +13,7 @@ import { SubProcessKanbanCard } from '@/components/dashboard/affiliations/subpro
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -112,6 +112,13 @@ export function KanbanClient({
       }
     })
 
+    // Sort each group by creation date (oldest first for priority)
+    Object.keys(groups).forEach((status) => {
+      groups[status as AffiliationSubProcessStatus].sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
+    })
+
     return groups
   }, [filteredSubProcesses])
 
@@ -145,7 +152,17 @@ export function KanbanClient({
     // Extract the status from the droppable container ID
     // Container IDs are in format "column-STATUS"
     const overColumnId = over.id as string
-    const newStatus = overColumnId.replace('column-', '') as AffiliationSubProcessStatus
+
+    // If dropped on a card instead of a column, get the column from card's data
+    let newStatus: AffiliationSubProcessStatus
+    if (overColumnId.startsWith('column-')) {
+      newStatus = overColumnId.replace('column-', '') as AffiliationSubProcessStatus
+    } else {
+      // Dropped on a card, get the status from the card's current status
+      const overCard = findSubProcess(overColumnId)
+      if (!overCard) return
+      newStatus = overCard.status
+    }
 
     // If dropped in same column, do nothing
     if (activeSubProcess.status === newStatus) return
@@ -192,7 +209,7 @@ export function KanbanClient({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={rectIntersection}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >

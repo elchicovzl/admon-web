@@ -20,12 +20,13 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { StatusBadge, TypeBadge } from './status-badge'
-import { FileText, MessageSquare, User, Loader2, Check, ExternalLink } from 'lucide-react'
+import { FileText, MessageSquare, User, Loader2, Check, ExternalLink, AlertCircle, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateSubProcessStatus, assignSubProcess } from '@/lib/actions/affiliation.actions'
 import { AffiliationSubProcessStatus } from '@prisma/client'
 import type { AffiliationSubProcessWithRelations, SubProcessKanbanItem } from '@/lib/types/affiliation.types'
 import { SubProcessStatusLabels } from '@/lib/types/affiliation.types'
+import { calculatePriority } from '@/lib/utils/priority'
 
 interface SubProcessKanbanCardProps {
   subProcess: AffiliationSubProcessWithRelations | SubProcessKanbanItem
@@ -134,27 +135,48 @@ export function SubProcessKanbanCard({
 
   const statusOptions = Object.values(AffiliationSubProcessStatus)
 
+  // Calculate priority for visual indicators
+  const priority = calculatePriority(subProcess.createdAt)
+
   // Compact mode render - simplified for Kanban view
   if (compact) {
     return (
-      <Card className="h-full hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
-        <CardHeader className="p-3 pb-2">
+      <Card className={`h-full hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${priority.borderColor}`}>
+        <CardHeader className="p-2 pb-1">
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
+            {/* Type badge centered */}
+            <div className="flex justify-center">
               <TypeBadge type={subProcess.type} className="text-[10px] px-1.5 py-0.5" />
+            </div>
+
+            {/* Time badge (left) and Status badge (right) */}
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1">
+                {priority.showIcon && (
+                  <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />
+                )}
+                <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${priority.badgeClass}`}>
+                  {priority.label}
+                </Badge>
+              </div>
               <StatusBadge status={subProcess.status} className="text-[10px] px-1.5 py-0.5" />
             </div>
+
+            {/* Client name */}
             {displayClientName && (
-              <CardTitle className="text-xs font-medium line-clamp-1">
-                {displayClientName}
-              </CardTitle>
+              <div className="flex items-center justify-baseline gap-1 pt-1">
+                <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                <CardTitle className="text-xs font-medium line-clamp-1">
+                  {displayClientName}
+                </CardTitle>
+              </div>
             )}
           </div>
         </CardHeader>
 
-        <CardContent className="p-3 pt-2 space-y-1.5">
+        <CardContent className="p-2 pt-1 space-y-1">
           {/* Manager */}
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <User className="h-3 w-3 flex-shrink-0" />
             {subProcess.assignedTo ? (
               <span className="truncate">{subProcess.assignedTo.name || subProcess.assignedTo.email}</span>
@@ -164,7 +186,7 @@ export function SubProcessKanbanCard({
           </div>
 
           {/* Document count */}
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <FileText className="h-3 w-3 flex-shrink-0" />
             <span>{documentCount} doc{documentCount !== 1 ? 's' : ''}</span>
           </div>
@@ -172,7 +194,7 @@ export function SubProcessKanbanCard({
           {/* View Affiliation Link - smaller */}
           <Link
             href={`/dashboard/affiliations/${subProcess.affiliationId}`}
-            className="flex items-center gap-1 text-[11px] text-primary hover:underline mt-1"
+            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
           >
             <ExternalLink className="h-3 w-3" />
             Ver detalle
