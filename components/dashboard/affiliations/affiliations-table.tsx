@@ -123,7 +123,7 @@ export function AffiliationsTable({
             <TableHead>Progreso</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead>Fecha de Creación</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Archivo</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
@@ -176,13 +176,13 @@ export function AffiliationsTable({
                   {format(new Date(affiliation.createdAt), "d 'de' MMM 'de' yyyy", { locale: es })}
                 </TableCell>
                 <TableCell>
-                  {affiliation.isActive ? (
-                    <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
-                      Activo
+                  {affiliation.status === 'ARCHIVED' || affiliation.archivedAt ? (
+                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300">
+                      Archivada
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300">
-                      Inactivo
+                    <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                      Activa
                     </Badge>
                   )}
                 </TableCell>
