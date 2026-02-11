@@ -48,7 +48,22 @@ export default async function AffiliationsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{stats?.total || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {stats?.active || 0} activas • {stats?.inactive || 0} inactivas
+              {stats?.completed || 0} completadas • {stats?.inProgress || 0} en proceso
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Sin Iniciar</CardTitle>
+            <Clock className="h-4 w-4 text-gray-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats?.byStatus.find((s) => s.status === 'NOT_STARTED')?.count || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sub-procesos sin iniciar
             </p>
           </CardContent>
         </Card>
@@ -56,40 +71,29 @@ export default async function AffiliationsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">En Proceso</CardTitle>
-            <Clock className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.inProgress || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Afiliaciones con sub-procesos activos
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completadas</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.completed || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Todos los sub-procesos finalizados
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sub-procesos</CardTitle>
-            <Loader2 className="h-4 w-4 text-muted-foreground" />
+            <Loader2 className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.byStatus.reduce((acc, curr) => acc + curr.count, 0) || 0}
+              {stats?.byStatus.find((s) => s.status === 'IN_PROGRESS')?.count || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              Total de sub-procesos activos
+              Sub-procesos en progreso
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Completados</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats?.byStatus.find((s) => s.status === 'COMPLETED')?.count || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Sub-procesos completados
             </p>
           </CardContent>
         </Card>

@@ -11,6 +11,11 @@ import {
   UserCircle,
   FileText,
   ClipboardList,
+  List,
+  KanbanSquare,
+  UserCheck,
+  ChevronDown,
+  Archive,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -28,6 +33,7 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -41,12 +47,19 @@ import { logout } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
+interface NavSubItem {
+  title: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+}
+
 interface NavItem {
   title: string
   href: string
   icon: React.ComponentType<{ className?: string }>
   badge?: string
   roles?: UserRole[]
+  subItems?: NavSubItem[]
 }
 
 interface AppSidebarProps {
@@ -79,6 +92,28 @@ export function AppSidebar({ user }: AppSidebarProps) {
       href: '/dashboard/affiliations',
       icon: ClipboardList,
       roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
+      subItems: [
+        {
+          title: 'Listado',
+          href: '/dashboard/affiliations',
+          icon: List,
+        },
+        {
+          title: 'Vista Kanban',
+          href: '/dashboard/affiliations/kanban',
+          icon: KanbanSquare,
+        },
+        {
+          title: 'Mis Asignaciones',
+          href: '/dashboard/affiliations/my-assignments',
+          icon: UserCheck,
+        },
+        {
+          title: 'Archivadas',
+          href: '/dashboard/affiliations/archived',
+          icon: Archive,
+        },
+      ],
     },
     {
       title: 'Incapacidades',
@@ -162,6 +197,47 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 const Icon = item.icon
                 const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
 
+                // If item has sub-items, render as Collapsible
+                if (item.subItems && item.subItems.length > 0) {
+                  const isAnySubItemActive = item.subItems.some(
+                    (subItem) => pathname === subItem.href
+                  )
+
+                  return (
+                    <Collapsible key={item.href} defaultOpen={isActive || isAnySubItemActive}>
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton isActive={isActive || isAnySubItemActive}>
+                            <Icon className="h-4 w-4" />
+                            <span>{item.title}</span>
+                            <ChevronDown className="ml-auto h-4 w-4 transition-transform ui-expanded:rotate-180" />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {item.subItems.map((subItem) => {
+                              const SubIcon = subItem.icon
+                              const isSubItemActive = pathname === subItem.href
+
+                              return (
+                                <SidebarMenuSubItem key={subItem.href}>
+                                  <SidebarMenuSubButton asChild isActive={isSubItemActive}>
+                                    <Link href={subItem.href}>
+                                      <SubIcon className="h-4 w-4" />
+                                      <span>{subItem.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              )
+                            })}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  )
+                }
+
+                // Regular item without sub-items
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton asChild isActive={isActive}>

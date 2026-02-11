@@ -50,6 +50,7 @@ model User {
 
   // Affiliation relations
   createdAffiliations            Affiliation[]            @relation("AffiliationCreatedBy")
+  sentAffiliations               Affiliation[]            @relation("AffiliationSentBy")
   assignedSubProcesses           AffiliationSubProcess[]  @relation("SubProcessAssignedTo")
   uploadedAffiliationDocuments   AffiliationDocument[]    @relation("AffiliationDocumentUploadedBy")
   affiliationObservations        AffiliationObservation[] @relation("AffiliationObservationCreatedBy")
@@ -401,6 +402,13 @@ model LegalRepresentative {
 // AFFILIATION MODULE (Afiliaciones a Seguridad Social)
 // ========================================
 
+// Affiliation lifecycle status
+enum AffiliationStatus {
+  ACTIVE   // In progress (default)
+  SENT     // Sent to client
+  ARCHIVED // Archived (permanent)
+}
+
 // Sub-process types
 enum AffiliationSubProcessType {
   ARL   // Administradora de Riesgos Laborales
@@ -434,11 +442,18 @@ model Affiliation {
   clientId         String
   client           Client                  @relation(fields: [clientId], references: [id])
 
+  // Status tracking
+  status           AffiliationStatus       @default(ACTIVE)
+  sentAt           DateTime?               // When sent to client
+  sentById         String?                 // Manager who sent
+  sentBy           User?                   @relation("AffiliationSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  archivedAt       DateTime?               // When archived
+
   // Audit trail
   createdById      String
   createdBy        User                    @relation("AffiliationCreatedBy", fields: [createdById], references: [id])
 
-  // Soft delete
+  // Soft delete (kept for compatibility)
   isActive         Boolean                 @default(true)
 
   // Timestamps
@@ -449,6 +464,7 @@ model Affiliation {
   subProcesses     AffiliationSubProcess[]
 
   @@map("affiliations")
+  @@index([status])
   @@index([clientId])
   @@index([createdById])
 }

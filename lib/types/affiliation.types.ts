@@ -4,10 +4,13 @@
  */
 
 import {
+  AffiliationStatus,
   AffiliationSubProcessType,
   AffiliationSubProcessStatus,
   AffiliationDocumentCategory,
 } from '@prisma/client'
+
+export { AffiliationStatus }
 
 // ========================================
 // BASE TYPES (from database)
@@ -16,6 +19,10 @@ import {
 export interface Affiliation {
   id: string
   clientId: string
+  status: AffiliationStatus
+  sentAt: Date | null
+  sentById: string | null
+  archivedAt: Date | null
   createdById: string
   isActive: boolean
   createdAt: Date
@@ -72,6 +79,10 @@ export interface AffiliationStatusLog {
 export interface SafeAffiliation {
   id: string
   clientId: string
+  status: AffiliationStatus
+  sentAt: Date | null
+  sentById: string | null
+  archivedAt: Date | null
   isActive: boolean
   createdAt: Date
   updatedAt: Date
@@ -137,6 +148,11 @@ export interface AffiliationWithRelations extends SafeAffiliation {
     name: string | null
     email: string
   }
+  sentBy?: {
+    id: string
+    name: string | null
+    email: string
+  } | null
 }
 
 export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubProcess {
@@ -234,7 +250,6 @@ export interface MyAssignmentsStats {
   total: number
   notStarted: number
   inProgress: number
-  pendingSupport: number
   inReview: number
   completed: number
   returned: number
@@ -265,6 +280,27 @@ export interface AffiliationListItem extends SafeAffiliation {
   globalStatus: 'completed' | 'in_progress' | 'not_started' | 'pending'
 }
 
+export interface SubProcessKanbanItem {
+  id: string
+  type: AffiliationSubProcessType
+  status: AffiliationSubProcessStatus
+  affiliationId: string
+  createdAt: Date
+  updatedAt: Date
+  client: {
+    id: string
+    fullName: string
+  }
+  assignedTo: {
+    id: string
+    name: string | null
+    email: string
+  } | null
+  _count: {
+    documents: number
+  }
+}
+
 // ========================================
 // ENUM LABELS (for UI display)
 // ========================================
@@ -279,7 +315,7 @@ export const SubProcessTypeLabels: Record<AffiliationSubProcessType, string> = {
 export const SubProcessStatusLabels: Record<AffiliationSubProcessStatus, string> = {
   NOT_STARTED: 'Sin Iniciar',
   IN_PROGRESS: 'En Proceso',
-  PENDING_SUPPORT: 'Pendiente de Soporte',
+  PENDING_SUPPORT: 'Pendiente Soporte',
   IN_REVIEW: 'En Revisión',
   COMPLETED: 'Terminado',
   RETURNED: 'Devuelto',
@@ -291,6 +327,12 @@ export const DocumentCategoryLabels: Record<AffiliationDocumentCategory, string>
   AFP_DOCS: 'Documentos AFP',
   CCF_DOCS: 'Documentos CCF',
   GENERAL: 'General',
+}
+
+export const AffiliationStatusLabels: Record<AffiliationStatus, string> = {
+  ACTIVE: 'En Progreso',
+  SENT: 'Enviada',
+  ARCHIVED: 'Archivada',
 }
 
 // ========================================
@@ -356,5 +398,26 @@ export const SubProcessTypeColors: Record<
     bg: 'bg-purple-100',
     text: 'text-purple-700',
     border: 'border-purple-300',
+  },
+}
+
+export const AffiliationStatusColors: Record<
+  AffiliationStatus,
+  { bg: string; text: string; border: string }
+> = {
+  ACTIVE: {
+    bg: 'bg-blue-100',
+    text: 'text-blue-700',
+    border: 'border-blue-300',
+  },
+  SENT: {
+    bg: 'bg-green-100',
+    text: 'text-green-700',
+    border: 'border-green-300',
+  },
+  ARCHIVED: {
+    bg: 'bg-gray-100',
+    text: 'text-gray-700',
+    border: 'border-gray-300',
   },
 }

@@ -38,9 +38,6 @@ export function MyAssignmentsClient({
     inProgress: assignments.filter(
       (a) => a.status === AffiliationSubProcessStatus.IN_PROGRESS
     ),
-    pendingSupport: assignments.filter(
-      (a) => a.status === AffiliationSubProcessStatus.PENDING_SUPPORT
-    ),
     inReview: assignments.filter(
       (a) => a.status === AffiliationSubProcessStatus.IN_REVIEW
     ),
@@ -113,15 +110,12 @@ export function MyAssignmentsClient({
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-6">
             <TabsTrigger value="all">
               Todos ({groupedAssignments.all.length})
             </TabsTrigger>
             <TabsTrigger value="inProgress">
               En Proceso ({groupedAssignments.inProgress.length})
-            </TabsTrigger>
-            <TabsTrigger value="pendingSupport">
-              Pendientes ({groupedAssignments.pendingSupport.length})
             </TabsTrigger>
             <TabsTrigger value="inReview">
               Revisión ({groupedAssignments.inReview.length})

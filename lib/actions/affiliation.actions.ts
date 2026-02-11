@@ -8,7 +8,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole, AffiliationSubProcessStatus } from '@prisma/client'
+import { UserRole, AffiliationSubProcessStatus, AffiliationStatus } from '@prisma/client'
 import {
   createAffiliationSchema,
   updateAffiliationSchema,
@@ -40,6 +40,7 @@ import type {
   AffiliationStats,
   MyAssignmentsStats,
   SafeAffiliationDocument,
+  SubProcessKanbanItem,
 } from '@/lib/types/affiliation.types'
 import type { ActionResponse } from '@/lib/types'
 
@@ -76,6 +77,10 @@ export async function getAffiliations(): Promise<ActionResponse<AffiliationWithR
       select: {
         id: true,
         clientId: true,
+        status: true,
+        sentAt: true,
+        sentById: true,
+        archivedAt: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -149,6 +154,10 @@ export async function getAffiliationById(id: string): Promise<ActionResponse<Aff
       select: {
         id: true,
         clientId: true,
+        status: true,
+        sentAt: true,
+        sentById: true,
+        archivedAt: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -285,20 +294,23 @@ export async function createAffiliation(
     }
 
     // Verify all assigned managers exist
+    // Get unique manager IDs (same manager can be assigned to multiple sub-processes)
     const managerIds = data.subProcesses
       .map((sp) => sp.assignedToId)
       .filter((id): id is string => id !== null && id !== undefined)
 
-    if (managerIds.length > 0) {
+    const uniqueManagerIds = [...new Set(managerIds)]
+
+    if (uniqueManagerIds.length > 0) {
       const managers = await prisma.user.findMany({
         where: {
-          id: { in: managerIds },
+          id: { in: uniqueManagerIds },
           role: { in: [UserRole.MANAGER, UserRole.SUPER_ADMIN] },
           isActive: true,
         },
       })
 
-      if (managers.length !== managerIds.length) {
+      if (managers.length !== uniqueManagerIds.length) {
         return { success: false, error: 'Uno o más managers no son válidos' }
       }
     }
@@ -487,7 +499,6 @@ export async function getAffiliationStats(): Promise<ActionResponse<AffiliationS
       const someInProgress = aff.subProcesses.some(
         (sp) =>
           sp.status === AffiliationSubProcessStatus.IN_PROGRESS ||
-          sp.status === AffiliationSubProcessStatus.PENDING_SUPPORT ||
           sp.status === AffiliationSubProcessStatus.IN_REVIEW
       )
 
@@ -921,7 +932,6 @@ export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignme
       total,
       notStarted,
       inProgress,
-      pendingSupport,
       inReview,
       completed,
       returned,
@@ -944,13 +954,6 @@ export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignme
           assignedToId: authCheck.userId,
           affiliation: { isActive: true },
           status: AffiliationSubProcessStatus.IN_PROGRESS,
-        },
-      }),
-      prisma.affiliationSubProcess.count({
-        where: {
-          assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
-          status: AffiliationSubProcessStatus.PENDING_SUPPORT,
         },
       }),
       prisma.affiliationSubProcess.count({
@@ -980,7 +983,6 @@ export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignme
       total,
       notStarted,
       inProgress,
-      pendingSupport,
       inReview,
       completed,
       returned,
@@ -990,6 +992,242 @@ export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignme
   } catch (error) {
     console.error('Error fetching my assignments stats:', error)
     return { success: false, error: 'Error al obtener las estadísticas' }
+  }
+}
+
+/**
+ * Get all sub-processes for Kanban view
+ * Returns minimal data optimized for Kanban board display
+ */
+export async function getSubProcessesForKanban(): Promise<ActionResponse<SubProcessKanbanItem[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const subProcesses = await prisma.affiliationSubProcess.findMany({
+      where: {
+        affiliation: {
+          isActive: true,
+          status: AffiliationStatus.ACTIVE, // Only show sub-processes from ACTIVE affiliations
+        },
+        status: {
+          not: AffiliationSubProcessStatus.PENDING_SUPPORT, // Exclude PENDING_SUPPORT from kanban
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        affiliationId: true,
+        createdAt: true,
+        updatedAt: true,
+        affiliation: {
+          select: {
+            client: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        _count: {
+          select: {
+            documents: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+
+    // Transform the data to match SubProcessKanbanItem interface
+    const kanbanItems: SubProcessKanbanItem[] = subProcesses.map((sp) => ({
+      id: sp.id,
+      type: sp.type,
+      status: sp.status,
+      affiliationId: sp.affiliationId,
+      createdAt: sp.createdAt,
+      updatedAt: sp.updatedAt,
+      client: sp.affiliation.client,
+      assignedTo: sp.assignedTo,
+      _count: sp._count,
+    }))
+
+    return { success: true, data: kanbanItems }
+  } catch (error) {
+    console.error('Error fetching sub-processes for kanban:', error)
+    return { success: false, error: 'Error al obtener los sub-procesos' }
+  }
+}
+
+/**
+ * Send affiliation to client and archive it
+ * This action is irreversible - affiliation will be immediately archived
+ */
+export async function sendAffiliation(affiliationId: string): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    // Fetch affiliation with all sub-processes
+    const affiliation = await prisma.affiliation.findUnique({
+      where: { id: affiliationId },
+      include: {
+        subProcesses: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        client: {
+          select: {
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    if (!affiliation) {
+      return { success: false, error: 'Afiliación no encontrada' }
+    }
+
+    // Verify affiliation is ACTIVE
+    if (affiliation.status !== AffiliationStatus.ACTIVE) {
+      return {
+        success: false,
+        error: 'Solo se pueden enviar afiliaciones activas',
+      }
+    }
+
+    // Verify all sub-processes are COMPLETED
+    const allCompleted = affiliation.subProcesses.every(
+      (sp) => sp.status === AffiliationSubProcessStatus.COMPLETED
+    )
+
+    if (!allCompleted) {
+      return {
+        success: false,
+        error: 'Todos los sub-procesos deben estar completados antes de enviar la afiliación',
+      }
+    }
+
+    // Update affiliation status in a transaction
+    const now = new Date()
+    await prisma.affiliation.update({
+      where: { id: affiliationId },
+      data: {
+        status: AffiliationStatus.ARCHIVED,
+        sentAt: now,
+        sentById: authCheck.userId,
+        archivedAt: now,
+      },
+    })
+
+    // TODO: Send email to client
+    // await sendAffiliationEmail(affiliation.client.email, affiliation.client.fullName, affiliationId)
+
+    console.log(`✉️ Afiliación ${affiliationId} enviada a ${affiliation.client.email}`)
+
+    revalidatePath('/dashboard/affiliations')
+    revalidatePath('/dashboard/affiliations/kanban')
+    revalidatePath(`/dashboard/affiliations/${affiliationId}`)
+
+    return {
+      success: true,
+      message: `Afiliación enviada exitosamente a ${affiliation.client.fullName}`,
+    }
+  } catch (error) {
+    console.error('Error sending affiliation:', error)
+    return { success: false, error: 'Error al enviar la afiliación' }
+  }
+}
+
+/**
+ * Get archived affiliations
+ * Returns affiliations with status ARCHIVED
+ */
+export async function getArchivedAffiliations(): Promise<ActionResponse<AffiliationWithRelations[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const affiliations = await prisma.affiliation.findMany({
+      where: {
+        status: AffiliationStatus.ARCHIVED,
+      },
+      select: {
+        id: true,
+        clientId: true,
+        status: true,
+        sentAt: true,
+        sentById: true,
+        archivedAt: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        client: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            identificationType: true,
+            identificationNumber: true,
+            clientType: true,
+          },
+        },
+        sentBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        subProcesses: {
+          select: {
+            id: true,
+            affiliationId: true,
+            type: true,
+            status: true,
+            assignedToId: true,
+            statusReason: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+      orderBy: {
+        archivedAt: 'desc',
+      },
+    })
+
+    return { success: true, data: affiliations }
+  } catch (error) {
+    console.error('Error fetching archived affiliations:', error)
+    return { success: false, error: 'Error al obtener las afiliaciones archivadas' }
   }
 }
 
