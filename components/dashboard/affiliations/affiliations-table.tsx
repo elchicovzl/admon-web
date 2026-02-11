@@ -90,7 +90,6 @@ export function AffiliationsTable({
     const someInProgress = subProcesses.some(
       (sp) =>
         sp.status === AffiliationSubProcessStatus.IN_PROGRESS ||
-        sp.status === AffiliationSubProcessStatus.PENDING_SUPPORT ||
         sp.status === AffiliationSubProcessStatus.IN_REVIEW
     )
     if (someInProgress) return 'in_progress'

@@ -100,14 +100,16 @@ export function KanbanClient({
     const groups: Record<AffiliationSubProcessStatus, SubProcessKanbanItem[]> = {
       NOT_STARTED: [],
       IN_PROGRESS: [],
-      PENDING_SUPPORT: [],
       IN_REVIEW: [],
       COMPLETED: [],
       RETURNED: [],
     }
 
     filteredSubProcesses.forEach((sp) => {
-      groups[sp.status].push(sp)
+      // Only add sub-processes with valid kanban statuses (exclude PENDING_SUPPORT)
+      if (groups[sp.status]) {
+        groups[sp.status].push(sp)
+      }
     })
 
     return groups
@@ -176,7 +178,14 @@ export function KanbanClient({
     }
   }
 
-  const statuses = Object.values(AffiliationSubProcessStatus)
+  // Define visible statuses explicitly - PENDING_SUPPORT is intentionally excluded from kanban view
+  const statuses: AffiliationSubProcessStatus[] = [
+    AffiliationSubProcessStatus.NOT_STARTED,
+    AffiliationSubProcessStatus.IN_PROGRESS,
+    AffiliationSubProcessStatus.IN_REVIEW,
+    AffiliationSubProcessStatus.COMPLETED,
+    AffiliationSubProcessStatus.RETURNED,
+  ]
 
   const activeSubProcess = activeId ? findSubProcess(activeId) : null
 
@@ -212,7 +221,7 @@ export function KanbanClient({
         />
 
         {/* Kanban Board */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {statuses.map((status) => (
             <div key={status} className="min-h-[500px]">
               <KanbanColumn

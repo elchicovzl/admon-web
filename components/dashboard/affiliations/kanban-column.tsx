@@ -88,7 +88,8 @@ export function KanbanColumn({
 
   const colors = SubProcessStatusColors[status]
   const label = SubProcessStatusLabels[status]
-  const count = subProcesses.length
+  const safeSubProcesses = subProcesses || []
+  const count = safeSubProcesses.length
 
   return (
     <div
@@ -112,15 +113,15 @@ export function KanbanColumn({
       {/* Cards Container with Scroll */}
       <div className="flex-1 overflow-y-auto space-y-2 pr-2">
         <SortableContext
-          items={subProcesses.map((sp) => sp.id)}
+          items={safeSubProcesses.map((sp) => sp.id)}
           strategy={verticalListSortingStrategy}
         >
-          {subProcesses.length === 0 ? (
+          {safeSubProcesses.length === 0 ? (
             <Card className="p-4 text-center text-xs text-muted-foreground border-dashed">
               {isOver ? 'Suelta aquí' : 'No hay sub-procesos'}
             </Card>
           ) : (
-            subProcesses.map((subProcess) => (
+            safeSubProcesses.map((subProcess) => (
               <DraggableCard
                 key={subProcess.id}
                 subProcess={subProcess}

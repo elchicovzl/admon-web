@@ -15,6 +15,7 @@ import {
   KanbanSquare,
   UserCheck,
   ChevronDown,
+  Archive,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -106,6 +107,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           title: 'Mis Asignaciones',
           href: '/dashboard/affiliations/my-assignments',
           icon: UserCheck,
+        },
+        {
+          title: 'Archivadas',
+          href: '/dashboard/affiliations/archived',
+          icon: Archive,
         },
       ],
     },
