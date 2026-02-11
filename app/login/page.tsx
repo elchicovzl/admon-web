@@ -26,20 +26,7 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-md">
         <LoginForm />
 
-        {/* Test credentials - styled to match theme */}
-        <div className="mt-8 text-center">
-          <div className="inline-block bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-6 py-4">
-            <p className="text-white/50 text-xs font-medium mb-2">Credenciales de prueba:</p>
-            <div className="space-y-1 font-mono text-xs">
-              <p className="text-white/70">
-                <span className="text-[#F1AD32]">Admin:</span> admin@admon.com / admin123
-              </p>
-              <p className="text-white/70">
-                <span className="text-[#F1AD32]">Manager:</span> manager@admon.com / manager123
-              </p>
-            </div>
-          </div>
-        </div>
+        
       </div>
     </div>
   )
