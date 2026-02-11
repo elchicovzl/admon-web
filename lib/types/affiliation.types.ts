@@ -265,6 +265,26 @@ export interface AffiliationListItem extends SafeAffiliation {
   globalStatus: 'completed' | 'in_progress' | 'not_started' | 'pending'
 }
 
+export interface SubProcessKanbanItem {
+  id: string
+  type: AffiliationSubProcessType
+  status: AffiliationSubProcessStatus
+  affiliationId: string
+  updatedAt: Date
+  client: {
+    id: string
+    fullName: string
+  }
+  assignedTo: {
+    id: string
+    name: string | null
+    email: string
+  } | null
+  _count: {
+    documents: number
+  }
+}
+
 // ========================================
 // ENUM LABELS (for UI display)
 // ========================================

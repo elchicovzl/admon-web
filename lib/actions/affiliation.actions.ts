@@ -40,6 +40,7 @@ import type {
   AffiliationStats,
   MyAssignmentsStats,
   SafeAffiliationDocument,
+  SubProcessKanbanItem,
 } from '@/lib/types/affiliation.types'
 import type { ActionResponse } from '@/lib/types'
 
@@ -285,20 +286,23 @@ export async function createAffiliation(
     }
 
     // Verify all assigned managers exist
+    // Get unique manager IDs (same manager can be assigned to multiple sub-processes)
     const managerIds = data.subProcesses
       .map((sp) => sp.assignedToId)
       .filter((id): id is string => id !== null && id !== undefined)
 
-    if (managerIds.length > 0) {
+    const uniqueManagerIds = [...new Set(managerIds)]
+
+    if (uniqueManagerIds.length > 0) {
       const managers = await prisma.user.findMany({
         where: {
-          id: { in: managerIds },
+          id: { in: uniqueManagerIds },
           role: { in: [UserRole.MANAGER, UserRole.SUPER_ADMIN] },
           isActive: true,
         },
       })
 
-      if (managers.length !== managerIds.length) {
+      if (managers.length !== uniqueManagerIds.length) {
         return { success: false, error: 'Uno o más managers no son válidos' }
       }
     }
@@ -990,6 +994,76 @@ export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignme
   } catch (error) {
     console.error('Error fetching my assignments stats:', error)
     return { success: false, error: 'Error al obtener las estadísticas' }
+  }
+}
+
+/**
+ * Get all sub-processes for Kanban view
+ * Returns minimal data optimized for Kanban board display
+ */
+export async function getSubProcessesForKanban(): Promise<ActionResponse<SubProcessKanbanItem[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const subProcesses = await prisma.affiliationSubProcess.findMany({
+      where: {
+        affiliation: {
+          isActive: true,
+        },
+      },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        affiliationId: true,
+        updatedAt: true,
+        affiliation: {
+          select: {
+            client: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        _count: {
+          select: {
+            documents: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+
+    // Transform the data to match SubProcessKanbanItem interface
+    const kanbanItems: SubProcessKanbanItem[] = subProcesses.map((sp) => ({
+      id: sp.id,
+      type: sp.type,
+      status: sp.status,
+      affiliationId: sp.affiliationId,
+      updatedAt: sp.updatedAt,
+      client: sp.affiliation.client,
+      assignedTo: sp.assignedTo,
+      _count: sp._count,
+    }))
+
+    return { success: true, data: kanbanItems }
+  } catch (error) {
+    console.error('Error fetching sub-processes for kanban:', error)
+    return { success: false, error: 'Error al obtener los sub-procesos' }
   }
 }
 

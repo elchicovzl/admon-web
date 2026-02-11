@@ -11,6 +11,7 @@ export {
 export {
   getUsers,
   getUserById,
+  getManagers,
   createManager,
   updateUser,
   deleteUser,

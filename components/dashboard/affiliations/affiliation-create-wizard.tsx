@@ -45,10 +45,10 @@ import { Loader2, Check, ChevronRight, ChevronLeft, Key } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getClients } from '@/lib/actions/client.actions'
-import { getUsers } from '@/lib/actions'
+import { getManagers } from '@/lib/actions'
 import { createAffiliation } from '@/lib/actions/affiliation.actions'
 import type { SafeClient } from '@/lib/types/client.types'
-import type { SafeUser } from '@/lib/types'
+import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
 
 const createAffiliationFormSchema = z.object({
@@ -114,7 +114,7 @@ export function AffiliationCreateWizard({
 
   async function loadManagers() {
     try {
-      const result = await getUsers()
+      const result = await getManagers()
       if (result.success && result.data) {
         setManagers(result.data.filter((u) => u.isActive))
       }

@@ -80,6 +80,53 @@ export async function getUsers(
 }
 
 /**
+ * Get all managers (users with MANAGER or SUPER_ADMIN role)
+ * Used for manager assignment in affiliations, disabilities, etc.
+ */
+export async function getManagers(): Promise<ActionResponse<SafeUser[]>> {
+  try {
+    const session = await auth()
+
+    if (!session?.user) {
+      return {
+        success: false,
+        error: 'No autenticado',
+      }
+    }
+
+    const managers = await prisma.user.findMany({
+      where: {
+        role: { in: [UserRole.MANAGER, UserRole.SUPER_ADMIN] },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    })
+
+    return {
+      success: true,
+      data: managers,
+    }
+  } catch (error) {
+    console.error('Get managers error:', error)
+    return {
+      success: false,
+      error: 'Error al obtener managers',
+    }
+  }
+}
+
+/**
  * Get user by ID
  */
 export async function getUserById(
