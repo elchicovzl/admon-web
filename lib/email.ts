@@ -1,4 +1,7 @@
 import nodemailer from 'nodemailer'
+import { render } from '@react-email/render'
+import OtpEmail from '@/emails/otp-email'
+import LoginSuccessEmail from '@/emails/login-success-email'
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -93,6 +96,10 @@ export function generateContactEmailHtml({
   `
 }
 
+/**
+ * @deprecated Use sendOtpEmail instead - migrated to React Email
+ * Legacy function kept for backwards compatibility
+ */
 export function generateOtpEmailHtml({
   code,
   expirationMinutes,
@@ -247,4 +254,75 @@ export function generateOtpEmailHtml({
     </body>
     </html>
   `
+}
+
+/**
+ * Send OTP email using React Email template
+ */
+export async function sendOtpEmail({
+  to,
+  code,
+  expirationMinutes = 5,
+}: {
+  to: string
+  code: string
+  expirationMinutes?: number
+}) {
+  try {
+    const html = render(OtpEmail({ code, expirationMinutes }))
+
+    return sendEmail({
+      to,
+      subject: 'Tu código de acceso - Administración Segura',
+      html,
+    })
+  } catch (renderError) {
+    console.error('[Email] React Email render failed, using fallback:', renderError)
+    // Fallback to old template
+    return sendEmail({
+      to,
+      subject: 'Tu código de acceso - Administración Segura',
+      html: generateOtpEmailHtml({ code, expirationMinutes }),
+    })
+  }
+}
+
+/**
+ * Send login success notification using React Email template
+ */
+export async function sendLoginSuccessEmail({
+  to,
+  userName,
+  userEmail,
+  loginTimestamp,
+  ipAddress,
+  userAgent,
+}: {
+  to: string
+  userName: string
+  userEmail: string
+  loginTimestamp: Date
+  ipAddress?: string
+  userAgent?: string
+}) {
+  try {
+    const html = render(
+      LoginSuccessEmail({
+        userName,
+        userEmail,
+        loginTimestamp,
+        ipAddress,
+        userAgent,
+      })
+    )
+
+    return sendEmail({
+      to,
+      subject: '✅ Inicio de sesión exitoso - Administración Segura',
+      html,
+    })
+  } catch (renderError) {
+    console.error('[Email] Login success email render failed:', renderError)
+    throw renderError
+  }
 }

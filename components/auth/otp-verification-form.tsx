@@ -46,8 +46,9 @@ export function OtpVerificationForm({
       const result = await verifyOtp({ email, code })
 
       if (result.success) {
-        toast.success('¡Bienvenido!', {
-          description: 'Acceso concedido',
+        toast.success('¡Inicio de sesión exitoso!', {
+          description: 'Te hemos enviado un correo de confirmación',
+          duration: 4000,
         })
         router.push('/dashboard')
         router.refresh()

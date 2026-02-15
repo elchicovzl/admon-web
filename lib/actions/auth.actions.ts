@@ -21,7 +21,7 @@ import {
   checkRateLimit,
   cleanupExpiredTokens,
 } from '@/lib/utils/otp'
-import { sendEmail, generateOtpEmailHtml } from '@/lib/email'
+import { sendOtpEmail, sendLoginSuccessEmail } from '@/lib/email'
 import { UserRole } from '@prisma/client'
 import type { ActionResponse } from '@/lib/types/auth.types'
 
@@ -81,10 +81,10 @@ export async function requestOtp(
 
     // Enviar email con OTP
     try {
-      await sendEmail({
+      await sendOtpEmail({
         to: email,
-        subject: 'Tu código de acceso - Administración Segura',
-        html: generateOtpEmailHtml({ code: otpCode, expirationMinutes: 5 }),
+        code: otpCode,
+        expirationMinutes: 5,
       })
     } catch (emailError) {
       console.error('[OTP] Email send failed:', emailError)
@@ -174,6 +174,35 @@ export async function verifyOtp(
         },
       },
     })
+
+    // Obtener datos del usuario para el email de notificación
+    const fullUser = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    })
+
+    if (!fullUser) {
+      console.error('[OTP] User not found after verification')
+      return { success: false, error: 'Error en la verificación' }
+    }
+
+    // Enviar email de notificación de login exitoso (no bloqueante)
+    try {
+      await sendLoginSuccessEmail({
+        to: email,
+        userName: fullUser.name || 'Usuario',
+        userEmail: email,
+        loginTimestamp: new Date(),
+        // Opcional: Agregar IP y user agent desde headers si es necesario
+      })
+    } catch (emailError) {
+      // Log error pero NO fallar el login
+      console.error('[OTP] Login success email failed:', emailError)
+    }
 
     // Crear sesión NextAuth
     await signIn('credentials', {
