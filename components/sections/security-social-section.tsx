@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, MouseEvent } from "react"
+import { useState, useRef, MouseEvent, useEffect } from "react"
 import { motion, useInView } from "motion/react"
 import { Hospital, PiggyBank, HardHat, Home } from "lucide-react"
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll"
@@ -34,7 +34,19 @@ function InteractiveCard({ affiliation, index }: { affiliation: Affiliation; ind
   const [rotateX, setRotateX] = useState(0)
   const [rotateY, setRotateY] = useState(0)
   const [isHovered, setIsHovered] = useState(false)
-  const particles = useRef(generateParticles(8)).current
+  // Generate particles only on client to avoid hydration mismatch
+  const [particles, setParticles] = useState<Array<{
+    id: number;
+    left: string;
+    top: string;
+    delay: number;
+    duration: number;
+  }>>([])
+
+  useEffect(() => {
+    // Generate particles only on client side
+    setParticles(generateParticles(8))
+  }, [])
 
   const Icon = affiliation.icon
 
