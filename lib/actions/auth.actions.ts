@@ -5,64 +5,255 @@ import prisma from '@/lib/db/prisma'
 import bcrypt from 'bcryptjs'
 import { AuthError } from 'next-auth'
 import {
-  loginSchema,
+  requestOtpSchema,
+  verifyOtpSchema,
+  resendOtpSchema,
   registerSchema,
-  changePasswordSchema,
-  type LoginInput,
+  type RequestOtpInput,
+  type VerifyOtpInput,
+  type ResendOtpInput,
   type RegisterInput,
-  type ChangePasswordInput
 } from '@/lib/validations/auth.schema'
+import {
+  generateOtpCode,
+  hashOtp,
+  verifyOtp as verifyOtpHash,
+  checkRateLimit,
+  cleanupExpiredTokens,
+} from '@/lib/utils/otp'
+import { sendEmail, generateOtpEmailHtml } from '@/lib/email'
 import { UserRole } from '@prisma/client'
 import type { ActionResponse } from '@/lib/types/auth.types'
 
 /**
- * Login action using NextAuth credentials provider
+ * Solicitar OTP - Genera y envía código al email
  */
-export async function login(
-  credentials: LoginInput
+export async function requestOtp(
+  input: RequestOtpInput
 ): Promise<ActionResponse> {
   try {
-    // Validate input
-    const validatedFields = loginSchema.safeParse(credentials)
+    const validated = requestOtpSchema.safeParse(input)
+    if (!validated.success) {
+      return { success: false, error: 'Email inválido' }
+    }
 
-    if (!validatedFields.success) {
+    const { email } = validated.data
+
+    // Verificar rate limiting
+    const rateLimitCheck = await checkRateLimit(email)
+    if (!rateLimitCheck.allowed) {
       return {
         success: false,
-        error: 'Datos inválidos',
+        error: `Demasiados intentos. Intenta de nuevo en ${rateLimitCheck.minutesRemaining} minutos`,
       }
     }
 
-    const { email, password } = validatedFields.data
+    // Buscar usuario
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, isActive: true },
+    })
 
-    // Attempt to sign in with NextAuth
+    // Verificar que usuario existe y está activo
+    if (!user || !user.isActive) {
+      // IMPORTANTE: Retornar mensaje genérico (seguridad - no revelar si email existe)
+      return {
+        success: true,
+        message: 'Si tu email está registrado, recibirás un código',
+      }
+    }
+
+    // Generar código OTP
+    const otpCode = generateOtpCode()
+    const hashedOtp = await hashOtp(otpCode)
+
+    // Expiración: 5 minutos
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+
+    // Guardar en VerificationToken
+    await prisma.verificationToken.create({
+      data: {
+        identifier: email,
+        token: hashedOtp,
+        expires: expiresAt,
+      },
+    })
+
+    // Enviar email con OTP
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Tu código de acceso - Administración Segura',
+        html: generateOtpEmailHtml({ code: otpCode, expirationMinutes: 5 }),
+      })
+    } catch (emailError) {
+      console.error('[OTP] Email send failed:', emailError)
+      // IMPORTANTE: No revelar error de email al usuario (seguridad)
+    }
+
+    console.log('[OTP] Request:', { email, timestamp: new Date() })
+
+    return {
+      success: true,
+      message: 'Si tu email está registrado, recibirás un código',
+    }
+  } catch (error) {
+    console.error('[OTP] Request error:', error)
+    return {
+      success: false,
+      error: 'Error al solicitar código. Intenta más tarde',
+    }
+  }
+}
+
+/**
+ * Verificar OTP - Valida código y crea sesión
+ */
+export async function verifyOtp(
+  input: VerifyOtpInput
+): Promise<ActionResponse> {
+  try {
+    const validated = verifyOtpSchema.safeParse(input)
+    if (!validated.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    const { email, code } = validated.data
+
+    // Limpiar tokens expirados
+    await cleanupExpiredTokens()
+
+    // Buscar usuario
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, isActive: true },
+    })
+
+    if (!user || !user.isActive) {
+      console.log('[OTP] Verification failed: User not found or inactive', {
+        email,
+      })
+      return { success: false, error: 'Código inválido' }
+    }
+
+    // Buscar último token válido para este email
+    const token = await prisma.verificationToken.findFirst({
+      where: {
+        identifier: email,
+        expires: { gt: new Date() },
+      },
+      orderBy: {
+        expires: 'desc',
+      },
+    })
+
+    if (!token) {
+      console.log('[OTP] Verification failed: Token not found or expired', {
+        email,
+      })
+      return {
+        success: false,
+        error: 'Código expirado o inválido. Solicita uno nuevo',
+      }
+    }
+
+    // Verificar código OTP
+    const isValid = await verifyOtpHash(code, token.token)
+
+    if (!isValid) {
+      console.log('[OTP] Verification failed: Invalid code', { email })
+      return { success: false, error: 'Código inválido' }
+    }
+
+    // Eliminar token usado (prevenir reuso)
+    await prisma.verificationToken.delete({
+      where: {
+        identifier_token: {
+          identifier: email,
+          token: token.token,
+        },
+      },
+    })
+
+    // Crear sesión NextAuth
     await signIn('credentials', {
       email,
-      password,
       redirect: false,
     })
+
+    console.log('[OTP] Verification successful:', { email })
 
     return {
       success: true,
       message: 'Inicio de sesión exitoso',
     }
   } catch (error) {
-    if (error instanceof AuthError) {
-      switch (error.type) {
-        case 'CredentialsSignin':
-          return {
-            success: false,
-            error: 'Credenciales inválidas',
-          }
-        default:
-          return {
-            success: false,
-            error: 'Error al iniciar sesión',
-          }
-      }
-    }
+    console.error('[OTP] Verify error:', error)
     return {
       success: false,
-      error: 'Error inesperado al iniciar sesión',
+      error: 'Error al verificar código',
+    }
+  }
+}
+
+/**
+ * Reenviar OTP - Con cooldown de 60 segundos
+ */
+export async function resendOtp(
+  input: ResendOtpInput
+): Promise<ActionResponse & { cooldownSeconds?: number }> {
+  try {
+    const validated = resendOtpSchema.safeParse(input)
+    if (!validated.success) {
+      return { success: false, error: 'Email inválido' }
+    }
+
+    const { email } = validated.data
+
+    // Verificar cooldown: último token enviado hace menos de 60 seg
+    const recentToken = await prisma.verificationToken.findFirst({
+      where: {
+        identifier: email,
+      },
+      orderBy: {
+        expires: 'desc',
+      },
+    })
+
+    if (recentToken) {
+      // Calcular cuándo se creó (expires - 5 min)
+      const createdAt = new Date(
+        recentToken.expires.getTime() - 5 * 60 * 1000
+      )
+      const cooldownEnds = new Date(createdAt.getTime() + 60 * 1000)
+      const now = new Date()
+
+      if (cooldownEnds > now) {
+        const remainingSeconds = Math.ceil(
+          (cooldownEnds.getTime() - now.getTime()) / 1000
+        )
+        return {
+          success: false,
+          error: `Espera ${remainingSeconds} segundos antes de solicitar un nuevo código`,
+          cooldownSeconds: remainingSeconds,
+        }
+      }
+    }
+
+    // Eliminar tokens anteriores no usados
+    await prisma.verificationToken.deleteMany({
+      where: { identifier: email },
+    })
+
+    console.log('[OTP] Resend:', { email, timestamp: new Date() })
+
+    // Llamar a requestOtp
+    return requestOtp(input)
+  } catch (error) {
+    console.error('[OTP] Resend error:', error)
+    return {
+      success: false,
+      error: 'Error al reenviar código',
     }
   }
 }
@@ -88,6 +279,7 @@ export async function logout(): Promise<ActionResponse> {
 
 /**
  * Register a new user (only SUPER_ADMIN can create managers)
+ * No password required - users login with OTP
  */
 export async function register(
   data: RegisterInput,
@@ -104,7 +296,7 @@ export async function register(
       }
     }
 
-    const { name, email, password, role } = validatedFields.data
+    const { name, email, role } = validatedFields.data
 
     // Check if creating a manager (requires SUPER_ADMIN)
     if (role === UserRole.MANAGER && createdByUserId) {
@@ -132,15 +324,11 @@ export async function register(
       }
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user
+    // Create user (without password)
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password: hashedPassword,
         role: role || UserRole.MANAGER,
         createdById: createdByUserId || null,
       },
@@ -171,76 +359,4 @@ export async function register(
  */
 export async function getSession() {
   return await auth()
-}
-
-/**
- * Change password action
- */
-export async function changePassword(
-  data: ChangePasswordInput
-): Promise<ActionResponse> {
-  try {
-    const session = await auth()
-
-    if (!session?.user) {
-      return {
-        success: false,
-        error: 'No autenticado',
-      }
-    }
-
-    // Validate input
-    const validatedFields = changePasswordSchema.safeParse(data)
-
-    if (!validatedFields.success) {
-      return {
-        success: false,
-        error: 'Datos inválidos',
-      }
-    }
-
-    const { currentPassword, newPassword } = validatedFields.data
-
-    // Get user with password
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    })
-
-    if (!user || !user.password) {
-      return {
-        success: false,
-        error: 'Usuario no encontrado',
-      }
-    }
-
-    // Verify current password
-    const passwordMatch = await bcrypt.compare(currentPassword, user.password)
-
-    if (!passwordMatch) {
-      return {
-        success: false,
-        error: 'Contraseña actual incorrecta',
-      }
-    }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10)
-
-    // Update password
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { password: hashedPassword },
-    })
-
-    return {
-      success: true,
-      message: 'Contraseña actualizada exitosamente',
-    }
-  } catch (error) {
-    console.error('Change password error:', error)
-    return {
-      success: false,
-      error: 'Error al cambiar contraseña',
-    }
-  }
 }

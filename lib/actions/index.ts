@@ -1,10 +1,11 @@
 // Auth actions
 export {
-  login,
+  requestOtp,
+  verifyOtp,
+  resendOtp,
   logout,
   register,
   getSession,
-  changePassword,
 } from './auth.actions'
 
 // User actions
@@ -17,7 +18,6 @@ export {
   deleteUser,
   getUsersCount,
   toggleUserStatus,
-  changeUserPassword,
 } from './user.actions'
 
 // Client actions

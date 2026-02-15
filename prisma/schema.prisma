@@ -23,7 +23,7 @@ model User {
   name          String?
   email         String    @unique
   emailVerified DateTime?
-  password      String
+  password      String?
   image         String?
   role          UserRole  @default(MANAGER)
   isActive      Boolean   @default(true)
@@ -100,6 +100,18 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+// OTP Rate Limiting model
+model OtpRateLimit {
+  id           String    @id @default(cuid())
+  email        String
+  attempts     Int       @default(1)
+  lastAttempt  DateTime  @default(now())
+  blockedUntil DateTime?
+
+  @@map("otp_rate_limits")
+  @@index([email])
 }
 
 // Client Management Enums

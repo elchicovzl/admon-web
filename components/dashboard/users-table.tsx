@@ -23,8 +23,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { MoreHorizontal, Shield, UserCheck, Key, Ban, CheckCircle } from 'lucide-react'
-import { EditPasswordDialog } from './edit-password-dialog'
+import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -34,8 +33,6 @@ interface UsersTableProps {
 }
 
 export function UsersTable({ users }: UsersTableProps) {
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
   const getUserInitials = (name: string | null, email: string) => {
@@ -48,11 +45,6 @@ export function UsersTable({ users }: UsersTableProps) {
         .slice(0, 2)
     }
     return email[0].toUpperCase()
-  }
-
-  const handleEditPassword = (user: SafeUser) => {
-    setSelectedUser(user)
-    setPasswordDialogOpen(true)
   }
 
   const handleToggleStatus = async (user: SafeUser) => {
@@ -153,11 +145,6 @@ export function UsersTable({ users }: UsersTableProps) {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleEditPassword(user)}>
-                            <Key className="mr-2 h-4 w-4" />
-                            Cambiar Contraseña
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
                             {user.isActive ? (
                               <>
@@ -181,15 +168,6 @@ export function UsersTable({ users }: UsersTableProps) {
           </TableBody>
         </Table>
       </div>
-
-      {selectedUser && (
-        <EditPasswordDialog
-          open={passwordDialogOpen}
-          onOpenChange={setPasswordDialogOpen}
-          userId={selectedUser.id}
-          userName={selectedUser.name || selectedUser.email}
-        />
-      )}
     </>
   )
 }

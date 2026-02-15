@@ -1,21 +1,32 @@
 import { z } from 'zod'
 import { UserRole } from '@prisma/client'
 
-// Login schema
-export const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, 'El email es requerido')
-    .email('Email inválido'),
-  password: z
-    .string()
-    .min(1, 'La contraseña es requerida')
-    .min(6, 'La contraseña debe tener al menos 6 caracteres'),
+// Request OTP schema
+export const requestOtpSchema = z.object({
+  email: z.string().email('Email inválido'),
 })
 
-export type LoginInput = z.infer<typeof loginSchema>
+export type RequestOtpInput = z.infer<typeof requestOtpSchema>
 
-// Register schema
+// Verify OTP schema
+export const verifyOtpSchema = z.object({
+  email: z.string().email('Email inválido'),
+  code: z
+    .string()
+    .length(6, 'El código debe tener 6 dígitos')
+    .regex(/^\d{6}$/, 'El código debe ser numérico'),
+})
+
+export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>
+
+// Resend OTP schema
+export const resendOtpSchema = z.object({
+  email: z.string().email('Email inválido'),
+})
+
+export type ResendOtpInput = z.infer<typeof resendOtpSchema>
+
+// Register schema (without password)
 export const registerSchema = z.object({
   name: z
     .string()
@@ -26,34 +37,7 @@ export const registerSchema = z.object({
     .string()
     .min(1, 'El email es requerido')
     .email('Email inválido'),
-  password: z
-    .string()
-    .min(1, 'La contraseña es requerida')
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
-    .max(100, 'La contraseña no puede exceder 100 caracteres'),
-  role: z
-    .nativeEnum(UserRole)
-    .default(UserRole.MANAGER)
-    .optional(),
+  role: z.nativeEnum(UserRole).default(UserRole.MANAGER).optional(),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>
-
-// Change password schema
-export const changePasswordSchema = z.object({
-  currentPassword: z
-    .string()
-    .min(1, 'La contraseña actual es requerida'),
-  newPassword: z
-    .string()
-    .min(6, 'La nueva contraseña debe tener al menos 6 caracteres')
-    .max(100, 'La contraseña no puede exceder 100 caracteres'),
-  confirmPassword: z
-    .string()
-    .min(1, 'Confirma tu nueva contraseña'),
-}).refine((data) => data.newPassword === data.confirmPassword, {
-  message: 'Las contraseñas no coinciden',
-  path: ['confirmPassword'],
-})
-
-export type ChangePasswordInput = z.infer<typeof changePasswordSchema>

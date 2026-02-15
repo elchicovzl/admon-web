@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { UserRole } from '@prisma/client'
 
-// Create user schema (for SUPER_ADMIN creating managers)
+// Create user schema (for SUPER_ADMIN creating managers) - No password, users login with OTP
 export const createUserSchema = z.object({
   name: z
     .string()
@@ -12,11 +12,6 @@ export const createUserSchema = z.object({
     .string()
     .min(1, 'El email es requerido')
     .email('Email inválido'),
-  password: z
-    .string()
-    .min(1, 'La contraseña es requerida')
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
-    .max(100, 'La contraseña no puede exceder 100 caracteres'),
   role: z
     .nativeEnum(UserRole)
     .default(UserRole.MANAGER),
@@ -55,17 +50,6 @@ export const getUserSchema = z.object({
 })
 
 export type GetUserInput = z.infer<typeof getUserSchema>
-
-// Change user password schema (for SUPER_ADMIN)
-export const changeUserPasswordSchema = z.object({
-  userId: z.string().cuid('ID de usuario inválido'),
-  newPassword: z
-    .string()
-    .min(6, 'La contraseña debe tener al menos 6 caracteres')
-    .max(100, 'La contraseña no puede exceder 100 caracteres'),
-})
-
-export type ChangeUserPasswordInput = z.infer<typeof changeUserPasswordSchema>
 
 // Toggle user status schema
 export const toggleUserStatusSchema = z.object({

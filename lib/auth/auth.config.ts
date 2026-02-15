@@ -1,8 +1,6 @@
 import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
-import bcrypt from 'bcryptjs'
 import prisma from '@/lib/db/prisma'
-import { loginSchema } from '@/lib/validations/auth.schema'
 
 export const authConfig = {
   providers: [
@@ -10,42 +8,34 @@ export const authConfig = {
       name: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
         try {
-          // Validate credentials with Zod
-          const validatedFields = loginSchema.safeParse(credentials)
+          // Solo validar que el email existe y está activo
+          // La verificación OTP ya se hizo en verifyOtp() action
 
-          if (!validatedFields.success) {
+          const { email } = credentials as { email: string }
+
+          if (!email) {
             return null
           }
 
-          const { email, password } = validatedFields.data
-
-          // Find user in database
+          // Buscar usuario
           const user = await prisma.user.findUnique({
             where: { email },
           })
 
-          if (!user || !user.password) {
+          if (!user) {
             return null
           }
 
-          // Check if user is active
+          // Verificar que está activo
           if (!user.isActive) {
             console.log(`Login blocked: User ${email} is inactive`)
             return null
           }
 
-          // Verify password
-          const passwordMatch = await bcrypt.compare(password, user.password)
-
-          if (!passwordMatch) {
-            return null
-          }
-
-          // Return user object (without password)
+          // Retornar usuario (sin verificar password)
           return {
             id: user.id,
             name: user.name,

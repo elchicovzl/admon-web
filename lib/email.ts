@@ -92,3 +92,159 @@ export function generateContactEmailHtml({
     </html>
   `
 }
+
+export function generateOtpEmailHtml({
+  code,
+  expirationMinutes,
+}: {
+  code: string
+  expirationMinutes: number
+}) {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body {
+          font-family: 'Segoe UI', Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          background-color: #f5f5f5;
+          margin: 0;
+          padding: 0;
+        }
+        .container {
+          max-width: 600px;
+          margin: 40px auto;
+          background: white;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+          background: linear-gradient(135deg, #00A86B 0%, #008556 100%);
+          color: white;
+          padding: 40px 30px;
+          text-align: center;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 28px;
+          font-weight: 600;
+        }
+        .header p {
+          margin: 10px 0 0;
+          opacity: 0.95;
+          font-size: 14px;
+        }
+        .content {
+          padding: 40px 30px;
+        }
+        .greeting {
+          font-size: 16px;
+          color: #333;
+          margin-bottom: 20px;
+        }
+        .otp-code {
+          font-size: 48px;
+          font-weight: 700;
+          letter-spacing: 12px;
+          color: #00A86B;
+          text-align: center;
+          padding: 30px 20px;
+          background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+          border-radius: 12px;
+          border: 3px dashed #00A86B;
+          margin: 30px 0;
+          font-family: 'Courier New', monospace;
+        }
+        .expiry {
+          text-align: center;
+          color: #666;
+          font-size: 14px;
+          margin-top: -15px;
+          margin-bottom: 30px;
+        }
+        .expiry strong {
+          color: #d9534f;
+          font-weight: 600;
+        }
+        .warning {
+          background: #fff3cd;
+          border-left: 5px solid #ffc107;
+          padding: 20px;
+          margin: 25px 0;
+          border-radius: 8px;
+        }
+        .warning strong {
+          color: #856404;
+          font-size: 15px;
+        }
+        .warning ul {
+          margin: 12px 0 0;
+          padding-left: 25px;
+          color: #856404;
+        }
+        .warning li {
+          margin: 8px 0;
+        }
+        .support {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 1px solid #e9ecef;
+          color: #666;
+          font-size: 14px;
+          text-align: center;
+        }
+        .footer {
+          background: #f8f9fa;
+          text-align: center;
+          padding: 20px;
+          color: #6c757d;
+          font-size: 12px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🔐 Código de Acceso</h1>
+          <p>Administración Segura</p>
+        </div>
+
+        <div class="content">
+          <p class="greeting">Hola,</p>
+          <p>Has solicitado acceso al panel administrativo. Usa el siguiente código para iniciar sesión:</p>
+
+          <div class="otp-code">${code}</div>
+
+          <p class="expiry">
+            Este código expirará en <strong>${expirationMinutes} minutos</strong>
+          </p>
+
+          <div class="warning">
+            <strong>⚠️ Importante - Seguridad</strong>
+            <ul>
+              <li><strong>No compartas</strong> este código con nadie</li>
+              <li>Nuestro equipo <strong>nunca te pedirá</strong> este código</li>
+              <li>Si no solicitaste este código, <strong>ignora este correo</strong></li>
+              <li>Cada código solo puede usarse <strong>una vez</strong></li>
+            </ul>
+          </div>
+
+          <p class="support">
+            Si tienes problemas para iniciar sesión o necesitas ayuda, <br>
+            contacta a nuestro equipo de soporte.
+          </p>
+        </div>
+
+        <div class="footer">
+          © ${new Date().getFullYear()} Administración Segura. Todos los derechos reservados.<br>
+          Este es un correo automático, por favor no respondas a este mensaje.
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}

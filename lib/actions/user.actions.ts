@@ -9,7 +9,6 @@ import {
   createUserSchema,
   updateUserSchema,
   deleteUserSchema,
-  changeUserPasswordSchema,
   toggleUserStatusSchema,
   type CreateUserInput,
   type UpdateUserInput,
@@ -203,7 +202,7 @@ export async function createManager(
       }
     }
 
-    const { name, email, password, role } = validatedFields.data
+    const { name, email, role } = validatedFields.data
 
     // Only allow creating managers
     if (role === UserRole.SUPER_ADMIN) {
@@ -225,15 +224,11 @@ export async function createManager(
       }
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10)
-
-    // Create user
+    // Create user (without password - users login with OTP)
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password: hashedPassword,
         role: UserRole.MANAGER,
         createdById: authCheck.userId,
       },
@@ -524,56 +519,5 @@ export async function toggleUserStatus(
   } catch (error) {
     console.error('Toggle user status error:', error)
     return { success: false, error: 'Error al cambiar status del usuario' }
-  }
-}
-
-/**
- * Change password of a user (only SUPER_ADMIN can change manager passwords)
- */
-export async function changeUserPassword(
-  userId: string,
-  newPassword: string
-): Promise<ActionResponse> {
-  try {
-    const authCheck = await requireSuperAdmin()
-    if (!authCheck.authorized) {
-      return { success: false, error: authCheck.error }
-    }
-
-    // Validar input
-    const validatedFields = changeUserPasswordSchema.safeParse({ userId, newPassword })
-    if (!validatedFields.success) {
-      return { success: false, error: 'Datos inválidos' }
-    }
-
-    // Verificar que el usuario existe
-    const user = await prisma.user.findUnique({ where: { id: userId } })
-    if (!user) {
-      return { success: false, error: 'Usuario no encontrado' }
-    }
-
-    // No se puede cambiar password de SUPER_ADMIN
-    if (user.role === UserRole.SUPER_ADMIN) {
-      return { success: false, error: 'No puedes cambiar el password de un Super Admin' }
-    }
-
-    // Hash del nuevo password
-    const hashedPassword = await bcrypt.hash(newPassword, 10)
-
-    // Actualizar password
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    })
-
-    revalidatePath('/dashboard/users')
-
-    return {
-      success: true,
-      message: 'Contraseña actualizada exitosamente',
-    }
-  } catch (error) {
-    console.error('Change user password error:', error)
-    return { success: false, error: 'Error al cambiar contraseña' }
   }
 }
