@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { X } from 'lucide-react'
 
 // WhatsApp SVG Icon Component
@@ -25,8 +26,12 @@ export default function WhatsAppWidget({
   message = "Hola, me gustaría obtener información sobre sus servicios de seguridad social.",
   companyName = "Administración Segura"
 }: WhatsAppWidgetProps) {
+  const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
+
+  // Don't show widget in dashboard or auth pages
+  const isDashboard = pathname?.startsWith('/dashboard') || pathname?.startsWith('/login')
 
   useEffect(() => {
     // Show widget after a delay
@@ -48,7 +53,8 @@ export default function WhatsAppWidget({
     setIsOpen(!isOpen)
   }
 
-  if (!isVisible) return null
+  // Don't render widget if not visible or in dashboard/auth pages
+  if (!isVisible || isDashboard) return null
 
   return (
     <>

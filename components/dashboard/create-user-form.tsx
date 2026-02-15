@@ -41,7 +41,6 @@ export function CreateUserForm({ open, onOpenChange, onUserCreated }: CreateUser
     defaultValues: {
       name: '',
       email: '',
-      password: '',
     },
   })
 
@@ -75,7 +74,7 @@ export function CreateUserForm({ open, onOpenChange, onUserCreated }: CreateUser
         <DialogHeader>
           <DialogTitle>Crear Nuevo Manager</DialogTitle>
           <DialogDescription>
-            Crea un nuevo usuario con rol de Manager. Completa todos los campos requeridos.
+            Crea un nuevo usuario con rol de Manager. El manager recibirá un código de acceso por email para iniciar sesión.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -113,28 +112,8 @@ export function CreateUserForm({ open, onOpenChange, onUserCreated }: CreateUser
                       {...field}
                     />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contraseña</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="••••••••"
-                      type="password"
-                      autoComplete="new-password"
-                      disabled={isLoading}
-                      {...field}
-                    />
-                  </FormControl>
                   <FormDescription>
-                    Mínimo 6 caracteres
+                    El manager recibirá un código de acceso por email
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

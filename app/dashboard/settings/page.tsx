@@ -45,79 +45,47 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Información del Perfil</CardTitle>
-            <CardDescription>
-              Datos básicos de tu cuenta
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src={session.user.image || undefined} alt={session.user.name || session.user.email} />
-                <AvatarFallback className="text-lg">
-                  {getUserInitials(session.user.name, session.user.email)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h3 className="font-semibold">{session.user.name || 'Sin nombre'}</h3>
-                <p className="text-sm text-muted-foreground">{session.user.email}</p>
-              </div>
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Información del Perfil</CardTitle>
+          <CardDescription>
+            Datos básicos de tu cuenta
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={session.user.image || undefined} alt={session.user.name || session.user.email} />
+              <AvatarFallback className="text-lg">
+                {getUserInitials(session.user.name, session.user.email)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <h3 className="font-semibold">{session.user.name || 'Sin nombre'}</h3>
+              <p className="text-sm text-muted-foreground">{session.user.email}</p>
             </div>
+          </div>
 
-            <Separator />
+          <Separator />
 
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Rol</span>
-                {getRoleBadge(session.user.role)}
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Email</span>
-                <span className="text-sm font-medium">{session.user.email}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Nombre</span>
-                <span className="text-sm font-medium">{session.user.name || 'No especificado'}</span>
-              </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Rol</span>
+              {getRoleBadge(session.user.role)}
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Seguridad</CardTitle>
-            <CardDescription>
-              Opciones de seguridad de tu cuenta
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border p-4">
-              <h4 className="text-sm font-medium">Cambiar Contraseña</h4>
-              <p className="text-sm text-muted-foreground mt-1">
-                Actualiza tu contraseña periódicamente para mantener tu cuenta segura
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Funcionalidad próximamente disponible
-              </p>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Email</span>
+              <span className="text-sm font-medium">{session.user.email}</span>
             </div>
-
-            <div className="rounded-lg border p-4">
-              <h4 className="text-sm font-medium">Autenticación de Dos Factores</h4>
-              <p className="text-sm text-muted-foreground mt-1">
-                Añade una capa extra de seguridad a tu cuenta
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Funcionalidad próximamente disponible
-              </p>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Nombre</span>
+              <span className="text-sm font-medium">{session.user.name || 'No especificado'}</span>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      <Card>
+      <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>Preferencias</CardTitle>
           <CardDescription>
