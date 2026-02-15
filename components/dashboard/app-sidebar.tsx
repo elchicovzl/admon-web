@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -177,15 +178,21 @@ export function AppSidebar({ user }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-4 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <LayoutDashboard className="h-4 w-4" />
+        <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 hover:opacity-80 transition-opacity">
+          <div className="relative h-10 w-10 flex-shrink-0">
+            <Image
+              src="/images/logoadmon2.webp"
+              alt="Administración Segura"
+              fill
+              className="object-contain"
+              priority
+            />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold">Admon Web</span>
+            <span className="text-sm font-semibold">Administración Segura</span>
             <span className="text-xs text-muted-foreground">Dashboard</span>
           </div>
-        </div>
+        </Link>
       </SidebarHeader>
 
       <SidebarContent>
