@@ -1,5 +1,6 @@
 'use server'
 
+import { cache } from 'react'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
 import { UserRole, ClientType } from '@prisma/client'
@@ -39,7 +40,7 @@ async function requireManagerOrAdmin() {
 /**
  * Get all clients
  */
-export async function getClients(): Promise<ActionResponse<SafeClient[]>> {
+export const getClients = cache(async (): Promise<ActionResponse<SafeClient[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -77,12 +78,12 @@ export async function getClients(): Promise<ActionResponse<SafeClient[]>> {
       error: 'Error al obtener clientes',
     }
   }
-}
+})
 
 /**
  * Get client by ID with relations
  */
-export async function getClientById(id: string): Promise<ActionResponse<ClientWithRelations>> {
+export const getClientById = cache(async (id: string): Promise<ActionResponse<ClientWithRelations>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -266,7 +267,7 @@ export async function getClientById(id: string): Promise<ActionResponse<ClientWi
       error: 'Error al obtener cliente',
     }
   }
-}
+})
 
 /**
  * Create a new client
@@ -598,14 +599,14 @@ export async function deleteClientNote(noteId: string): Promise<ActionResponse> 
 /**
  * Get clients count
  */
-export async function getClientsCount(): Promise<
+export const getClientsCount = cache(async (): Promise<
   ActionResponse<{
     total: number
     active: number
     inactive: number
     byType: { type: string; count: number }[]
   }>
-> {
+> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -643,7 +644,7 @@ export async function getClientsCount(): Promise<
       error: 'Error al obtener conteo de clientes',
     }
   }
-}
+})
 
 /**
  * Assign employee to company
@@ -763,7 +764,7 @@ export async function removeEmployeeFromCompany(employeeId: string): Promise<Act
 /**
  * Get available employees (not assigned to any company)
  */
-export async function getAvailableEmployees(): Promise<ActionResponse<SafeClient[]>> {
+export const getAvailableEmployees = cache(async (): Promise<ActionResponse<SafeClient[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -806,12 +807,12 @@ export async function getAvailableEmployees(): Promise<ActionResponse<SafeClient
       error: 'Error al obtener empleados disponibles',
     }
   }
-}
+})
 
 /**
  * Get company employees
  */
-export async function getCompanyEmployees(companyId: string): Promise<ActionResponse<SafeClient[]>> {
+export const getCompanyEmployees = cache(async (companyId: string): Promise<ActionResponse<SafeClient[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -870,4 +871,4 @@ export async function getCompanyEmployees(companyId: string): Promise<ActionResp
       error: 'Error al obtener empleados de la empresa',
     }
   }
-}
+})

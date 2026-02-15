@@ -4,45 +4,29 @@
  */
 
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/auth'
 import { getMyAssignments, getMyAssignmentsStats } from '@/lib/actions/affiliation.actions'
 import { MyAssignmentsClient } from './my-assignments-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Clock, AlertCircle, CheckCircle2, XCircle, FileText, Eye } from 'lucide-react'
+import { MyAssignmentsStatsSkeleton } from '@/components/dashboard/affiliations/my-assignments-stats-skeleton'
+import { MyAssignmentsTableSkeleton } from '@/components/dashboard/affiliations/my-assignments-table-skeleton'
 
 export const metadata: Metadata = {
   title: 'Mis Asignaciones | Dashboard',
   description: 'Sub-procesos asignados a mí',
 }
 
-export default async function MyAssignmentsPage() {
-  const session = await auth()
-
-  if (!session?.user) {
-    redirect('/login')
-  }
-
-  // Load data in parallel
-  const [assignmentsResult, statsResult] = await Promise.all([
-    getMyAssignments(),
-    getMyAssignmentsStats(),
-  ])
-
-  const assignments = assignmentsResult.success ? assignmentsResult.data || [] : []
+// Async component for stats
+async function AssignmentsStats() {
+  const statsResult = await getMyAssignmentsStats()
   const stats = statsResult.success ? statsResult.data : null
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Mis Asignaciones</h1>
-        <p className="text-muted-foreground">
-          Sub-procesos de afiliación asignados a ti
-        </p>
-      </div>
-
-      {/* Stats Cards */}
+    <>
+      {/* Primary stats - 4 cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -129,13 +113,50 @@ export default async function MyAssignmentsPage() {
           </CardContent>
         </Card>
       </div>
+    </>
+  )
+}
 
-      {/* Client Component with assignments */}
-      <MyAssignmentsClient
-        initialAssignments={assignments}
-        currentUserId={session.user.id}
-        currentUserRole={session.user.role}
-      />
+// Async component for table
+async function AssignmentsTable({ userId, userRole }: { userId: string; userRole: string }) {
+  const assignmentsResult = await getMyAssignments()
+  const assignments = assignmentsResult.success ? assignmentsResult.data || [] : []
+
+  return (
+    <MyAssignmentsClient
+      initialAssignments={assignments}
+      currentUserId={userId}
+      currentUserRole={userRole}
+    />
+  )
+}
+
+export default async function MyAssignmentsPage() {
+  const session = await auth()
+
+  if (!session?.user) {
+    redirect('/login')
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - renders immediately */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Mis Asignaciones</h1>
+        <p className="text-muted-foreground">
+          Sub-procesos de afiliación asignados a ti
+        </p>
+      </div>
+
+      {/* Stats - progressive rendering */}
+      <Suspense fallback={<MyAssignmentsStatsSkeleton />}>
+        <AssignmentsStats />
+      </Suspense>
+
+      {/* Table - progressive rendering */}
+      <Suspense fallback={<MyAssignmentsTableSkeleton />}>
+        <AssignmentsTable userId={session.user.id} userRole={session.user.role} />
+      </Suspense>
     </div>
   )
 }

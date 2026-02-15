@@ -31,10 +31,9 @@ import { es } from 'date-fns/locale'
 
 interface UsersTableProps {
   users: SafeUser[]
-  onUserUpdated?: (userId: string, updates: Partial<SafeUser>) => void
 }
 
-export function UsersTable({ users, onUserUpdated }: UsersTableProps) {
+export function UsersTable({ users }: UsersTableProps) {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null)
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
@@ -64,7 +63,7 @@ export function UsersTable({ users, onUserUpdated }: UsersTableProps) {
 
       if (result.success) {
         toast.success(result.message || 'Status actualizado exitosamente')
-        onUserUpdated?.(user.id, { isActive: !user.isActive })
+        // Server Action already calls revalidatePath
       } else {
         toast.error(result.error || 'Error al cambiar status')
       }

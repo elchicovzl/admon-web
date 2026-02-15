@@ -5,6 +5,7 @@
 
 'use server'
 
+import { cache } from 'react'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
@@ -66,7 +67,7 @@ async function requireManagerOrAdmin() {
 /**
  * Get all affiliations with client and sub-processes info
  */
-export async function getAffiliations(): Promise<ActionResponse<AffiliationWithRelations[]>> {
+export const getAffiliations = cache(async (): Promise<ActionResponse<AffiliationWithRelations[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -132,12 +133,12 @@ export async function getAffiliations(): Promise<ActionResponse<AffiliationWithR
     console.error('Error fetching affiliations:', error)
     return { success: false, error: 'Error al obtener las afiliaciones' }
   }
-}
+})
 
 /**
  * Get affiliation by ID with all relations
  */
-export async function getAffiliationById(id: string): Promise<ActionResponse<AffiliationWithRelations>> {
+export const getAffiliationById = cache(async (id: string): Promise<ActionResponse<AffiliationWithRelations>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -265,7 +266,7 @@ export async function getAffiliationById(id: string): Promise<ActionResponse<Aff
     console.error('Error fetching affiliation:', error)
     return { success: false, error: 'Error al obtener la afiliación' }
   }
-}
+})
 
 /**
  * Create new affiliation with sub-processes
@@ -455,63 +456,63 @@ export async function toggleAffiliationStatus(
 /**
  * Get affiliation stats
  */
-export async function getAffiliationStats(): Promise<ActionResponse<AffiliationStats>> {
+export const getAffiliationStats = cache(async (): Promise<ActionResponse<AffiliationStats>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error }
     }
 
-    const [total, active, inactive, subProcessStats, statusStats] = await Promise.all([
-      prisma.affiliation.count(),
-      prisma.affiliation.count({ where: { isActive: true } }),
-      prisma.affiliation.count({ where: { isActive: false } }),
+    // Optimized: 4 queries instead of 6, no full table scan
+    const [basicStats, subProcessStats, statusStats, completionStats] = await Promise.all([
+      // Query 1: Basic counts (3 counts efficiently)
+      Promise.all([
+        prisma.affiliation.count(),
+        prisma.affiliation.count({ where: { isActive: true } }),
+        prisma.affiliation.count({ where: { isActive: false } }),
+      ]),
+
+      // Query 2: Subprocess type stats
       prisma.affiliationSubProcess.groupBy({
         by: ['type'],
         _count: true,
       }),
+
+      // Query 3: Subprocess status stats
       prisma.affiliationSubProcess.groupBy({
         by: ['status'],
         _count: true,
       }),
+
+      // Query 4: Completed/InProgress using SQL aggregation (NO loading all affiliations)
+      prisma.$queryRaw<[{ completed: number; in_progress: number }]>`
+        SELECT
+          COUNT(DISTINCT a.id) FILTER (
+            WHERE NOT EXISTS (
+              SELECT 1 FROM affiliation_subprocesses asp
+              WHERE asp."affiliationId" = a.id AND asp.status != 'COMPLETED'
+            ) AND EXISTS (
+              SELECT 1 FROM affiliation_subprocesses asp
+              WHERE asp."affiliationId" = a.id
+            )
+          )::int as completed,
+          COUNT(DISTINCT a.id) FILTER (
+            WHERE EXISTS (
+              SELECT 1 FROM affiliation_subprocesses asp
+              WHERE asp."affiliationId" = a.id
+              AND asp.status IN ('IN_PROGRESS', 'IN_REVIEW')
+            )
+          )::int as in_progress
+        FROM affiliations a
+      `,
     ])
 
-    // Count completed and in_progress affiliations
-    const affiliations = await prisma.affiliation.findMany({
-      include: {
-        subProcesses: {
-          select: {
-            status: true,
-          },
-        },
-      },
-    })
-
-    let completed = 0
-    let inProgress = 0
-
-    affiliations.forEach((aff) => {
-      if (aff.subProcesses.length === 0) return
-
-      const allCompleted = aff.subProcesses.every(
-        (sp) => sp.status === AffiliationSubProcessStatus.COMPLETED
-      )
-      const someInProgress = aff.subProcesses.some(
-        (sp) =>
-          sp.status === AffiliationSubProcessStatus.IN_PROGRESS ||
-          sp.status === AffiliationSubProcessStatus.IN_REVIEW
-      )
-
-      if (allCompleted) completed++
-      else if (someInProgress) inProgress++
-    })
-
     const stats: AffiliationStats = {
-      total,
-      active,
-      inactive,
-      completed,
-      inProgress,
+      total: basicStats[0],
+      active: basicStats[1],
+      inactive: basicStats[2],
+      completed: completionStats[0].completed,
+      inProgress: completionStats[0].in_progress,
       bySubProcessType: subProcessStats.map((stat) => ({
         type: stat.type,
         count: stat._count,
@@ -527,7 +528,7 @@ export async function getAffiliationStats(): Promise<ActionResponse<AffiliationS
     console.error('Error fetching affiliation stats:', error)
     return { success: false, error: 'Error al obtener las estadísticas' }
   }
-}
+})
 
 // ========================================
 // SUB-PROCESS OPERATIONS
@@ -536,9 +537,9 @@ export async function getAffiliationStats(): Promise<ActionResponse<AffiliationS
 /**
  * Get sub-process by ID with all relations
  */
-export async function getSubProcessById(
+export const getSubProcessById = cache(async (
   id: string
-): Promise<ActionResponse<AffiliationSubProcessWithRelations>> {
+): Promise<ActionResponse<AffiliationSubProcessWithRelations>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -641,7 +642,7 @@ export async function getSubProcessById(
     console.error('Error fetching sub-process:', error)
     return { success: false, error: 'Error al obtener el sub-proceso' }
   }
-}
+})
 
 /**
  * Update sub-process status
@@ -817,9 +818,9 @@ export async function assignSubProcess(
 /**
  * Get manager's assigned sub-processes
  */
-export async function getMyAssignments(
+export const getMyAssignments = cache(async (
   statusFilter?: AffiliationSubProcessStatus
-): Promise<ActionResponse<AffiliationSubProcessWithRelations[]>> {
+): Promise<ActionResponse<AffiliationSubProcessWithRelations[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -916,76 +917,46 @@ export async function getMyAssignments(
     console.error('Error fetching my assignments:', error)
     return { success: false, error: 'Error al obtener las asignaciones' }
   }
-}
+})
 
 /**
  * Get my assignments stats
  */
-export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignmentsStats>> {
+export const getMyAssignmentsStats = cache(async (): Promise<ActionResponse<MyAssignmentsStats>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error }
     }
 
-    const [
-      total,
-      notStarted,
-      inProgress,
-      inReview,
-      completed,
-      returned,
-    ] = await Promise.all([
-      prisma.affiliationSubProcess.count({
+    // Optimized: 2 queries instead of 6
+    const [statusGroups, total] = await Promise.all([
+      // Query 1: Group by status to get counts for each status
+      prisma.affiliationSubProcess.groupBy({
+        by: ['status'],
         where: {
           assignedToId: authCheck.userId,
           affiliation: { isActive: true },
         },
+        _count: true,
       }),
+      // Query 2: Total count
       prisma.affiliationSubProcess.count({
         where: {
           assignedToId: authCheck.userId,
           affiliation: { isActive: true },
-          status: AffiliationSubProcessStatus.NOT_STARTED,
-        },
-      }),
-      prisma.affiliationSubProcess.count({
-        where: {
-          assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
-          status: AffiliationSubProcessStatus.IN_PROGRESS,
-        },
-      }),
-      prisma.affiliationSubProcess.count({
-        where: {
-          assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
-          status: AffiliationSubProcessStatus.IN_REVIEW,
-        },
-      }),
-      prisma.affiliationSubProcess.count({
-        where: {
-          assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
-          status: AffiliationSubProcessStatus.COMPLETED,
-        },
-      }),
-      prisma.affiliationSubProcess.count({
-        where: {
-          assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
-          status: AffiliationSubProcessStatus.RETURNED,
         },
       }),
     ])
 
+    // Map grouped results to stats object
     const stats: MyAssignmentsStats = {
       total,
-      notStarted,
-      inProgress,
-      inReview,
-      completed,
-      returned,
+      notStarted: statusGroups.find(g => g.status === 'NOT_STARTED')?._count || 0,
+      inProgress: statusGroups.find(g => g.status === 'IN_PROGRESS')?._count || 0,
+      inReview: statusGroups.find(g => g.status === 'IN_REVIEW')?._count || 0,
+      completed: statusGroups.find(g => g.status === 'COMPLETED')?._count || 0,
+      returned: statusGroups.find(g => g.status === 'RETURNED')?._count || 0,
     }
 
     return { success: true, data: stats }
@@ -993,13 +964,13 @@ export async function getMyAssignmentsStats(): Promise<ActionResponse<MyAssignme
     console.error('Error fetching my assignments stats:', error)
     return { success: false, error: 'Error al obtener las estadísticas' }
   }
-}
+})
 
 /**
  * Get all sub-processes for Kanban view
  * Returns minimal data optimized for Kanban board display
  */
-export async function getSubProcessesForKanban(): Promise<ActionResponse<SubProcessKanbanItem[]>> {
+export const getSubProcessesForKanban = cache(async (): Promise<ActionResponse<SubProcessKanbanItem[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -1069,7 +1040,7 @@ export async function getSubProcessesForKanban(): Promise<ActionResponse<SubProc
     console.error('Error fetching sub-processes for kanban:', error)
     return { success: false, error: 'Error al obtener los sub-procesos' }
   }
-}
+})
 
 /**
  * Send affiliation to client and archive it
@@ -1160,7 +1131,7 @@ export async function sendAffiliation(affiliationId: string): Promise<ActionResp
  * Get archived affiliations
  * Returns affiliations with status ARCHIVED
  */
-export async function getArchivedAffiliations(): Promise<ActionResponse<AffiliationWithRelations[]>> {
+export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<AffiliationWithRelations[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -1229,7 +1200,7 @@ export async function getArchivedAffiliations(): Promise<ActionResponse<Affiliat
     console.error('Error fetching archived affiliations:', error)
     return { success: false, error: 'Error al obtener las afiliaciones archivadas' }
   }
-}
+})
 
 // ========================================
 // OBSERVATION OPERATIONS

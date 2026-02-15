@@ -1,5 +1,6 @@
 'use server'
 
+import { cache } from 'react'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
 import { UserRole } from '@prisma/client'
@@ -40,7 +41,7 @@ async function requireManagerOrAdmin() {
 /**
  * Get all disabilities
  */
-export async function getDisabilities(): Promise<ActionResponse<SafeDisability[]>> {
+export const getDisabilities = cache(async (): Promise<ActionResponse<SafeDisability[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -82,14 +83,14 @@ export async function getDisabilities(): Promise<ActionResponse<SafeDisability[]
       error: 'Error al obtener incapacidades',
     }
   }
-}
+})
 
 /**
  * Get disability by ID with relations
  */
-export async function getDisabilityById(
+export const getDisabilityById = cache(async (
   id: string
-): Promise<ActionResponse<DisabilityWithRelations>> {
+): Promise<ActionResponse<DisabilityWithRelations>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -177,7 +178,7 @@ export async function getDisabilityById(
       error: 'Error al obtener incapacidad',
     }
   }
-}
+})
 
 /**
  * Create a new disability
@@ -528,14 +529,14 @@ export async function deleteDisabilityObservation(observationId: string): Promis
 /**
  * Get disabilities count and stats
  */
-export async function getDisabilitiesCount(): Promise<
+export const getDisabilitiesCount = cache(async (): Promise<
   ActionResponse<{
     total: number
     active: number
     inactive: number
     byStatus: { status: string; count: number }[]
   }>
-> {
+> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -574,4 +575,4 @@ export async function getDisabilitiesCount(): Promise<
       error: 'Error al obtener conteo de incapacidades',
     }
   }
-}
+})

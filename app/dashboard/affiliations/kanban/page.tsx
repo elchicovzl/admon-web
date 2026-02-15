@@ -3,24 +3,22 @@
  * Server Component that fetches data and renders the Kanban board
  */
 
+import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/auth'
 import { getSubProcessesForKanban } from '@/lib/actions/affiliation.actions'
-import { getManagers } from '@/lib/actions'
+import { getManagers } from '@/lib/actions/user.actions'
 import { KanbanClient } from './kanban-client'
+import { KanbanBoardSkeleton } from '@/components/dashboard/affiliations/kanban-board-skeleton'
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Vista Kanban - Afiliaciones',
   description: 'Vista Kanban de sub-procesos de afiliaciones',
 }
 
-export default async function AffiliationsKanbanPage() {
-  const session = await auth()
-
-  if (!session?.user) {
-    redirect('/login')
-  }
-
+// Async component for kanban board
+async function KanbanBoard({ userId, userRole }: { userId: string; userRole: string }) {
   // Fetch sub-processes and managers in parallel
   const [subProcessesResult, managersResult] = await Promise.all([
     getSubProcessesForKanban(),
@@ -44,8 +42,22 @@ export default async function AffiliationsKanbanPage() {
     <KanbanClient
       initialSubProcesses={subProcessesResult.data}
       managers={managers}
-      currentUserId={session.user.id}
-      currentUserRole={session.user.role}
+      currentUserId={userId}
+      currentUserRole={userRole}
     />
+  )
+}
+
+export default async function AffiliationsKanbanPage() {
+  const session = await auth()
+
+  if (!session?.user) {
+    redirect('/login')
+  }
+
+  return (
+    <Suspense fallback={<KanbanBoardSkeleton />}>
+      <KanbanBoard userId={session.user.id} userRole={session.user.role} />
+    </Suspense>
   )
 }

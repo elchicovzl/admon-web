@@ -4,14 +4,31 @@
  */
 
 import { Metadata } from 'next'
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/auth'
 import { getArchivedAffiliations } from '@/lib/actions/affiliation.actions'
 import { ArchivedAffiliationsClient } from './archived-affiliations-client'
+import { ArchivedAffiliationsTableSkeleton } from '@/components/dashboard/affiliations/archived-affiliations-table-skeleton'
 
 export const metadata: Metadata = {
   title: 'Afiliaciones Archivadas | Dashboard',
   description: 'Historial de afiliaciones completadas y archivadas',
+}
+
+// Async component for archived table
+async function ArchivedTable() {
+  const result = await getArchivedAffiliations()
+
+  if (!result.success) {
+    return (
+      <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
+        <p>Error al cargar las afiliaciones archivadas: {result.error}</p>
+      </div>
+    )
+  }
+
+  return <ArchivedAffiliationsClient affiliations={result.data || []} />
 }
 
 export default async function ArchivedAffiliationsPage() {
@@ -21,26 +38,9 @@ export default async function ArchivedAffiliationsPage() {
     redirect('/login')
   }
 
-  const result = await getArchivedAffiliations()
-
-  if (!result.success) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Afiliaciones Archivadas</h1>
-          <p className="text-muted-foreground">
-            Historial de afiliaciones completadas y enviadas a clientes
-          </p>
-        </div>
-        <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
-          <p>Error al cargar las afiliaciones archivadas: {result.error}</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
+      {/* Header - renders immediately */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Afiliaciones Archivadas</h1>
         <p className="text-muted-foreground">
@@ -48,7 +48,10 @@ export default async function ArchivedAffiliationsPage() {
         </p>
       </div>
 
-      <ArchivedAffiliationsClient affiliations={result.data || []} />
+      {/* Table with Suspense */}
+      <Suspense fallback={<ArchivedAffiliationsTableSkeleton />}>
+        <ArchivedTable />
+      </Suspense>
     </div>
   )
 }

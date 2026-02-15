@@ -30,7 +30,6 @@ import { DisabilityStatus, HealthAdministrator } from '@prisma/client'
 
 interface DisabilitiesTableProps {
   disabilities: SafeDisability[]
-  onDisabilityUpdated?: (disabilityId: string, updates: Partial<SafeDisability>) => void
   onEditDisability?: (disability: SafeDisability) => void
 }
 
@@ -68,7 +67,6 @@ const administratorLabels = {
 
 export function DisabilitiesTable({
   disabilities,
-  onDisabilityUpdated,
   onEditDisability,
 }: DisabilitiesTableProps) {
   const router = useRouter()
@@ -81,7 +79,7 @@ export function DisabilitiesTable({
 
       if (result.success) {
         toast.success(result.message || 'Status actualizado')
-        onDisabilityUpdated?.(disabilityId, { isActive: !currentStatus })
+        // Server Action already calls revalidatePath
       } else {
         toast.error(result.error || 'Error al actualizar status')
       }

@@ -1,125 +1,96 @@
-'use client'
+/**
+ * Users Management Page
+ * Server Component with progressive rendering
+ */
 
-import { useEffect, useState } from 'react'
-import { UserRole } from '@prisma/client'
-import type { SafeUser } from '@/lib/types/auth.types'
-import { getUsers } from '@/lib/actions'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { UsersTable } from '@/components/dashboard/users-table'
+import { Metadata } from 'next'
+import { Suspense } from 'react'
+import { getUsers } from '@/lib/actions/user.actions'
+import { UsersClient } from './users-client'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Users, Shield, UserCheck } from 'lucide-react'
+import { UsersStatsSkeleton } from '@/components/dashboard/users/users-stats-skeleton'
 import { UsersTableSkeleton } from '@/components/dashboard/users-table-skeleton'
-import { CreateUserForm } from '@/components/dashboard/create-user-form'
-import { UserPlus } from 'lucide-react'
+import { UserRole } from '@prisma/client'
 
-export default function UsersPage() {
-  const [users, setUsers] = useState<SafeUser[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+export const metadata: Metadata = {
+  title: 'Usuarios | Dashboard',
+  description: 'Gestión de usuarios del sistema',
+}
 
-  useEffect(() => {
-    async function loadUsers() {
-      try {
-        const result = await getUsers()
-        if (result.success && result.data) {
-          setUsers(result.data)
-        }
-      } catch (error) {
-        console.error('Error loading users:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+// Async component for stats
+async function UsersStats() {
+  const usersResult = await getUsers()
+  const users = usersResult.success ? usersResult.data || [] : []
 
-    loadUsers()
-  }, [])
-
-  const handleUserCreated = (newUser: SafeUser) => {
-    setUsers((prevUsers) => [...prevUsers, newUser])
-  }
-
-  const handleUserUpdated = (userId: string, updates: Partial<SafeUser>) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((u) => (u.id === userId ? { ...u, ...updates } : u))
-    )
-  }
-
-  const managers = users.filter((u) => u.role === UserRole.MANAGER)
-  const superAdmins = users.filter((u) => u.role === UserRole.SUPER_ADMIN)
+  const total = users.length
+  const managers = users.filter((u) => u.role === UserRole.MANAGER).length
+  const superAdmins = users.filter((u) => u.role === UserRole.SUPER_ADMIN).length
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestión de Usuarios</h1>
-          <p className="text-muted-foreground">
-            Administra los usuarios del sistema
-          </p>
-        </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Crear Manager
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Total de Usuarios</CardDescription>
-            <CardTitle className="text-3xl">{users.length}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Usuarios registrados en el sistema
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Super Admins</CardDescription>
-            <CardTitle className="text-3xl">{superAdmins.length}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Administradores del sistema
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Managers</CardDescription>
-            <CardTitle className="text-3xl">{managers.length}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">
-              Gestores activos
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
+    <div className="grid gap-4 md:grid-cols-3">
       <Card>
-        <CardHeader>
-          <CardTitle>Usuarios</CardTitle>
-          <CardDescription>
-            Lista completa de usuarios del sistema
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Total de Usuarios</CardTitle>
+          <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <UsersTableSkeleton />
-          ) : (
-            <UsersTable users={users} onUserUpdated={handleUserUpdated} />
-          )}
+          <div className="text-2xl font-bold">{total}</div>
+          <p className="text-xs text-muted-foreground">
+            Usuarios registrados en el sistema
+          </p>
         </CardContent>
       </Card>
 
-      <CreateUserForm
-        open={createDialogOpen}
-        onOpenChange={setCreateDialogOpen}
-        onUserCreated={handleUserCreated}
-      />
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Super Admins</CardTitle>
+          <Shield className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{superAdmins}</div>
+          <p className="text-xs text-muted-foreground">
+            Administradores del sistema
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Managers</CardTitle>
+          <UserCheck className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold">{managers}</div>
+          <p className="text-xs text-muted-foreground">
+            Gestores activos
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// Async component for table
+async function UsersTable() {
+  const usersResult = await getUsers()
+  const users = usersResult.success ? usersResult.data || [] : []
+
+  return <UsersClient initialUsers={users} />
+}
+
+export default async function UsersPage() {
+  return (
+    <div className="space-y-6">
+      {/* Stats - progressive rendering */}
+      <Suspense fallback={<UsersStatsSkeleton />}>
+        <UsersStats />
+      </Suspense>
+
+      {/* Table - progressive rendering */}
+      <Suspense fallback={<UsersTableSkeleton />}>
+        <UsersTable />
+      </Suspense>
     </div>
   )
 }

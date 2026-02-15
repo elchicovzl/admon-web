@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import type { SafeClientCredential } from '@/lib/types/client.types'
 import { deleteCredential } from '@/lib/actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,9 +17,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { CredentialCard } from './credential-card'
-import { CredentialFormDialog } from './credential-form-dialog'
 import { KeyRound, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+
+const CredentialFormDialog = dynamic(
+  () => import('./credential-form-dialog')
+    .then(mod => ({ default: mod.CredentialFormDialog })),
+  { ssr: false }
+)
 
 interface ClientCredentialsSectionProps {
   clientId: string

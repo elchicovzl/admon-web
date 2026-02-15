@@ -6,6 +6,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -20,8 +21,13 @@ import {
 import { ChevronDown, ChevronUp, Mail, Phone, FileText, Key, ExternalLink } from 'lucide-react'
 import { SubProcessKanbanCard } from '@/components/dashboard/affiliations/subprocess-kanban-card'
 import { ClientCredentialsQuickView } from '@/components/dashboard/affiliations/client-credentials-quick-view'
-import { SubProcessDetailModal } from '@/components/dashboard/affiliations/subprocess-detail-modal'
 import type { AffiliationWithRelations, AffiliationSubProcessWithRelations, AffiliationObservationWithRelations } from '@/lib/types/affiliation.types'
+
+const SubProcessDetailModal = dynamic(
+  () => import('@/components/dashboard/affiliations/subprocess-detail-modal')
+    .then(mod => ({ default: mod.SubProcessDetailModal })),
+  { ssr: false }
+)
 
 interface AffiliationDetailClientProps {
   affiliation: AffiliationWithRelations

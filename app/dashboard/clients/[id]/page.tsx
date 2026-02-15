@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter, useParams } from 'next/navigation'
-import { getClientById } from '@/lib/actions'
+import { getClientById } from '@/lib/actions/client.actions'
 import type { ClientWithRelations } from '@/lib/types/client.types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, Mail, Phone, FileText, Calendar, User, CreditCard } from 'lucide-react'
 import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-section'
-import { ClientDocumentsGallery } from '@/components/dashboard/clients/client-documents-gallery'
+import { ClientDocumentsGallerySkeleton } from '@/components/dashboard/clients/client-documents-gallery-skeleton'
 import { ClientCredentialsSection } from '@/components/dashboard/clients/client-credentials-section'
 import { CompanyEmployeesSection } from '@/components/dashboard/clients/company-employees-section'
 import { ClientAddressSection } from '@/components/dashboard/clients/client-address-section'
@@ -20,6 +21,15 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ClientType, IdentificationType } from '@prisma/client'
 import Link from 'next/link'
+
+const ClientDocumentsGallery = dynamic(
+  () => import('@/components/dashboard/clients/client-documents-gallery')
+    .then(mod => ({ default: mod.ClientDocumentsGallery })),
+  {
+    loading: () => <ClientDocumentsGallerySkeleton />,
+    ssr: false, // FilePond requires browser APIs
+  }
+)
 
 export default function ClientDetailPage() {
   const router = useRouter()

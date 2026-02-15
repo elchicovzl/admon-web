@@ -59,11 +59,10 @@ const getClientTypeBadgeVariant = (type: ClientType) => {
 
 interface ClientsTableProps {
   clients: SafeClient[]
-  onClientUpdated?: (clientId: string, updates: Partial<SafeClient>) => void
   onEditClient?: (client: SafeClient) => void
 }
 
-export function ClientsTable({ clients, onClientUpdated, onEditClient }: ClientsTableProps) {
+export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
   const router = useRouter()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
 
@@ -75,7 +74,7 @@ export function ClientsTable({ clients, onClientUpdated, onEditClient }: Clients
 
       if (result.success) {
         toast.success(result.message || 'Status actualizado exitosamente')
-        onClientUpdated?.(client.id, { isActive: !client.isActive })
+        // Server Action already calls revalidatePath
       } else {
         toast.error(result.error || 'Error al cambiar status')
       }
@@ -85,7 +84,7 @@ export function ClientsTable({ clients, onClientUpdated, onEditClient }: Clients
     } finally {
       setIsTogglingStatus(false)
     }
-  }, [onClientUpdated])
+  }, [])
 
   const handleViewDetails = useCallback((client: SafeClient) => {
     router.push(`/dashboard/clients/${client.id}`)

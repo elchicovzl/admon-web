@@ -1,5 +1,6 @@
 'use server'
 
+import { cache } from 'react'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
 import bcrypt from 'bcryptjs'
@@ -36,9 +37,9 @@ async function requireSuperAdmin() {
 /**
  * Get all users (with optional role filter)
  */
-export async function getUsers(
+export const getUsers = cache(async (
   role?: UserRole
-): Promise<ActionResponse<SafeUser[]>> {
+): Promise<ActionResponse<SafeUser[]>> => {
   try {
     const session = await auth()
 
@@ -77,13 +78,13 @@ export async function getUsers(
       error: 'Error al obtener usuarios',
     }
   }
-}
+})
 
 /**
  * Get all managers (users with MANAGER or SUPER_ADMIN role)
  * Used for manager assignment in affiliations, disabilities, etc.
  */
-export async function getManagers(): Promise<ActionResponse<SafeUser[]>> {
+export const getManagers = cache(async (): Promise<ActionResponse<SafeUser[]>> => {
   try {
     const session = await auth()
 
@@ -124,14 +125,14 @@ export async function getManagers(): Promise<ActionResponse<SafeUser[]>> {
       error: 'Error al obtener managers',
     }
   }
-}
+})
 
 /**
  * Get user by ID
  */
-export async function getUserById(
+export const getUserById = cache(async (
   id: string
-): Promise<ActionResponse<SafeUser>> {
+): Promise<ActionResponse<SafeUser>> => {
   try {
     const session = await auth()
 
@@ -174,7 +175,7 @@ export async function getUserById(
       error: 'Error al obtener usuario',
     }
   }
-}
+})
 
 /**
  * Create a new manager (only SUPER_ADMIN can do this)
@@ -432,13 +433,13 @@ export async function deleteUser(id: string): Promise<ActionResponse> {
 /**
  * Get users count by role
  */
-export async function getUsersCount(): Promise<
+export const getUsersCount = cache(async (): Promise<
   ActionResponse<{
     total: number
     superAdmins: number
     managers: number
   }>
-> {
+> => {
   try {
     const session = await auth()
 
@@ -470,7 +471,7 @@ export async function getUsersCount(): Promise<
       error: 'Error al obtener conteo de usuarios',
     }
   }
-}
+})
 
 /**
  * Toggle user active status (instead of delete)

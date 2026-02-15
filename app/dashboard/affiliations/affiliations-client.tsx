@@ -6,30 +6,35 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { AffiliationsTable } from '@/components/dashboard/affiliations/affiliations-table'
-import { AffiliationCreateWizard } from '@/components/dashboard/affiliations/affiliation-create-wizard'
 import type { AffiliationWithRelations, AffiliationStats } from '@/lib/types/affiliation.types'
+
+const AffiliationCreateWizard = dynamic(
+  () => import('@/components/dashboard/affiliations/affiliation-create-wizard')
+    .then(mod => ({ default: mod.AffiliationCreateWizard })),
+  { ssr: false }
+)
 
 interface AffiliationsClientProps {
   initialAffiliations: AffiliationWithRelations[]
-  initialStats?: AffiliationStats
   currentUserId?: string
 }
 
 export function AffiliationsClient({
   initialAffiliations,
-  initialStats,
   currentUserId,
 }: AffiliationsClientProps) {
   const [affiliations, setAffiliations] = useState<AffiliationWithRelations[]>(initialAffiliations)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   function handleAffiliationCreated() {
-    // Refresh the page to get updated data
-    window.location.reload()
+    // Server Action already calls revalidatePath('/dashboard/affiliations')
+    // Page will update automatically without full reload
+    setCreateDialogOpen(false)
   }
 
   function handleAffiliationUpdated(
