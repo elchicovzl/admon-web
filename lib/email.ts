@@ -269,7 +269,7 @@ export async function sendOtpEmail({
   expirationMinutes?: number
 }) {
   try {
-    const html = render(OtpEmail({ code, expirationMinutes }))
+    const html = await render(OtpEmail({ code, expirationMinutes }))
 
     return sendEmail({
       to,
@@ -306,7 +306,7 @@ export async function sendLoginSuccessEmail({
   userAgent?: string
 }) {
   try {
-    const html = render(
+    const html = await render(
       LoginSuccessEmail({
         userName,
         userEmail,
