@@ -290,7 +290,7 @@ export async function createClient(
       }
     }
 
-    const { fullName, identificationType, identificationNumber, clientType, email, phone, status, legalRepresentative } = validatedFields.data
+    const { fullName, identificationType, identificationNumber, clientType, email, phone, legalRepresentative } = validatedFields.data
 
     // Check if identification number already exists
     const existingClient = await prisma.client.findUnique({
@@ -313,7 +313,6 @@ export async function createClient(
         clientType,
         email,
         phone,
-        status: status || 'ACTIVO',
         createdById: authCheck.userId!,
         // Create legal representative if client is a company
         ...(clientType === ClientType.EMPRESA && legalRepresentative && {

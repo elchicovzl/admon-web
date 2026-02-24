@@ -39,17 +39,17 @@ export const createClientSchema = z
       .min(1, 'El nombre completo es requerido')
       .min(3, 'El nombre debe tener al menos 3 caracteres')
       .max(100, 'El nombre no puede exceder 100 caracteres'),
+    clientType: z.nativeEnum(ClientType, {
+      required_error: 'El tipo de cliente es requerido',
+    }),
     identificationType: z.nativeEnum(IdentificationType, {
       required_error: 'El tipo de identificación es requerido',
     }),
     identificationNumber: z
       .string()
       .min(1, 'El número de identificación es requerido')
-      .min(5, 'El número de identificación debe tener al menos 5 caracteres')
+      .min(4, 'El número de identificación debe tener al menos 4 caracteres')
       .max(20, 'El número de identificación no puede exceder 20 caracteres'),
-    clientType: z.nativeEnum(ClientType, {
-      required_error: 'El tipo de cliente es requerido',
-    }),
     email: z
       .string()
       .min(1, 'El email es requerido')
@@ -59,10 +59,6 @@ export const createClientSchema = z
       .min(1, 'El teléfono es requerido')
       .min(7, 'El teléfono debe tener al menos 7 caracteres')
       .max(20, 'El teléfono no puede exceder 20 caracteres'),
-    status: z
-      .string()
-      .default('ACTIVO')
-      .optional(),
     // Legal representative (conditional - required for companies)
     legalRepresentative: legalRepresentativeSchema.optional(),
   })
@@ -89,16 +85,16 @@ export const updateClientSchema = z.object({
     .min(3, 'El nombre debe tener al menos 3 caracteres')
     .max(100, 'El nombre no puede exceder 100 caracteres')
     .optional(),
+  clientType: z
+    .nativeEnum(ClientType)
+    .optional(),
   identificationType: z
     .nativeEnum(IdentificationType)
     .optional(),
   identificationNumber: z
     .string()
-    .min(5, 'El número de identificación debe tener al menos 5 caracteres')
+    .min(4, 'El número de identificación debe tener al menos 4 caracteres')
     .max(20, 'El número de identificación no puede exceder 20 caracteres')
-    .optional(),
-  clientType: z
-    .nativeEnum(ClientType)
     .optional(),
   email: z
     .string()
@@ -108,9 +104,6 @@ export const updateClientSchema = z.object({
     .string()
     .min(7, 'El teléfono debe tener al menos 7 caracteres')
     .max(20, 'El teléfono no puede exceder 20 caracteres')
-    .optional(),
-  status: z
-    .string()
     .optional(),
 })
 

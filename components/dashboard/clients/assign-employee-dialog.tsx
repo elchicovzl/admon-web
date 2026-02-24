@@ -51,10 +51,15 @@ export function AssignEmployeeDialog({
   const [isAssigning, setIsAssigning] = useState(false)
 
   const getIdentificationTypeLabel = (type: IdentificationType) => {
-    const labels = {
+    const labels: Record<IdentificationType, string> = {
       CEDULA: 'CC',
+      TARJETA_IDENTIDAD: 'TI',
+      REGISTRO_CIVIL: 'RC',
       CEDULA_EXTRANJERIA: 'CE',
+      PASAPORTE: 'PA',
       PPT: 'PPT',
+      PEP: 'PEP',
+      NUIP: 'NUIP',
       NIT: 'NIT',
     }
     return labels[type]

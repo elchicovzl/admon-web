@@ -55,12 +55,11 @@ export function CreateEmployeeDialog({
     resolver: zodResolver(createClientSchema),
     defaultValues: {
       fullName: '',
+      clientType: ClientType.EMPLEADO,
       identificationType: IdentificationType.CEDULA,
       identificationNumber: '',
-      clientType: ClientType.EMPLEADO, // Fixed to EMPLEADO
       email: '',
       phone: '',
-      status: 'ACTIVO',
     },
   })
 
@@ -209,9 +208,6 @@ export function CreateEmployeeDialog({
                 )}
               />
             </div>
-
-            {/* Status (hidden, always ACTIVO) */}
-            <input type="hidden" {...form.register('status')} value="ACTIVO" />
 
             {/* Client Type (hidden, always EMPLEADO) */}
             <input type="hidden" {...form.register('clientType')} value={ClientType.EMPLEADO} />

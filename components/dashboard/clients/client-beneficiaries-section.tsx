@@ -179,10 +179,15 @@ export function ClientBeneficiariesSection({
   }
 
   const getIdentificationTypeLabel = (type: IdentificationType) => {
-    const labels = {
+    const labels: Record<IdentificationType, string> = {
       CEDULA: 'CC',
+      TARJETA_IDENTIDAD: 'TI',
+      REGISTRO_CIVIL: 'RC',
       CEDULA_EXTRANJERIA: 'CE',
+      PASAPORTE: 'PA',
       PPT: 'PPT',
+      PEP: 'PEP',
+      NUIP: 'NUIP',
       NIT: 'NIT',
     }
     return labels[type]
@@ -362,11 +367,14 @@ export function ClientBeneficiariesSection({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value={IdentificationType.CEDULA}>Cédula</SelectItem>
-                          <SelectItem value={IdentificationType.CEDULA_EXTRANJERIA}>
-                            Cédula Extranjería
-                          </SelectItem>
+                          <SelectItem value={IdentificationType.CEDULA}>Cédula (CC)</SelectItem>
+                          <SelectItem value={IdentificationType.TARJETA_IDENTIDAD}>Tarjeta de Identidad (TI)</SelectItem>
+                          <SelectItem value={IdentificationType.REGISTRO_CIVIL}>Registro Civil (RC)</SelectItem>
+                          <SelectItem value={IdentificationType.CEDULA_EXTRANJERIA}>Cédula Extranjería (CE)</SelectItem>
+                          <SelectItem value={IdentificationType.PASAPORTE}>Pasaporte (PA)</SelectItem>
                           <SelectItem value={IdentificationType.PPT}>PPT</SelectItem>
+                          <SelectItem value={IdentificationType.PEP}>PEP</SelectItem>
+                          <SelectItem value={IdentificationType.NUIP}>NUIP</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

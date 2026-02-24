@@ -62,10 +62,15 @@ export default function ClientDetailPage() {
   }, [clientId])
 
   const getIdentificationTypeLabel = (type: IdentificationType) => {
-    const labels = {
-      CEDULA: 'Cédula',
-      CEDULA_EXTRANJERIA: 'Cédula Extranjería',
+    const labels: Record<IdentificationType, string> = {
+      CEDULA: 'Cédula (CC)',
+      TARJETA_IDENTIDAD: 'Tarjeta Identidad (TI)',
+      REGISTRO_CIVIL: 'Registro Civil (RC)',
+      CEDULA_EXTRANJERIA: 'Cédula Extranjería (CE)',
+      PASAPORTE: 'Pasaporte (PA)',
       PPT: 'PPT',
+      PEP: 'PEP',
+      NUIP: 'NUIP',
       NIT: 'NIT',
     }
     return labels[type]
