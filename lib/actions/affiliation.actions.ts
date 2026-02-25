@@ -9,6 +9,7 @@ import { cache } from 'react'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { UserRole, AffiliationSubProcessStatus, AffiliationStatus } from '@prisma/client'
 import {
   createAffiliationSchema,
@@ -18,6 +19,7 @@ import {
   updateSubProcessStatusSchema,
   assignSubProcessSchema,
   getSubProcessSchema,
+  addSubProcessesSchema,
   addObservationSchema,
   deleteObservationSchema,
   getSubProcessStatusLogsSchema,
@@ -28,6 +30,7 @@ import {
   type UpdateAffiliationInput,
   type UpdateSubProcessStatusInput,
   type AssignSubProcessInput,
+  type AddSubProcessesInput,
   type AddObservationInput,
   type GenerateUploadUrlInput,
   type ConfirmUploadInput,
@@ -60,6 +63,17 @@ async function requireManagerOrAdmin() {
   return { authorized: true, userId: session.user.id, role: session.user.role }
 }
 
+async function generateAffiliationNumber(): Promise<string> {
+  const last = await prisma.affiliation.findFirst({
+    where: { affiliationNumber: { startsWith: 'PROC-' } },
+    orderBy: { affiliationNumber: 'desc' },
+    select: { affiliationNumber: true },
+  })
+
+  const lastNumber = last ? parseInt(last.affiliationNumber.replace('PROC-', ''), 10) : 0
+  return `PROC-${String(lastNumber + 1).padStart(5, '0')}`
+}
+
 // ========================================
 // AFFILIATION CRUD OPERATIONS
 // ========================================
@@ -77,6 +91,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
     const affiliations = await prisma.affiliation.findMany({
       select: {
         id: true,
+        affiliationNumber: true,
         clientId: true,
         status: true,
         sentAt: true,
@@ -103,6 +118,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
             type: true,
             status: true,
             assignedToId: true,
+            employeeId: true,
             statusReason: true,
             createdAt: true,
             updatedAt: true,
@@ -111,6 +127,12 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
                 id: true,
                 name: true,
                 email: true,
+              },
+            },
+            employee: {
+              select: {
+                id: true,
+                fullName: true,
               },
             },
           },
@@ -154,6 +176,7 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
       where: { id },
       select: {
         id: true,
+        affiliationNumber: true,
         clientId: true,
         status: true,
         sentAt: true,
@@ -180,6 +203,7 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
             type: true,
             status: true,
             assignedToId: true,
+            employeeId: true,
             statusReason: true,
             createdAt: true,
             updatedAt: true,
@@ -188,6 +212,12 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
                 id: true,
                 name: true,
                 email: true,
+              },
+            },
+            employee: {
+              select: {
+                id: true,
+                fullName: true,
               },
             },
             documents: {
@@ -316,9 +346,39 @@ export async function createAffiliation(
       }
     }
 
+    // Verify all employees belong to this company (for EMPRESA clients)
+    const employeeIds = data.subProcesses
+      .map((sp) => sp.employeeId)
+      .filter((id): id is string => id !== null && id !== undefined)
+
+    const uniqueEmployeeIds = [...new Set(employeeIds)]
+
+    if (uniqueEmployeeIds.length > 0) {
+      if (client.clientType !== 'EMPRESA') {
+        return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
+      }
+
+      const employees = await prisma.client.findMany({
+        where: {
+          id: { in: uniqueEmployeeIds },
+          companyId: data.clientId,
+          clientType: 'EMPLEADO',
+          isActive: true,
+        },
+      })
+
+      if (employees.length !== uniqueEmployeeIds.length) {
+        return { success: false, error: 'Uno o más empleados no son válidos o no pertenecen a esta empresa' }
+      }
+    }
+
+    // Generate sequential number
+    const affiliationNumber = await generateAffiliationNumber()
+
     // Create affiliation with sub-processes
     const affiliation = await prisma.affiliation.create({
       data: {
+        affiliationNumber,
         clientId: data.clientId,
         createdById: authCheck.userId,
         subProcesses: {
@@ -326,11 +386,13 @@ export async function createAffiliation(
             type: sp.type,
             status: AffiliationSubProcessStatus.NOT_STARTED,
             assignedToId: sp.assignedToId,
+            employeeId: sp.employeeId ?? null,
           })),
         },
       },
       select: {
         id: true,
+        affiliationNumber: true,
         clientId: true,
         isActive: true,
         createdAt: true,
@@ -559,6 +621,7 @@ export const getSubProcessById = cache(async (
         type: true,
         status: true,
         assignedToId: true,
+        employeeId: true,
         statusReason: true,
         createdAt: true,
         updatedAt: true,
@@ -573,6 +636,12 @@ export const getSubProcessById = cache(async (
             id: true,
             name: true,
             email: true,
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
           },
         },
         documents: {
@@ -702,6 +771,7 @@ export async function updateSubProcessStatus(
           type: true,
           status: true,
           assignedToId: true,
+          employeeId: true,
           statusReason: true,
           createdAt: true,
           updatedAt: true,
@@ -792,6 +862,7 @@ export async function assignSubProcess(
         type: true,
         status: true,
         assignedToId: true,
+        employeeId: true,
         statusReason: true,
         createdAt: true,
         updatedAt: true,
@@ -812,6 +883,124 @@ export async function assignSubProcess(
   } catch (error) {
     console.error('Error assigning sub-process:', error)
     return { success: false, error: 'Error al asignar el sub-proceso' }
+  }
+}
+
+/**
+ * Add sub-processes to an existing affiliation
+ */
+export async function addSubProcesses(
+  data: AddSubProcessesInput
+): Promise<ActionResponse<SafeAffiliationSubProcess[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const validation = addSubProcessesSchema.safeParse(data)
+    if (!validation.success) {
+      return { success: false, error: validation.error.errors[0].message }
+    }
+
+    // Verify affiliation exists and is active
+    const affiliation = await prisma.affiliation.findUnique({
+      where: { id: data.affiliationId },
+      include: { client: true },
+    })
+
+    if (!affiliation) {
+      return { success: false, error: 'Afiliación no encontrada' }
+    }
+
+    if (affiliation.status !== AffiliationStatus.ACTIVE) {
+      return { success: false, error: 'Solo se pueden agregar sub-procesos a afiliaciones activas' }
+    }
+
+    // Verify managers
+    const managerIds = data.subProcesses
+      .map((sp) => sp.assignedToId)
+      .filter((id): id is string => id !== null && id !== undefined)
+
+    const uniqueManagerIds = [...new Set(managerIds)]
+
+    if (uniqueManagerIds.length > 0) {
+      const managers = await prisma.user.findMany({
+        where: {
+          id: { in: uniqueManagerIds },
+          role: { in: [UserRole.MANAGER, UserRole.SUPER_ADMIN] },
+          isActive: true,
+        },
+      })
+
+      if (managers.length !== uniqueManagerIds.length) {
+        return { success: false, error: 'Uno o más managers no son válidos' }
+      }
+    }
+
+    // Verify employees (for EMPRESA clients)
+    const employeeIds = data.subProcesses
+      .map((sp) => sp.employeeId)
+      .filter((id): id is string => id !== null && id !== undefined)
+
+    const uniqueEmployeeIds = [...new Set(employeeIds)]
+
+    if (uniqueEmployeeIds.length > 0) {
+      if (affiliation.client.clientType !== 'EMPRESA') {
+        return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
+      }
+
+      const employees = await prisma.client.findMany({
+        where: {
+          id: { in: uniqueEmployeeIds },
+          companyId: affiliation.clientId,
+          clientType: 'EMPLEADO',
+          isActive: true,
+        },
+      })
+
+      if (employees.length !== uniqueEmployeeIds.length) {
+        return { success: false, error: 'Uno o más empleados no son válidos o no pertenecen a esta empresa' }
+      }
+    }
+
+    // Create sub-processes
+    const created = await prisma.$transaction(
+      data.subProcesses.map((sp) =>
+        prisma.affiliationSubProcess.create({
+          data: {
+            affiliationId: data.affiliationId,
+            type: sp.type,
+            status: AffiliationSubProcessStatus.NOT_STARTED,
+            assignedToId: sp.assignedToId ?? null,
+            employeeId: sp.employeeId ?? null,
+          },
+          select: {
+            id: true,
+            affiliationId: true,
+            type: true,
+            status: true,
+            assignedToId: true,
+            employeeId: true,
+            statusReason: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        })
+      )
+    )
+
+    revalidatePath('/dashboard/affiliations')
+    revalidatePath(`/dashboard/affiliations/${data.affiliationId}`)
+
+    return {
+      success: true,
+      data: created,
+      message: `${created.length} sub-proceso${created.length !== 1 ? 's' : ''} agregado${created.length !== 1 ? 's' : ''} exitosamente`,
+    }
+  } catch (error) {
+    console.error('Error adding sub-processes:', error)
+    return { success: false, error: 'Error al agregar sub-procesos' }
   }
 }
 
@@ -846,12 +1035,14 @@ export const getMyAssignments = cache(async (
         type: true,
         status: true,
         assignedToId: true,
+        employeeId: true,
         statusReason: true,
         createdAt: true,
         updatedAt: true,
         affiliation: {
           select: {
             id: true,
+            affiliationNumber: true,
             clientId: true,
             client: {
               select: {
@@ -871,6 +1062,12 @@ export const getMyAssignments = cache(async (
             id: true,
             name: true,
             email: true,
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
           },
         },
         documents: {
@@ -992,10 +1189,12 @@ export const getSubProcessesForKanban = cache(async (): Promise<ActionResponse<S
         type: true,
         status: true,
         affiliationId: true,
+        employeeId: true,
         createdAt: true,
         updatedAt: true,
         affiliation: {
           select: {
+            affiliationNumber: true,
             client: {
               select: {
                 id: true,
@@ -1009,6 +1208,12 @@ export const getSubProcessesForKanban = cache(async (): Promise<ActionResponse<S
             id: true,
             name: true,
             email: true,
+          },
+        },
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
           },
         },
         _count: {
@@ -1028,9 +1233,12 @@ export const getSubProcessesForKanban = cache(async (): Promise<ActionResponse<S
       type: sp.type,
       status: sp.status,
       affiliationId: sp.affiliationId,
+      affiliationNumber: sp.affiliation.affiliationNumber,
+      employeeId: sp.employeeId,
       createdAt: sp.createdAt,
       updatedAt: sp.updatedAt,
       client: sp.affiliation.client,
+      employee: sp.employee,
       assignedTo: sp.assignedTo,
       _count: sp._count,
     }))
@@ -1144,6 +1352,7 @@ export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<Af
       },
       select: {
         id: true,
+        affiliationNumber: true,
         clientId: true,
         status: true,
         sentAt: true,
@@ -1184,9 +1393,16 @@ export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<Af
             type: true,
             status: true,
             assignedToId: true,
+            employeeId: true,
             statusReason: true,
             createdAt: true,
             updatedAt: true,
+            employee: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
           },
         },
       },
@@ -1375,6 +1591,22 @@ export async function getSubProcessStatusLogs(
 // DOCUMENT OPERATIONS (using R2/S3)
 // ========================================
 
+function getR2Client() {
+  const accountId = process.env.R2_ACCOUNT_ID
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
+
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error('Cloudflare R2 credentials not configured')
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  })
+}
+
 // Note: Document upload functionality will use the same R2 pattern as client documents
 // You'll need to add generateUploadUrl and confirmUpload functions similar to client.actions.ts
 // For brevity, I'm adding placeholders here that you can implement following the existing pattern
@@ -1422,8 +1654,18 @@ export async function deleteDocument(documentId: string): Promise<ActionResponse
       return { success: false, error: 'Documento no encontrado' }
     }
 
-    // TODO: Delete from R2 using document.s3Key before deleting from database
-    // Follow the pattern in client document actions
+    // Delete from R2
+    try {
+      const r2Client = getR2Client()
+      const command = new DeleteObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME!,
+        Key: document.s3Key,
+      })
+      await r2Client.send(command)
+    } catch (r2Error) {
+      console.error('R2 deletion error:', r2Error)
+      // Continue with DB deletion even if R2 fails
+    }
 
     await prisma.affiliationDocument.delete({
       where: { id: documentId },

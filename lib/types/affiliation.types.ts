@@ -18,6 +18,7 @@ export { AffiliationStatus }
 
 export interface Affiliation {
   id: string
+  affiliationNumber: string
   clientId: string
   status: AffiliationStatus
   sentAt: Date | null
@@ -35,6 +36,7 @@ export interface AffiliationSubProcess {
   type: AffiliationSubProcessType
   status: AffiliationSubProcessStatus
   assignedToId: string | null
+  employeeId: string | null
   statusReason: string | null
   createdAt: Date
   updatedAt: Date
@@ -78,6 +80,7 @@ export interface AffiliationStatusLog {
 
 export interface SafeAffiliation {
   id: string
+  affiliationNumber: string
   clientId: string
   status: AffiliationStatus
   sentAt: Date | null
@@ -94,6 +97,7 @@ export interface SafeAffiliationSubProcess {
   type: AffiliationSubProcessType
   status: AffiliationSubProcessStatus
   assignedToId: string | null
+  employeeId: string | null
   statusReason: string | null
   createdAt: Date
   updatedAt: Date
@@ -165,6 +169,10 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
     name: string | null
     email: string
   } | null
+  employee?: {
+    id: string
+    fullName: string
+  } | null
   documents?: SafeAffiliationDocument[]
   observations?: AffiliationObservationWithRelations[]
   statusLogs?: AffiliationStatusLogWithRelations[]
@@ -195,6 +203,7 @@ export interface CreateAffiliationInput {
   subProcesses: {
     type: AffiliationSubProcessType
     assignedToId?: string | null
+    employeeId?: string | null
   }[]
 }
 
@@ -285,12 +294,18 @@ export interface SubProcessKanbanItem {
   type: AffiliationSubProcessType
   status: AffiliationSubProcessStatus
   affiliationId: string
+  affiliationNumber: string
+  employeeId: string | null
   createdAt: Date
   updatedAt: Date
   client: {
     id: string
     fullName: string
   }
+  employee: {
+    id: string
+    fullName: string
+  } | null
   assignedTo: {
     id: string
     name: string | null

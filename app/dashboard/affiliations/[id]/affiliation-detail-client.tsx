@@ -18,10 +18,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronUp, Mail, Phone, FileText, Key, ExternalLink } from 'lucide-react'
-import { SubProcessKanbanCard } from '@/components/dashboard/affiliations/subprocess-kanban-card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ChevronDown, ChevronUp, Mail, Phone, FileText, Key, ExternalLink, Users, Plus, Eye } from 'lucide-react'
+import { AffiliationSubProcessType } from '@prisma/client'
+import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
+import { AddSubProcessDialog } from '@/components/dashboard/affiliations/add-subprocess-dialog'
 import { ClientCredentialsQuickView } from '@/components/dashboard/affiliations/client-credentials-quick-view'
-import type { AffiliationWithRelations, AffiliationSubProcessWithRelations, AffiliationObservationWithRelations } from '@/lib/types/affiliation.types'
+import type { AffiliationWithRelations, AffiliationSubProcessWithRelations, AffiliationObservationWithRelations, SafeAffiliationDocument } from '@/lib/types/affiliation.types'
 
 const SubProcessDetailModal = dynamic(
   () => import('@/components/dashboard/affiliations/subprocess-detail-modal')
@@ -42,6 +52,7 @@ export function AffiliationDetailClient({
 }: AffiliationDetailClientProps) {
   const [clientInfoOpen, setClientInfoOpen] = useState(false)
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
+  const [addSubProcessOpen, setAddSubProcessOpen] = useState(false)
   const [selectedSubProcess, setSelectedSubProcess] = useState<AffiliationSubProcessWithRelations | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [subProcesses, setSubProcesses] = useState<AffiliationSubProcessWithRelations[]>(
@@ -96,6 +107,19 @@ export function AffiliationDetailClient({
     }
   }
 
+  function handleDocumentUploadedFromModal(document: SafeAffiliationDocument) {
+    if (selectedSubProcess) {
+      const updated = {
+        ...selectedSubProcess,
+        documents: [...(selectedSubProcess.documents || []), document],
+      }
+      setSubProcesses((prev) =>
+        prev.map((sp) => (sp.id === selectedSubProcess.id ? updated : sp))
+      )
+      setSelectedSubProcess(updated)
+    }
+  }
+
   function handleDocumentDeletedFromModal(documentId: string) {
     if (selectedSubProcess) {
       const updated = {
@@ -110,6 +134,16 @@ export function AffiliationDetailClient({
   }
 
   const client = affiliation.client
+
+  // Check if any sub-processes have employees (EMPRESA affiliation)
+  const hasEmployeeSubProcesses = subProcesses.some((sp) => sp.employeeId)
+
+  // Group sub-processes by type for EMPRESA view
+  const subProcessesByType = subProcesses.reduce<Record<string, AffiliationSubProcessWithRelations[]>>((acc, sp) => {
+    if (!acc[sp.type]) acc[sp.type] = []
+    acc[sp.type].push(sp)
+    return acc
+  }, {})
 
   return (
     <div className="space-y-6">
@@ -196,11 +230,19 @@ export function AffiliationDetailClient({
 
       {/* Sub-Processes - Compact Cards */}
       <div className="space-y-4">
-        <div className="mb-4">
-          <h2 className="text-2xl font-bold">Sub-procesos de Afiliación</h2>
-          <p className="text-muted-foreground">
-            Haz clic en "Ver Detalles Completos" para gestionar documentos y observaciones
-          </p>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold">Sub-procesos de Afiliación</h2>
+            <p className="text-muted-foreground">
+              Haz clic en &quot;Ver Detalles Completos&quot; para gestionar documentos y observaciones
+            </p>
+          </div>
+          {affiliation.status === 'ACTIVE' && (
+            <Button onClick={() => setAddSubProcessOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Agregar Sub-procesos
+            </Button>
+          )}
         </div>
 
         {subProcesses.length === 0 ? (
@@ -209,18 +251,82 @@ export function AffiliationDetailClient({
               <p>No hay sub-procesos configurados para esta afiliación</p>
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {subProcesses.map((subProcess) => (
-              <SubProcessKanbanCard
-                key={subProcess.id}
-                subProcess={subProcess}
-                currentUserId={currentUserId}
-                currentUserRole={currentUserRole}
-                onSubProcessUpdated={handleSubProcessUpdated}
-                onViewDetails={() => openSubProcessDetail(subProcess)}
-              />
+        ) : hasEmployeeSubProcesses ? (
+          // Grouped tables by type for EMPRESA clients with employees
+          <div className="space-y-6">
+            {Object.entries(subProcessesByType).map(([type, sps]) => (
+              <div key={type} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <TypeBadge type={type as AffiliationSubProcessType} />
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Users className="h-3.5 w-3.5" />
+                    {sps.length} empleado{sps.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Empleado</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Manager</TableHead>
+                        <TableHead className="text-center">Docs</TableHead>
+                        <TableHead className="text-right">Acción</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sps.map((sp) => (
+                        <TableRow key={sp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openSubProcessDetail(sp)}>
+                          <TableCell className="font-medium">{sp.employee?.fullName || '—'}</TableCell>
+                          <TableCell><StatusBadge status={sp.status} className="text-xs" /></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {sp.assignedTo ? (sp.assignedTo.name || sp.assignedTo.email) : <span className="italic">Sin asignar</span>}
+                          </TableCell>
+                          <TableCell className="text-center text-sm text-muted-foreground">{sp.documents?.length || 0}</TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
             ))}
+          </div>
+        ) : (
+          // Table for individual/independent clients
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Manager</TableHead>
+                  <TableHead className="text-center">Docs</TableHead>
+                  <TableHead className="text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subProcesses.map((sp) => (
+                  <TableRow key={sp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openSubProcessDetail(sp)}>
+                    <TableCell><TypeBadge type={sp.type} className="text-xs" /></TableCell>
+                    <TableCell><StatusBadge status={sp.status} className="text-xs" /></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {sp.assignedTo ? (sp.assignedTo.name || sp.assignedTo.email) : <span className="italic">Sin asignar</span>}
+                    </TableCell>
+                    <TableCell className="text-center text-sm text-muted-foreground">{sp.documents?.length || 0}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" className="h-7 w-7">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>
@@ -282,7 +388,31 @@ export function AffiliationDetailClient({
           onSubProcessUpdated={handleSubProcessUpdatedFromModal}
           onObservationAdded={handleObservationAddedFromModal}
           onObservationDeleted={handleObservationDeletedFromModal}
+          onDocumentUploaded={handleDocumentUploadedFromModal}
           onDocumentDeleted={handleDocumentDeletedFromModal}
+        />
+      )}
+
+      {/* Add Sub-Process Dialog */}
+      {client && (
+        <AddSubProcessDialog
+          open={addSubProcessOpen}
+          onOpenChange={setAddSubProcessOpen}
+          affiliationId={affiliation.id}
+          clientId={client.id}
+          clientType={client.clientType}
+          currentUserId={currentUserId}
+          existingSubProcesses={subProcesses.map((sp) => ({
+            type: sp.type,
+            employeeId: sp.employeeId,
+          }))}
+          onSubProcessesAdded={(created) => {
+            // Add new sub-processes to local state (cast since they lack full relations)
+            setSubProcesses((prev) => [
+              ...prev,
+              ...created.map((sp) => ({ ...sp, documents: [], observations: [], statusLogs: [] })),
+            ])
+          }}
         />
       )}
     </div>

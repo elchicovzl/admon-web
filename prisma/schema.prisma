@@ -175,6 +175,7 @@ model Client {
 
   // Affiliation relations
   affiliations Affiliation[]
+  subProcessesAsEmployee AffiliationSubProcess[] @relation("SubProcessEmployee")
 
   // Address and additional info
   address             ClientAddress?
@@ -458,9 +459,10 @@ enum AffiliationDocumentCategory {
 
 // Main Affiliation model
 model Affiliation {
-  id               String                  @id @default(cuid())
-  clientId         String
-  client           Client                  @relation(fields: [clientId], references: [id])
+  id                String                  @id @default(cuid())
+  affiliationNumber String                  @unique
+  clientId          String
+  client            Client                  @relation(fields: [clientId], references: [id])
 
   // Status tracking
   status           AffiliationStatus       @default(ACTIVE)
@@ -506,6 +508,10 @@ model AffiliationSubProcess {
   // Status change reason (for RETURNED status)
   statusReason      String?                       @db.Text
 
+  // Employee assignment (for EMPRESA clients - which employee this sub-process belongs to)
+  employeeId        String?
+  employee          Client?                       @relation("SubProcessEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+
   // Timestamps
   createdAt         DateTime                      @default(now())
   updatedAt         DateTime                      @updatedAt
@@ -520,6 +526,7 @@ model AffiliationSubProcess {
   @@index([assignedToId])
   @@index([status])
   @@index([type])
+  @@index([employeeId])
 }
 
 // Document model for sub-process documents

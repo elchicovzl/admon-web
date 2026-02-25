@@ -19,10 +19,10 @@ export const createAffiliationSchema = z.object({
           required_error: 'El tipo de sub-proceso es requerido',
         }),
         assignedToId: z.string().cuid('ID de manager inválido').optional().nullable(),
+        employeeId: z.string().cuid('ID de empleado inválido').optional().nullable(),
       })
     )
-    .min(1, 'Debe seleccionar al menos un sub-proceso')
-    .max(4, 'Máximo 4 sub-procesos permitidos'),
+    .min(1, 'Debe seleccionar al menos un sub-proceso'),
 })
 
 export const updateAffiliationSchema = z.object({
@@ -59,6 +59,23 @@ export const assignSubProcessSchema = z.object({
   subProcessId: z.string().cuid('ID de sub-proceso inválido'),
   managerId: z.string().cuid('ID de manager inválido').nullable(),
 })
+
+export const addSubProcessesSchema = z.object({
+  affiliationId: z.string().cuid('ID de afiliación inválido'),
+  subProcesses: z
+    .array(
+      z.object({
+        type: z.nativeEnum(AffiliationSubProcessType, {
+          required_error: 'El tipo de sub-proceso es requerido',
+        }),
+        assignedToId: z.string().cuid('ID de manager inválido').optional().nullable(),
+        employeeId: z.string().cuid('ID de empleado inválido').optional().nullable(),
+      })
+    )
+    .min(1, 'Debe agregar al menos un sub-proceso'),
+})
+
+export type AddSubProcessesInput = z.infer<typeof addSubProcessesSchema>
 
 export const getSubProcessSchema = z.object({
   id: z.string().cuid('ID de sub-proceso inválido'),

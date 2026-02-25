@@ -20,7 +20,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { StatusBadge, TypeBadge } from './status-badge'
-import { FileText, MessageSquare, User, Loader2, Check, ExternalLink, AlertCircle, Building2 } from 'lucide-react'
+import { FileText, MessageSquare, User, Loader2, Check, ExternalLink, AlertCircle, Building2, ChevronDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { updateSubProcessStatus, assignSubProcess } from '@/lib/actions/affiliation.actions'
 import { AffiliationSubProcessStatus } from '@prisma/client'
@@ -48,6 +49,7 @@ export function SubProcessKanbanCard({
   clientName,
 }: SubProcessKanbanCardProps) {
   const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [showStatusChange, setShowStatusChange] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState<AffiliationSubProcessStatus | ''>('' )
   const [statusReason, setStatusReason] = useState('')
@@ -64,6 +66,9 @@ export function SubProcessKanbanCard({
 
   // Get client name - from prop or from subProcess data
   const displayClientName = clientName || ('client' in subProcess ? (subProcess as SubProcessKanbanItem).client.fullName : '')
+
+  // Get employee name if present
+  const employeeName = 'employee' in subProcess ? (subProcess as SubProcessKanbanItem | AffiliationSubProcessWithRelations).employee?.fullName : null
 
   // In compact mode, we don't show observations count or status change UI
   const showObservationsCount = !compact && 'observations' in subProcess
@@ -138,67 +143,93 @@ export function SubProcessKanbanCard({
   // Calculate priority for visual indicators
   const priority = calculatePriority(subProcess.createdAt)
 
+  // Get affiliation number if available
+  const affiliationNumber = 'affiliationNumber' in subProcess ? (subProcess as SubProcessKanbanItem).affiliationNumber : null
+
   // Compact mode render - simplified for Kanban view
   if (compact) {
     return (
       <Card className={`h-full hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${priority.borderColor}`}>
-        <CardHeader className="p-2 pb-1">
-          <div className="space-y-1">
-            {/* Type badge centered */}
-            <div className="flex justify-center">
-              <TypeBadge type={subProcess.type} className="text-[10px] px-1.5 py-0.5" />
-            </div>
+        <CardContent className="p-2 space-y-1.5">
+          {/* Row 1: Type badge + Process number */}
+          <div className="flex items-center justify-between gap-1">
+            <TypeBadge type={subProcess.type} className="text-[10px] px-1.5 py-0.5" />
+            {affiliationNumber && (
+              <Link
+                href={`/dashboard/affiliations/${subProcess.affiliationId}`}
+                className="text-[10px] font-mono text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {affiliationNumber}
+              </Link>
+            )}
+          </div>
 
-            {/* Time badge (left) and Status badge (right) */}
-            <div className="flex items-center justify-between gap-1">
-              <div className="flex items-center gap-1">
-                {priority.showIcon && (
-                  <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />
+          {/* Row 2: Time badge + Status badge */}
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
+              {priority.showIcon && (
+                <AlertCircle className="h-3 w-3 text-red-500 flex-shrink-0" />
+              )}
+              <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${priority.badgeClass}`}>
+                {priority.label}
+              </Badge>
+            </div>
+            <StatusBadge status={subProcess.status} className="text-[10px] px-1.5 py-0.5" />
+          </div>
+
+          {/* Row 3: Client name (Empresa › Empleado) */}
+          {displayClientName && (
+            <div className="flex items-center gap-1">
+              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-xs font-medium truncate">
+                {displayClientName}
+                {employeeName && (
+                  <span className="text-muted-foreground font-normal"> › {employeeName}</span>
                 )}
-                <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${priority.badgeClass}`}>
-                  {priority.label}
-                </Badge>
-              </div>
-              <StatusBadge status={subProcess.status} className="text-[10px] px-1.5 py-0.5" />
+              </span>
             </div>
+          )}
 
-            {/* Client name */}
-            {displayClientName && (
-              <div className="flex items-center justify-baseline gap-1 pt-1">
-                <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                <CardTitle className="text-xs font-medium line-clamp-1">
-                  {displayClientName}
-                </CardTitle>
-              </div>
-            )}
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-2 pt-1 space-y-1">
-          {/* Manager */}
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <User className="h-3 w-3 flex-shrink-0" />
-            {subProcess.assignedTo ? (
-              <span className="truncate">{subProcess.assignedTo.name || subProcess.assignedTo.email}</span>
-            ) : (
-              <span className="italic">Sin asignar</span>
-            )}
-          </div>
-
-          {/* Document count */}
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <FileText className="h-3 w-3 flex-shrink-0" />
-            <span>{documentCount} doc{documentCount !== 1 ? 's' : ''}</span>
-          </div>
-
-          {/* View Affiliation Link - smaller */}
-          <Link
-            href={`/dashboard/affiliations/${subProcess.affiliationId}`}
-            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+          {/* Expand toggle */}
+          <button
+            type="button"
+            className="flex items-center justify-center w-full pt-0.5 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
           >
-            <ExternalLink className="h-3 w-3" />
-            Ver detalle
-          </Link>
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-180')} />
+          </button>
+
+          {/* Expanded details */}
+          {expanded && (
+            <div className="space-y-1 pt-0.5 border-t">
+              {/* Manager */}
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <User className="h-3 w-3 flex-shrink-0" />
+                {subProcess.assignedTo ? (
+                  <span className="truncate">{subProcess.assignedTo.name || subProcess.assignedTo.email}</span>
+                ) : (
+                  <span className="italic">Sin asignar</span>
+                )}
+              </div>
+
+              {/* Document count */}
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <FileText className="h-3 w-3 flex-shrink-0" />
+                <span>{documentCount} doc{documentCount !== 1 ? 's' : ''}</span>
+              </div>
+
+              {/* View detail link */}
+              <Link
+                href={`/dashboard/affiliations/${subProcess.affiliationId}`}
+                className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="h-3 w-3" />
+                Ver detalle
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
     )
@@ -212,6 +243,9 @@ export function SubProcessKanbanCard({
           <div className="space-y-1">
             <CardTitle className="text-xl flex items-center gap-2">
               <TypeBadge type={subProcess.type} />
+              {employeeName && (
+                <span className="text-sm font-normal text-muted-foreground">— {employeeName}</span>
+              )}
             </CardTitle>
             <CardDescription className="flex items-center gap-2 text-sm">
               <User className="h-3 w-3" />

@@ -54,6 +54,7 @@ interface SubProcessDetailModalProps {
   onSubProcessUpdated?: (updates: Partial<AffiliationSubProcessWithRelations>) => void
   onObservationAdded?: (observation: AffiliationObservationWithRelations) => void
   onObservationDeleted?: (observationId: string) => void
+  onDocumentUploaded?: (document: SafeAffiliationDocument) => void
   onDocumentDeleted?: (documentId: string) => void
 }
 
@@ -67,6 +68,7 @@ export function SubProcessDetailModal({
   onSubProcessUpdated,
   onObservationAdded,
   onObservationDeleted,
+  onDocumentUploaded,
   onDocumentDeleted,
 }: SubProcessDetailModalProps) {
   const [activeTab, setActiveTab] = useState('info')
@@ -335,6 +337,7 @@ export function SubProcessDetailModal({
                   documents={subProcess.documents || []}
                   currentUserId={currentUserId}
                   currentUserRole={currentUserRole}
+                  onDocumentUploaded={onDocumentUploaded}
                   onDocumentDeleted={onDocumentDeleted}
                 />
               </TabsContent>

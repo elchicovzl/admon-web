@@ -50,7 +50,9 @@ export function MyAssignmentsClient({
   }
 
   function AssignmentCard({ assignment }: { assignment: AffiliationSubProcessWithRelations }) {
-    const client = (assignment.affiliation as any)?.client
+    const affiliation = assignment.affiliation as any
+    const client = affiliation?.client
+    const affiliationNumber = affiliation?.affiliationNumber as string | undefined
 
     return (
       <Card>
@@ -58,11 +60,13 @@ export function MyAssignmentsClient({
           <div className="flex items-start justify-between">
             <div className="space-y-1 flex-1">
               <CardTitle className="text-lg flex items-center gap-2">
-                {client?.fullName}
+                {affiliationNumber && (
+                  <span className="font-mono text-sm text-primary">{affiliationNumber}</span>
+                )}
                 <TypeBadge type={assignment.type} className="text-xs" />
               </CardTitle>
               <CardDescription>
-                {client?.identificationType} {client?.identificationNumber}
+                {client?.fullName} · {client?.identificationType} {client?.identificationNumber}
               </CardDescription>
             </div>
             <StatusBadge status={assignment.status} />

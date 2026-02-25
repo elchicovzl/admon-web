@@ -78,6 +78,37 @@ export const createClientSchema = z
 
 export type CreateClientInput = z.infer<typeof createClientSchema>
 
+// Create employee schema (email and phone are optional)
+export const createEmployeeSchema = z.object({
+  fullName: z
+    .string()
+    .min(1, 'El nombre completo es requerido')
+    .min(3, 'El nombre debe tener al menos 3 caracteres')
+    .max(100, 'El nombre no puede exceder 100 caracteres'),
+  clientType: z.nativeEnum(ClientType, {
+    required_error: 'El tipo de cliente es requerido',
+  }),
+  identificationType: z.nativeEnum(IdentificationType, {
+    required_error: 'El tipo de identificación es requerido',
+  }),
+  identificationNumber: z
+    .string()
+    .min(1, 'El número de identificación es requerido')
+    .min(4, 'El número de identificación debe tener al menos 4 caracteres')
+    .max(20, 'El número de identificación no puede exceder 20 caracteres'),
+  email: z
+    .string()
+    .email('Email inválido')
+    .or(z.literal('')),
+  phone: z
+    .string()
+    .min(7, 'El teléfono debe tener al menos 7 caracteres')
+    .max(20, 'El teléfono no puede exceder 20 caracteres')
+    .or(z.literal('')),
+})
+
+export type CreateEmployeeInput = z.infer<typeof createEmployeeSchema>
+
 // Update client schema
 export const updateClientSchema = z.object({
   fullName: z

@@ -72,7 +72,7 @@ export default async function AffiliationDetailPage({
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-3xl font-bold tracking-tight">
-                Afiliación de {affiliation.client?.fullName}
+                {affiliation.affiliationNumber} - {affiliation.client?.fullName}
               </h1>
               <Badge
                 variant="outline"

@@ -6,6 +6,7 @@ import prisma from '@/lib/db/prisma'
 import { UserRole, ClientType } from '@prisma/client'
 import {
   createClientSchema,
+  createEmployeeSchema,
   updateClientSchema,
   toggleClientStatusSchema,
   addClientNoteSchema,
@@ -14,6 +15,7 @@ import {
   removeEmployeeFromCompanySchema,
   getCompanyEmployeesSchema,
   type CreateClientInput,
+  type CreateEmployeeInput,
   type UpdateClientInput,
 } from '@/lib/validations/client.schema'
 import type { SafeClient, ClientWithRelations, ClientNote } from '@/lib/types/client.types'
@@ -61,6 +63,12 @@ export const getClients = cache(async (): Promise<ActionResponse<SafeClient[]>> 
         createdAt: true,
         updatedAt: true,
         companyId: true,
+        company: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -273,7 +281,7 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
  * Create a new client
  */
 export async function createClient(
-  data: CreateClientInput
+  data: CreateClientInput | CreateEmployeeInput
 ): Promise<ActionResponse<SafeClient>> {
   try {
     const authCheck = await requireManagerOrAdmin()
@@ -281,16 +289,20 @@ export async function createClient(
       return { success: false, error: authCheck.error }
     }
 
-    // Validate input
-    const validatedFields = createClientSchema.safeParse(data)
-    if (!validatedFields.success) {
+    // Validate input - try employee schema first (more permissive), then full client schema
+    const employeeValidation = createEmployeeSchema.safeParse(data)
+    const clientValidation = createClientSchema.safeParse(data)
+
+    if (!clientValidation.success && !employeeValidation.success) {
       return {
         success: false,
         error: 'Datos inválidos',
       }
     }
 
-    const { fullName, identificationType, identificationNumber, clientType, email, phone, legalRepresentative } = validatedFields.data
+    const validatedData = clientValidation.success ? clientValidation.data : employeeValidation.data!
+    const { fullName, identificationType, identificationNumber, clientType, email, phone } = validatedData
+    const legalRepresentative = clientValidation.success ? clientValidation.data.legalRepresentative : undefined
 
     // Check if identification number already exists
     const existingClient = await prisma.client.findUnique({

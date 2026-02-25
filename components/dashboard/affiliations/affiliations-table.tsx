@@ -117,7 +117,7 @@ export function AffiliationsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Cliente</TableHead>
+            <TableHead>Proceso</TableHead>
             <TableHead>Identificación</TableHead>
             <TableHead>Sub-procesos</TableHead>
             <TableHead>Progreso</TableHead>
@@ -135,12 +135,13 @@ export function AffiliationsTable({
 
             return (
               <TableRow key={affiliation.id}>
-                <TableCell className="font-medium">
+                <TableCell>
                   <Link
                     href={`/dashboard/affiliations/${affiliation.id}`}
-                    className="hover:text-primary hover:underline cursor-pointer"
+                    className="hover:text-primary cursor-pointer block"
                   >
-                    {affiliation.client?.fullName}
+                    <span className="font-mono text-sm font-bold hover:underline">{affiliation.affiliationNumber}</span>
+                    <div className="text-sm text-muted-foreground">{affiliation.client?.fullName}</div>
                   </Link>
                 </TableCell>
                 <TableCell>
@@ -151,9 +152,22 @@ export function AffiliationsTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    {affiliation.subProcesses?.map((sp) => (
-                      <TypeBadge key={sp.id} type={sp.type} className="text-xs" />
-                    ))}
+                    {(() => {
+                      const sps = affiliation.subProcesses || []
+                      // Group sub-processes by type and count
+                      const typeCounts = sps.reduce<Record<string, number>>((acc, sp) => {
+                        acc[sp.type] = (acc[sp.type] || 0) + 1
+                        return acc
+                      }, {})
+                      return Object.entries(typeCounts).map(([type, count]) => (
+                        <div key={type} className="flex items-center gap-0.5">
+                          <TypeBadge type={type as any} className="text-xs" />
+                          {count > 1 && (
+                            <span className="text-[10px] text-muted-foreground font-medium">({count})</span>
+                          )}
+                        </div>
+                      ))
+                    })()}
                   </div>
                 </TableCell>
                 <TableCell>

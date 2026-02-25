@@ -29,6 +29,10 @@ export interface SafeClient {
   createdAt: Date
   updatedAt: Date
   companyId?: string | null
+  company?: {
+    id: string
+    fullName: string
+  } | null
 }
 
 export interface ClientWithRelations extends SafeClient {

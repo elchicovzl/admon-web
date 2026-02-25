@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Mail, Phone, FileText, Calendar, User, CreditCard } from 'lucide-react'
+import { ArrowLeft, Mail, Phone, FileText, Calendar, User, CreditCard, Building2 } from 'lucide-react'
 import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-section'
 import { ClientDocumentsGallerySkeleton } from '@/components/dashboard/clients/client-documents-gallery-skeleton'
 import { ClientCredentialsSection } from '@/components/dashboard/clients/client-credentials-section'
@@ -123,16 +123,29 @@ export default function ClientDetailPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => router.push('/dashboard/clients')}
+            onClick={() => router.push(
+              client.company ? `/dashboard/clients/${client.company.id}` : '/dashboard/clients'
+            )}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{client.fullName}</h1>
-            <p className="text-muted-foreground">
-              Cliente desde{' '}
-              {format(new Date(client.createdAt), "d 'de' MMMM, yyyy", { locale: es })}
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-muted-foreground">
+                Cliente desde{' '}
+                {format(new Date(client.createdAt), "d 'de' MMMM, yyyy", { locale: es })}
+              </p>
+              {client.company && (
+                <Link
+                  href={`/dashboard/clients/${client.company.id}`}
+                  className="flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  {client.company.fullName}
+                </Link>
+              )}
+            </div>
           </div>
         </div>
         <Badge variant={client.isActive ? 'default' : 'destructive'}>

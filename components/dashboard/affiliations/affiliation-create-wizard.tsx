@@ -1,6 +1,7 @@
 /**
  * Affiliation Create Wizard Component
  * 2-step wizard for creating new affiliations
+ * Supports EMPRESA clients with employee selection per sub-process type
  */
 
 'use client'
@@ -29,7 +30,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -41,10 +42,10 @@ import {
 } from '@/components/ui/select'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Loader2, Check, ChevronRight, ChevronLeft, Key } from 'lucide-react'
+import { Loader2, Check, ChevronRight, ChevronLeft, Key, Users, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { getClients } from '@/lib/actions/client.actions'
+import { getClients, getCompanyEmployees } from '@/lib/actions/client.actions'
 import { getManagers } from '@/lib/actions'
 import { createAffiliation } from '@/lib/actions/affiliation.actions'
 import type { SafeClient } from '@/lib/types/client.types'
@@ -86,6 +87,20 @@ export function AffiliationCreateWizard({
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [comboboxOpen, setComboboxOpen] = useState(false)
 
+  // Employee selection state (for EMPRESA clients)
+  const [companyEmployees, setCompanyEmployees] = useState<SafeClient[]>([])
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
+  const [selectedEmployeesByType, setSelectedEmployeesByType] = useState<
+    Record<AffiliationSubProcessType, string[]>
+  >({
+    ARL: [],
+    EPS: [],
+    AFP: [],
+    CCF: [],
+  })
+
+  const isEmpresa = selectedClient?.clientType === 'EMPRESA'
+
   const form = useForm<CreateAffiliationFormValues>({
     resolver: zodResolver(createAffiliationFormSchema),
     defaultValues: {
@@ -123,10 +138,30 @@ export function AffiliationCreateWizard({
     }
   }
 
+  async function loadCompanyEmployees(companyId: string) {
+    setLoadingEmployees(true)
+    try {
+      const result = await getCompanyEmployees(companyId)
+      if (result.success && result.data) {
+        setCompanyEmployees(result.data)
+      } else {
+        setCompanyEmployees([])
+      }
+    } catch (error) {
+      console.error('Error loading employees:', error)
+      setCompanyEmployees([])
+    } finally {
+      setLoadingEmployees(false)
+    }
+  }
+
   function handleClientSelect(client: SafeClient) {
     setSelectedClient(client)
     form.setValue('clientId', client.id)
     setComboboxOpen(false)
+    // Reset employee selections when client changes
+    setCompanyEmployees([])
+    setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [] })
   }
 
   function handleNextStep() {
@@ -134,6 +169,10 @@ export function AffiliationCreateWizard({
       if (!form.getValues('clientId')) {
         toast.error('Debe seleccionar un cliente')
         return
+      }
+      // Load employees if EMPRESA
+      if (selectedClient?.clientType === 'EMPRESA') {
+        loadCompanyEmployees(selectedClient.id)
       }
       setStep(2)
     }
@@ -143,14 +182,67 @@ export function AffiliationCreateWizard({
     setStep(1)
   }
 
+  function toggleEmployeeForType(type: AffiliationSubProcessType, employeeId: string) {
+    setSelectedEmployeesByType((prev) => {
+      const current = prev[type]
+      const exists = current.includes(employeeId)
+      return {
+        ...prev,
+        [type]: exists
+          ? current.filter((id) => id !== employeeId)
+          : [...current, employeeId],
+      }
+    })
+  }
+
+  function toggleAllEmployeesForType(type: AffiliationSubProcessType) {
+    setSelectedEmployeesByType((prev) => {
+      const allSelected = prev[type].length === companyEmployees.length
+      return {
+        ...prev,
+        [type]: allSelected ? [] : companyEmployees.map((e) => e.id),
+      }
+    })
+  }
+
   async function onSubmit(data: CreateAffiliationFormValues) {
+    // Validate employee selection for EMPRESA
+    if (isEmpresa) {
+      const selectedTypes = data.subProcesses.map((sp) => sp.type)
+      for (const type of selectedTypes) {
+        if (selectedEmployeesByType[type].length === 0) {
+          toast.error(`Debe seleccionar al menos un empleado para ${type}`)
+          return
+        }
+      }
+    }
+
     setLoading(true)
     try {
-      // Transform data: if assignToSelf is true, use currentUserId
-      const transformedSubProcesses = data.subProcesses.map((sp) => ({
-        type: sp.type,
-        assignedToId: sp.assignToSelf ? currentUserId : sp.assignedToId,
-      }))
+      // Build sub-processes array
+      const transformedSubProcesses: { type: AffiliationSubProcessType; assignedToId?: string | null; employeeId?: string | null }[] = []
+
+      for (const sp of data.subProcesses) {
+        const assignedToId = sp.assignToSelf ? currentUserId : sp.assignedToId
+
+        if (isEmpresa) {
+          // Expand to one sub-process per employee
+          const employeeIds = selectedEmployeesByType[sp.type]
+          for (const employeeId of employeeIds) {
+            transformedSubProcesses.push({
+              type: sp.type,
+              assignedToId,
+              employeeId,
+            })
+          }
+        } else {
+          // Individual/independent client - no employeeId
+          transformedSubProcesses.push({
+            type: sp.type,
+            assignedToId,
+          })
+        }
+      }
 
       const result = await createAffiliation({
         clientId: data.clientId,
@@ -162,6 +254,8 @@ export function AffiliationCreateWizard({
         form.reset()
         setStep(1)
         setSelectedClient(null)
+        setCompanyEmployees([])
+        setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [] })
         onOpenChange(false)
         onAffiliationCreated?.()
         // Redirect to detail page
@@ -193,6 +287,8 @@ export function AffiliationCreateWizard({
         'subProcesses',
         current.filter((sp) => sp.type !== type)
       )
+      // Clear employee selection for this type
+      setSelectedEmployeesByType((prev) => ({ ...prev, [type]: [] }))
     } else {
       form.setValue('subProcesses', [
         ...current,
@@ -212,7 +308,10 @@ export function AffiliationCreateWizard({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className={cn(
+          'max-h-[90vh] overflow-y-auto',
+          isEmpresa && step === 2 ? 'sm:max-w-[800px]' : 'sm:max-w-[700px]'
+        )}>
           <DialogHeader>
             <DialogTitle>
               Crear Nueva Afiliación {step === 1 ? '- Paso 1/2' : '- Paso 2/2'}
@@ -341,6 +440,20 @@ export function AffiliationCreateWizard({
               {/* STEP 2: CONFIGURE SUB-PROCESSES */}
               {step === 2 && (
                 <div className="space-y-4">
+                  {/* Show employee loading/warning for EMPRESA */}
+                  {isEmpresa && loadingEmployees && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando empleados de la empresa...
+                    </div>
+                  )}
+                  {isEmpresa && !loadingEmployees && companyEmployees.length === 0 && (
+                    <div className="flex items-center gap-2 rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      Esta empresa no tiene empleados registrados. Debe agregar empleados desde el perfil del cliente antes de crear una afiliación.
+                    </div>
+                  )}
+
                   <FormField
                     control={form.control}
                     name="subProcesses"
@@ -348,26 +461,89 @@ export function AffiliationCreateWizard({
                       <FormItem>
                         <FormLabel>Sub-procesos de Afiliación *</FormLabel>
                         <FormDescription>
-                          Seleccione los sub-procesos necesarios y asigne managers
+                          {isEmpresa
+                            ? 'Seleccione los sub-procesos y los empleados a los que se les aplicará cada uno'
+                            : 'Seleccione los sub-procesos necesarios y asigne managers'}
                         </FormDescription>
                         <div className="space-y-3 mt-4">
                           {subProcessTypes.map((spType) => {
                             const isSelected = field.value.some((sp) => sp.type === spType.value)
                             const subProcess = field.value.find((sp) => sp.type === spType.value)
+                            const selectedCount = selectedEmployeesByType[spType.value].length
 
                             return (
                               <Card key={spType.value} className={cn(isSelected && 'border-primary')}>
                                 <CardHeader className="pb-3">
-                                  <div className="flex items-center space-x-2">
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => toggleSubProcess(spType.value)}
-                                    />
-                                    <CardTitle className="text-base">{spType.label}</CardTitle>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => toggleSubProcess(spType.value)}
+                                        disabled={isEmpresa && !loadingEmployees && companyEmployees.length === 0}
+                                      />
+                                      <CardTitle className="text-base">{spType.label}</CardTitle>
+                                    </div>
+                                    {isSelected && isEmpresa && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        <Users className="mr-1 h-3 w-3" />
+                                        {selectedCount} empleado{selectedCount !== 1 ? 's' : ''}
+                                      </Badge>
+                                    )}
                                   </div>
                                 </CardHeader>
                                 {isSelected && (
                                   <CardContent className="space-y-3">
+                                    {/* Employee selection for EMPRESA clients */}
+                                    {isEmpresa && companyEmployees.length > 0 && (
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-sm font-medium">Seleccionar empleados</label>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-auto py-1 px-2 text-xs"
+                                            onClick={() => toggleAllEmployeesForType(spType.value)}
+                                          >
+                                            {selectedEmployeesByType[spType.value].length === companyEmployees.length
+                                              ? 'Deseleccionar todos'
+                                              : 'Seleccionar todos'}
+                                          </Button>
+                                        </div>
+                                        <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1">
+                                          {companyEmployees.map((employee) => {
+                                            const isChecked = selectedEmployeesByType[spType.value].includes(employee.id)
+                                            return (
+                                              <div
+                                                key={employee.id}
+                                                className={cn(
+                                                  'flex items-center space-x-2 rounded-sm px-2 py-1.5 cursor-pointer hover:bg-muted/50',
+                                                  isChecked && 'bg-muted/30'
+                                                )}
+                                                onClick={() => toggleEmployeeForType(spType.value, employee.id)}
+                                              >
+                                                <div className={cn(
+                                                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border',
+                                                  isChecked
+                                                    ? 'bg-primary border-primary'
+                                                    : 'border-input'
+                                                )}>
+                                                  {isChecked && <Check className="h-3 w-3 text-primary-foreground" />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-medium truncate">{employee.fullName}</p>
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {employee.identificationType} {employee.identificationNumber}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Manager assignment */}
                                     <div className="flex items-center space-x-2">
                                       <Checkbox
                                         checked={subProcess?.assignToSelf || false}

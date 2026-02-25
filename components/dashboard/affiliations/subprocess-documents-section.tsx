@@ -5,12 +5,19 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,9 +28,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { FileText, Trash2, Download, Upload, ExternalLink } from 'lucide-react'
+import { FileText, Trash2, Download, Upload, ExternalLink, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { deleteDocument } from '@/lib/actions/affiliation.actions'
+import { AffiliationDocumentCategory } from '@prisma/client'
 import type { SafeAffiliationDocument } from '@/lib/types/affiliation.types'
 import { DocumentCategoryLabels } from '@/lib/types/affiliation.types'
 
@@ -32,6 +40,7 @@ interface SubProcessDocumentsSectionProps {
   documents: SafeAffiliationDocument[]
   currentUserId?: string
   currentUserRole?: string
+  onDocumentUploaded?: (document: SafeAffiliationDocument) => void
   onDocumentDeleted?: (documentId: string) => void
 }
 
@@ -40,11 +49,70 @@ export function SubProcessDocumentsSection({
   documents,
   currentUserId,
   currentUserRole,
+  onDocumentUploaded,
   onDocumentDeleted,
 }: SubProcessDocumentsSectionProps) {
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<AffiliationDocumentCategory>(AffiliationDocumentCategory.GENERAL)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileUpload(file: File) {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('subProcessId', subProcessId)
+      formData.append('category', selectedCategory)
+
+      const response = await fetch('/api/affiliations/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (result.success && result.data) {
+        toast.success('Documento subido exitosamente')
+        onDocumentUploaded?.(result.data)
+      } else {
+        toast.error(result.error || 'Error al subir documento')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
+      toast.error('Error al subir documento')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 10485760) {
+        toast.error('El archivo excede el límite de 10MB')
+        return
+      }
+      handleFileUpload(file)
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) {
+      if (file.size > 10485760) {
+        toast.error('El archivo excede el límite de 10MB')
+        return
+      }
+      handleFileUpload(file)
+    }
+  }
 
   async function handleDeleteDocument() {
     if (!documentToDelete) return
@@ -108,19 +176,51 @@ export function SubProcessDocumentsSection({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Upload Button - TODO: Implement R2 upload */}
-          <div className="border-2 border-dashed rounded-lg p-6 text-center">
-            <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-3">
-              Arrastra archivos aquí o haz clic para subir
-            </p>
-            <Button variant="outline" size="sm" disabled>
-              <Upload className="mr-2 h-4 w-4" />
-              Subir Documento
-            </Button>
-            <p className="text-xs text-muted-foreground mt-2">
-              Próximamente: Upload de documentos con R2
-            </p>
+          {/* Upload Area */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Select
+                value={selectedCategory}
+                onValueChange={(v) => setSelectedCategory(v as AffiliationDocumentCategory)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(DocumentCategoryLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div
+              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => !uploading && fileInputRef.current?.click()}
+            >
+              {uploading ? (
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Subiendo documento...</p>
+                </div>
+              ) : (
+                <>
+                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Arrastra archivos aquí o haz clic para subir
+                  </p>
+                  <p className="text-xs text-muted-foreground">Máximo 10MB por archivo</p>
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+                disabled={uploading}
+              />
+            </div>
           </div>
 
           {/* Documents List */}
