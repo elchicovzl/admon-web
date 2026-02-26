@@ -90,7 +90,7 @@ async function MyAssignmentsWidget() {
           <div>
             <CardTitle>Mis Asignaciones</CardTitle>
             <CardDescription>
-              Sub-procesos de afiliación asignados a ti
+              Sub-procesos asignados a ti
             </CardDescription>
           </div>
           <Button variant="outline" size="sm" asChild>

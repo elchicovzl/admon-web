@@ -372,8 +372,8 @@ export function AffiliationCreateWizard({
             </DialogTitle>
             <DialogDescription>
               {step === 1
-                ? 'Seleccione el cliente para la afiliación'
-                : 'Configure los sub-procesos de afiliación'}
+                ? 'Seleccione el cliente'
+                : 'Configure los sub-procesos'}
             </DialogDescription>
           </DialogHeader>
 
@@ -593,7 +593,7 @@ export function AffiliationCreateWizard({
                     name="subProcesses"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Sub-procesos de Afiliación *</FormLabel>
+                        <FormLabel>Sub-procesos *</FormLabel>
                         <FormDescription>
                           {isEmpresa
                             ? 'Seleccione los sub-procesos y los empleados a los que se les aplicará cada uno'

@@ -232,7 +232,7 @@ export function AffiliationDetailClient({
       <div className="space-y-4">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-2xl font-bold">Sub-procesos de Afiliación</h2>
+            <h2 className="text-2xl font-bold">Sub-procesos</h2>
             <p className="text-muted-foreground">
               Haz clic en &quot;Ver Detalles Completos&quot; para gestionar documentos y observaciones
             </p>

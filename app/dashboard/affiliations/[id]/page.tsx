@@ -14,7 +14,8 @@ import { AffiliationDetailClient } from './affiliation-detail-client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SendAffiliationButton } from '@/components/dashboard/affiliations/send-affiliation-button'
-import { AffiliationStatusLabels, AffiliationStatusColors } from '@/lib/types/affiliation.types'
+import { AffiliationStatusLabels, AffiliationStatusColors, AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
+import { AffiliationProcessType } from '@prisma/client'
 import { AffiliationSubProcessStatus } from '@prisma/client'
 import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -89,6 +90,13 @@ export default async function AffiliationDetailPage({
             <p className="text-muted-foreground">
               {affiliation.client?.identificationType} {affiliation.client?.identificationNumber}
             </p>
+            {affiliation.processType && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {affiliation.processType === AffiliationProcessType.OTRO && affiliation.processTypeOther
+                  ? affiliation.processTypeOther
+                  : AffiliationProcessTypeLabels[affiliation.processType]}
+              </p>
+            )}
           </div>
         </div>
 

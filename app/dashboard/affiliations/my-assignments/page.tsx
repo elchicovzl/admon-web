@@ -144,7 +144,7 @@ export default async function MyAssignmentsPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Mis Asignaciones</h1>
         <p className="text-muted-foreground">
-          Sub-procesos de afiliación asignados a ti
+          Sub-procesos asignados a ti
         </p>
       </div>
 
