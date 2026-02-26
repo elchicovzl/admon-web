@@ -325,6 +325,10 @@ export const SubProcessTypeLabels: Record<AffiliationSubProcessType, string> = {
   EPS: 'EPS',
   AFP: 'AFP',
   CCF: 'CCF',
+  PILA: 'Pila',
+  TRASLADOS: 'Traslados',
+  INCAPACIDADES: 'Incapacidades',
+  CONCILIACION_MORA: 'Conciliación Mora',
 }
 
 export const SubProcessStatusLabels: Record<AffiliationSubProcessStatus, string> = {
@@ -341,6 +345,10 @@ export const DocumentCategoryLabels: Record<AffiliationDocumentCategory, string>
   EPS_DOCS: 'Documentos EPS',
   AFP_DOCS: 'Documentos AFP',
   CCF_DOCS: 'Documentos CCF',
+  PILA_DOCS: 'Documentos Pila',
+  TRASLADOS_DOCS: 'Documentos Traslados',
+  INCAPACIDADES_DOCS: 'Documentos Incapacidades',
+  CONCILIACION_MORA_DOCS: 'Documentos Conciliación Mora',
   GENERAL: 'General',
 }
 
@@ -413,6 +421,26 @@ export const SubProcessTypeColors: Record<
     bg: 'bg-purple-100',
     text: 'text-purple-700',
     border: 'border-purple-300',
+  },
+  PILA: {
+    bg: 'bg-amber-100',
+    text: 'text-amber-700',
+    border: 'border-amber-300',
+  },
+  TRASLADOS: {
+    bg: 'bg-teal-100',
+    text: 'text-teal-700',
+    border: 'border-teal-300',
+  },
+  INCAPACIDADES: {
+    bg: 'bg-rose-100',
+    text: 'text-rose-700',
+    border: 'border-rose-300',
+  },
+  CONCILIACION_MORA: {
+    bg: 'bg-indigo-100',
+    text: 'text-indigo-700',
+    border: 'border-indigo-300',
   },
 }
 

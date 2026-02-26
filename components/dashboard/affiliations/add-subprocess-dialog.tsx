@@ -52,6 +52,10 @@ const subProcessTypes = [
   { value: AffiliationSubProcessType.EPS, label: 'EPS' },
   { value: AffiliationSubProcessType.AFP, label: 'AFP' },
   { value: AffiliationSubProcessType.CCF, label: 'CCF' },
+  { value: AffiliationSubProcessType.PILA, label: 'Pila' },
+  { value: AffiliationSubProcessType.TRASLADOS, label: 'Traslados' },
+  { value: AffiliationSubProcessType.INCAPACIDADES, label: 'Incapacidades' },
+  { value: AffiliationSubProcessType.CONCILIACION_MORA, label: 'Conciliación Mora' },
 ]
 
 export function AddSubProcessDialog({
@@ -70,15 +74,21 @@ export function AddSubProcessDialog({
 
   const [selectedTypes, setSelectedTypes] = useState<Record<AffiliationSubProcessType, boolean>>({
     ARL: false, EPS: false, AFP: false, CCF: false,
+    PILA: false, TRASLADOS: false, INCAPACIDADES: false, CONCILIACION_MORA: false,
   })
   const [assignments, setAssignments] = useState<Record<AffiliationSubProcessType, { assignedToId: string | null; assignToSelf: boolean }>>({
     ARL: { assignedToId: null, assignToSelf: false },
     EPS: { assignedToId: null, assignToSelf: false },
     AFP: { assignedToId: null, assignToSelf: false },
     CCF: { assignedToId: null, assignToSelf: false },
+    PILA: { assignedToId: null, assignToSelf: false },
+    TRASLADOS: { assignedToId: null, assignToSelf: false },
+    INCAPACIDADES: { assignedToId: null, assignToSelf: false },
+    CONCILIACION_MORA: { assignedToId: null, assignToSelf: false },
   })
   const [selectedEmployeesByType, setSelectedEmployeesByType] = useState<Record<AffiliationSubProcessType, string[]>>({
     ARL: [], EPS: [], AFP: [], CCF: [],
+    PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [],
   })
 
   const isEmpresa = clientType === 'EMPRESA'
@@ -155,14 +165,18 @@ export function AddSubProcessDialog({
   }
 
   function resetState() {
-    setSelectedTypes({ ARL: false, EPS: false, AFP: false, CCF: false })
+    setSelectedTypes({ ARL: false, EPS: false, AFP: false, CCF: false, PILA: false, TRASLADOS: false, INCAPACIDADES: false, CONCILIACION_MORA: false })
     setAssignments({
       ARL: { assignedToId: null, assignToSelf: false },
       EPS: { assignedToId: null, assignToSelf: false },
       AFP: { assignedToId: null, assignToSelf: false },
       CCF: { assignedToId: null, assignToSelf: false },
+      PILA: { assignedToId: null, assignToSelf: false },
+      TRASLADOS: { assignedToId: null, assignToSelf: false },
+      INCAPACIDADES: { assignedToId: null, assignToSelf: false },
+      CONCILIACION_MORA: { assignedToId: null, assignToSelf: false },
     })
-    setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [] })
+    setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
   }
 
   const hasSelectedTypes = Object.values(selectedTypes).some(Boolean)

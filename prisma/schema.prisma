@@ -433,10 +433,14 @@ enum AffiliationStatus {
 
 // Sub-process types
 enum AffiliationSubProcessType {
-  ARL   // Administradora de Riesgos Laborales
-  EPS   // Entidad Promotora de Salud
-  AFP   // Administradora de Fondos de Pensiones
-  CCF   // Caja de Compensación Familiar
+  ARL              // Administradora de Riesgos Laborales
+  EPS              // Entidad Promotora de Salud
+  AFP              // Administradora de Fondos de Pensiones
+  CCF              // Caja de Compensación Familiar
+  PILA             // Pila
+  TRASLADOS        // Traslados
+  INCAPACIDADES    // Incapacidades
+  CONCILIACION_MORA // Conciliación Mora
 }
 
 // Sub-process status states
@@ -455,6 +459,10 @@ enum AffiliationDocumentCategory {
   EPS_DOCS
   AFP_DOCS
   CCF_DOCS
+  PILA_DOCS
+  TRASLADOS_DOCS
+  INCAPACIDADES_DOCS
+  CONCILIACION_MORA_DOCS
   GENERAL
 }
 

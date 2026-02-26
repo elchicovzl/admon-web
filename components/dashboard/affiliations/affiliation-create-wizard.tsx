@@ -97,6 +97,10 @@ export function AffiliationCreateWizard({
     EPS: [],
     AFP: [],
     CCF: [],
+    PILA: [],
+    TRASLADOS: [],
+    INCAPACIDADES: [],
+    CONCILIACION_MORA: [],
   })
 
   const isEmpresa = selectedClient?.clientType === 'EMPRESA'
@@ -161,7 +165,7 @@ export function AffiliationCreateWizard({
     setComboboxOpen(false)
     // Reset employee selections when client changes
     setCompanyEmployees([])
-    setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [] })
+    setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
   }
 
   function handleNextStep() {
@@ -255,7 +259,7 @@ export function AffiliationCreateWizard({
         setStep(1)
         setSelectedClient(null)
         setCompanyEmployees([])
-        setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [] })
+        setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
         onOpenChange(false)
         onAffiliationCreated?.()
         // Redirect to detail page
@@ -276,6 +280,10 @@ export function AffiliationCreateWizard({
     { value: AffiliationSubProcessType.EPS, label: 'EPS' },
     { value: AffiliationSubProcessType.AFP, label: 'AFP' },
     { value: AffiliationSubProcessType.CCF, label: 'CCF' },
+    { value: AffiliationSubProcessType.PILA, label: 'Pila' },
+    { value: AffiliationSubProcessType.TRASLADOS, label: 'Traslados' },
+    { value: AffiliationSubProcessType.INCAPACIDADES, label: 'Incapacidades' },
+    { value: AffiliationSubProcessType.CONCILIACION_MORA, label: 'Conciliación Mora' },
   ]
 
   function toggleSubProcess(type: AffiliationSubProcessType) {
