@@ -30,6 +30,7 @@ export const legalRepresentativeSchema = z.object({
 })
 
 export type LegalRepresentativeInput = z.infer<typeof legalRepresentativeSchema>
+export type UpdateLegalRepresentativeInput = LegalRepresentativeInput
 
 // Create client schema
 export const createClientSchema = z

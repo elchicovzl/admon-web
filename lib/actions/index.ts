@@ -34,6 +34,7 @@ export {
   removeEmployeeFromCompany,
   getAvailableEmployees,
   getCompanyEmployees,
+  updateLegalRepresentative,
 } from './client.actions'
 
 // Document actions

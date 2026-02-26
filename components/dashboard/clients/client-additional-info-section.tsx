@@ -37,6 +37,7 @@ import { Badge } from '@/components/ui/badge'
 interface ClientAdditionalInfoSectionProps {
   clientId: string
   initialInfo?: ClientAdditionalInfo | null
+  asSection?: boolean
 }
 
 const NOVEDADES_OPTIONS = [
@@ -50,6 +51,7 @@ const NOVEDADES_OPTIONS = [
 export function ClientAdditionalInfoSection({
   clientId,
   initialInfo,
+  asSection = false,
 }: ClientAdditionalInfoSectionProps) {
   const [info, setInfo] = useState<ClientAdditionalInfo | null>(initialInfo || null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -106,73 +108,117 @@ export function ClientAdditionalInfoSection({
     }).format(value)
   }
 
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Briefcase className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <CardTitle>Información Adicional</CardTitle>
-                <CardDescription>Información laboral y familiar</CardDescription>
-              </div>
-            </div>
-            <Button onClick={handleOpenDialog} size="sm">
-              {info ? (
-                <>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Editar
-                </>
-              ) : (
-                <>
-                  <Briefcase className="mr-2 h-4 w-4" />
-                  Agregar Información
-                </>
-              )}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {info ? (
-            <div className="space-y-3">
-              {info.actividadComercial && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Actividad Comercial</p>
-                  <p className="text-sm">{info.actividadComercial}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Salario</p>
-                <p className="text-sm font-semibold">{formatCurrency(info.salario)}</p>
-              </div>
-              {info.novedadesIngreso && info.novedadesIngreso.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-2">
-                    Novedades de Ingreso
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {info.novedadesIngreso.map((novedad) => (
-                      <Badge key={novedad} variant="secondary">
-                        {NOVEDADES_OPTIONS.find((n) => n.id === novedad)?.label || novedad}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {!info.actividadComercial && !info.salario && info.novedadesIngreso.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay información adicional registrada
-                </p>
-              )}
+  const infoContent = info ? (
+    asSection ? (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 pl-6">
+        <div className="col-span-2">
+          <p className="text-xs font-medium text-muted-foreground">Actividad Comercial</p>
+          <p className="text-sm">{info.actividadComercial || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Salario</p>
+          <p className="text-sm font-semibold">{formatCurrency(info.salario)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Novedades de Ingreso</p>
+          {info.novedadesIngreso && info.novedadesIngreso.length > 0 ? (
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {info.novedadesIngreso.map((novedad) => (
+                <Badge key={novedad} variant="secondary" className="text-xs">
+                  {NOVEDADES_OPTIONS.find((n) => n.id === novedad)?.label || novedad}
+                </Badge>
+              ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No hay información adicional registrada
-            </p>
+            <p className="text-sm text-muted-foreground">—</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {info.actividadComercial && (
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Actividad Comercial</p>
+            <p className="text-sm">{info.actividadComercial}</p>
+          </div>
+        )}
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Salario</p>
+          <p className="text-sm font-semibold">{formatCurrency(info.salario)}</p>
+        </div>
+        {info.novedadesIngreso && info.novedadesIngreso.length > 0 && (
+          <div>
+            <p className="text-sm font-medium text-muted-foreground mb-2">
+              Novedades de Ingreso
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {info.novedadesIngreso.map((novedad) => (
+                <Badge key={novedad} variant="secondary">
+                  {NOVEDADES_OPTIONS.find((n) => n.id === novedad)?.label || novedad}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {!info.actividadComercial && !info.salario && info.novedadesIngreso.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No hay información adicional registrada
+          </p>
+        )}
+      </div>
+    )
+  ) : (
+    <p className="text-sm text-muted-foreground text-center py-4">
+      No hay información adicional registrada
+    </p>
+  )
+
+  const editButton = (
+    <Button onClick={handleOpenDialog} size="sm" variant={asSection ? 'ghost' : 'default'}>
+      {info ? (
+        <>
+          <Edit className="mr-2 h-4 w-4" />
+          Editar
+        </>
+      ) : (
+        <>
+          <Briefcase className="mr-2 h-4 w-4" />
+          Agregar
+        </>
+      )}
+    </Button>
+  )
+
+  return (
+    <>
+      {asSection ? (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Información Adicional</p>
+            </div>
+            {editButton}
+          </div>
+          {infoContent}
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <CardTitle>Información Adicional</CardTitle>
+                  <CardDescription>Información laboral y familiar</CardDescription>
+                </div>
+              </div>
+              {editButton}
+            </div>
+          </CardHeader>
+          <CardContent>{infoContent}</CardContent>
+        </Card>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">

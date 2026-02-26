@@ -6,20 +6,18 @@ import { useRouter, useParams } from 'next/navigation'
 import { getClientById } from '@/lib/actions/client.actions'
 import type { ClientWithRelations } from '@/lib/types/client.types'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Mail, Phone, FileText, Calendar, User, CreditCard, Building2 } from 'lucide-react'
+import { ArrowLeft, Building2 } from 'lucide-react'
 import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-section'
 import { ClientDocumentsGallerySkeleton } from '@/components/dashboard/clients/client-documents-gallery-skeleton'
 import { ClientCredentialsSection } from '@/components/dashboard/clients/client-credentials-section'
 import { CompanyEmployeesSection } from '@/components/dashboard/clients/company-employees-section'
-import { ClientAddressSection } from '@/components/dashboard/clients/client-address-section'
-import { ClientAdditionalInfoSection } from '@/components/dashboard/clients/client-additional-info-section'
 import { ClientBeneficiariesSection } from '@/components/dashboard/clients/client-beneficiaries-section'
+import { ClientInfoPanel } from '@/components/dashboard/clients/client-info-panel'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ClientType, IdentificationType } from '@prisma/client'
+import { ClientType } from '@prisma/client'
 import Link from 'next/link'
 
 const ClientDocumentsGallery = dynamic(
@@ -60,30 +58,6 @@ export default function ClientDetailPage() {
       loadClient()
     }
   }, [clientId])
-
-  const getIdentificationTypeLabel = (type: IdentificationType) => {
-    const labels: Record<IdentificationType, string> = {
-      CEDULA: 'Cédula (CC)',
-      TARJETA_IDENTIDAD: 'Tarjeta Identidad (TI)',
-      REGISTRO_CIVIL: 'Registro Civil (RC)',
-      CEDULA_EXTRANJERIA: 'Cédula Extranjería (CE)',
-      PASAPORTE: 'Pasaporte (PA)',
-      PPT: 'PPT',
-      PEP: 'PEP',
-      NUIP: 'NUIP',
-      NIT: 'NIT',
-    }
-    return labels[type]
-  }
-
-  const getClientTypeLabel = (type: ClientType) => {
-    const labels = {
-      EMPLEADO: 'Empleado',
-      EMPRESA: 'Empresa',
-      INDEPENDIENTE: 'Independiente',
-    }
-    return labels[type]
-  }
 
   if (isLoading) {
     return (
@@ -153,196 +127,16 @@ export default function ClientDetailPage() {
         </Badge>
       </div>
 
-      {/* Client Information Cards */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Personal Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Información Personal</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <User className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Nombre Completo</p>
-                <p className="text-sm text-muted-foreground">{client.fullName}</p>
-              </div>
-            </div>
+      {/* Unified Info Panel */}
+      <ClientInfoPanel client={client} onClientUpdated={setClient} />
 
-            <div className="flex items-start gap-3">
-              <CreditCard className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Identificación</p>
-                <p className="text-sm text-muted-foreground">
-                  {getIdentificationTypeLabel(client.identificationType)}:{' '}
-                  {client.identificationNumber}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Tipo de Cliente</p>
-                <p className="text-sm text-muted-foreground">
-                  {getClientTypeLabel(client.clientType)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Status</p>
-                <p className="text-sm text-muted-foreground">{client.status}</p>
-              </div>
-            </div>
-
-            {/* Company info for employees */}
-            {client.clientType === ClientType.EMPLEADO && client.company && (
-              <div className="flex items-start gap-3 pt-2 border-t">
-                <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Empresa</p>
-                  <Link
-                    href={`/dashboard/clients/${client.company.id}`}
-                    className="text-sm text-primary hover:underline"
-                  >
-                    {client.company.fullName}
-                  </Link>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Contact Information */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Información de Contacto</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <Mail className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Email</p>
-                <a
-                  href={`mailto:${client.email}`}
-                  className="text-sm text-muted-foreground hover:text-primary underline"
-                >
-                  {client.email}
-                </a>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Teléfono</p>
-                <a
-                  href={`tel:${client.phone}`}
-                  className="text-sm text-muted-foreground hover:text-primary underline"
-                >
-                  {client.phone}
-                </a>
-              </div>
-            </div>
-
-            {client.createdBy && (
-              <div className="flex items-start gap-3">
-                <User className="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Creado por</p>
-                  <p className="text-sm text-muted-foreground">
-                    {client.createdBy.name || client.createdBy.email}
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Legal Representative Section (only for companies) */}
-      {client.clientType === ClientType.EMPRESA && client.legalRepresentative && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Representante Legal</CardTitle>
-            <CardDescription>
-              Información del representante legal de la empresa
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex items-start gap-3">
-                <User className="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Nombre Completo</p>
-                  <p className="text-sm text-muted-foreground">
-                    {client.legalRepresentative.fullName}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <CreditCard className="h-5 w-5 text-muted-foreground mt-0.5" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Identificación</p>
-                  <p className="text-sm text-muted-foreground">
-                    {getIdentificationTypeLabel(client.legalRepresentative.identificationType)}:{' '}
-                    {client.legalRepresentative.identificationNumber}
-                  </p>
-                </div>
-              </div>
-
-              {client.legalRepresentative.email && (
-                <div className="flex items-start gap-3">
-                  <Mail className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Email</p>
-                    <a
-                      href={`mailto:${client.legalRepresentative.email}`}
-                      className="text-sm text-muted-foreground hover:text-primary underline"
-                    >
-                      {client.legalRepresentative.email}
-                    </a>
-                  </div>
-                </div>
-              )}
-
-              {client.legalRepresentative.phone && (
-                <div className="flex items-start gap-3">
-                  <Phone className="h-5 w-5 text-muted-foreground mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Teléfono</p>
-                    <a
-                      href={`tel:${client.legalRepresentative.phone}`}
-                      className="text-sm text-muted-foreground hover:text-primary underline"
-                    >
-                      {client.legalRepresentative.phone}
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Beneficiaries Section (not for companies) */}
+      {client.clientType !== ClientType.EMPRESA && (
+        <ClientBeneficiariesSection
+          clientId={client.id}
+          initialBeneficiaries={client.beneficiaries || []}
+        />
       )}
-
-      {/* Address Section */}
-      <ClientAddressSection clientId={client.id} initialAddress={client.address} />
-
-      {/* Additional Info Section */}
-      <ClientAdditionalInfoSection
-        clientId={client.id}
-        initialInfo={client.additionalInfo}
-      />
-
-      {/* Beneficiaries Section */}
-      <ClientBeneficiariesSection
-        clientId={client.id}
-        initialBeneficiaries={client.beneficiaries || []}
-      />
 
       {/* Employees Section (only for companies) */}
       {client.clientType === ClientType.EMPRESA && (

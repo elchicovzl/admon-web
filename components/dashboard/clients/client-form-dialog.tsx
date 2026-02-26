@@ -58,8 +58,16 @@ const PERSON_ID_TYPES: { value: IdentificationType; label: string }[] = [
   { value: IdentificationType.NUIP, label: 'NUIP' },
 ]
 
-// ID types allowed for companies
-const COMPANY_ID_TYPES: { value: IdentificationType; label: string }[] = [
+// ID types allowed for companies (personas naturales y jurídicas)
+const ALL_ID_TYPES: { value: IdentificationType; label: string }[] = [
+  { value: IdentificationType.CEDULA, label: 'Cédula de Ciudadanía (CC)' },
+  { value: IdentificationType.TARJETA_IDENTIDAD, label: 'Tarjeta de Identidad (TI)' },
+  { value: IdentificationType.REGISTRO_CIVIL, label: 'Registro Civil (RC)' },
+  { value: IdentificationType.CEDULA_EXTRANJERIA, label: 'Cédula de Extranjería (CE)' },
+  { value: IdentificationType.PASAPORTE, label: 'Pasaporte (PA)' },
+  { value: IdentificationType.PPT, label: 'Permiso de Protección Temporal (PPT)' },
+  { value: IdentificationType.PEP, label: 'Permiso Especial de Permanencia (PEP)' },
+  { value: IdentificationType.NUIP, label: 'NUIP' },
   { value: IdentificationType.NIT, label: 'NIT' },
 ]
 
@@ -118,13 +126,9 @@ export function ClientFormDialog({
   // Track previous identification type to clear number only when it actually changes
   const prevIdTypeRef = useRef<IdentificationType | null>(null)
 
-  // When switching to/from EMPRESA, reset identification type and number
+  // When switching away from EMPRESA, reset NIT to CEDULA (NIT no aplica para personas naturales)
   useEffect(() => {
-    if (isCompany) {
-      form.setValue('identificationType', IdentificationType.NIT)
-      form.setValue('identificationNumber', '')
-    } else {
-      // Only reset if the current type is NIT (company-only)
+    if (!isCompany) {
       if (form.getValues('identificationType') === IdentificationType.NIT) {
         form.setValue('identificationType', IdentificationType.CEDULA)
         form.setValue('identificationNumber', '')
@@ -222,7 +226,7 @@ export function ClientFormDialog({
     }
   }
 
-  const availableIdTypes = isCompany ? COMPANY_ID_TYPES : PERSON_ID_TYPES
+  const availableIdTypes = isCompany ? ALL_ID_TYPES : PERSON_ID_TYPES
   const currentMask = ID_MASK_CONFIG[identificationType]
 
   return (
@@ -298,7 +302,7 @@ export function ClientFormDialog({
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
-                      disabled={isLoading || isCompany}
+                      disabled={isLoading}
                     >
                       <FormControl>
                         <SelectTrigger>

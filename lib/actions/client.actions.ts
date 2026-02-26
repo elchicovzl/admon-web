@@ -14,11 +14,13 @@ import {
   assignEmployeeToCompanySchema,
   removeEmployeeFromCompanySchema,
   getCompanyEmployeesSchema,
+  legalRepresentativeSchema,
   type CreateClientInput,
   type CreateEmployeeInput,
   type UpdateClientInput,
+  type LegalRepresentativeInput,
 } from '@/lib/validations/client.schema'
-import type { SafeClient, ClientWithRelations, ClientNote } from '@/lib/types/client.types'
+import type { SafeClient, ClientWithRelations, ClientNote, LegalRepresentative } from '@/lib/types/client.types'
 import type { ActionResponse } from '@/lib/types/auth.types'
 import { revalidatePath } from 'next/cache'
 
@@ -883,3 +885,56 @@ export const getCompanyEmployees = cache(async (companyId: string): Promise<Acti
     }
   }
 })
+
+/**
+ * Update or create legal representative for a company client
+ */
+export async function updateLegalRepresentative(
+  clientId: string,
+  data: LegalRepresentativeInput
+): Promise<ActionResponse<LegalRepresentative>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const validatedFields = legalRepresentativeSchema.safeParse(data)
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    const existing = await prisma.legalRepresentative.findUnique({
+      where: { clientId },
+    })
+
+    let legalRep
+    if (existing) {
+      legalRep = await prisma.legalRepresentative.update({
+        where: { clientId },
+        data: validatedFields.data,
+      })
+    } else {
+      legalRep = await prisma.legalRepresentative.create({
+        data: {
+          ...validatedFields.data,
+          clientId,
+        },
+      })
+    }
+
+    revalidatePath(`/dashboard/clients/${clientId}`)
+
+    return {
+      success: true,
+      message: 'Representante legal actualizado exitosamente',
+      data: legalRep,
+    }
+  } catch (error) {
+    console.error('Update legal representative error:', error)
+    return {
+      success: false,
+      error: 'Error al actualizar representante legal',
+    }
+  }
+}

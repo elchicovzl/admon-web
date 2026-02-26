@@ -119,21 +119,11 @@ export function ClientCredentialsSection({
         </CardHeader>
         <CardContent>
           {credentials.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg">
-              <KeyRound className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-sm text-muted-foreground mb-2">
-                No hay credenciales guardadas para este cliente
-              </p>
-              <p className="text-xs text-muted-foreground mb-4">
-                Agrega credenciales para portales de administradoras (EPS, AFP, ARL, etc.)
-              </p>
-              <Button variant="outline" onClick={() => setCreateDialogOpen(true)}>
-                <KeyRound className="mr-2 h-4 w-4" />
-                Agregar Primera Credencial
-              </Button>
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No hay credenciales guardadas para este cliente
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border divide-y">
               {credentials.map((credential) => (
                 <CredentialCard
                   key={credential.id}

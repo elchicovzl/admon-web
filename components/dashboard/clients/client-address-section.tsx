@@ -47,9 +47,10 @@ import { MapPin, Edit, Loader2 } from 'lucide-react'
 interface ClientAddressSectionProps {
   clientId: string
   initialAddress?: ClientAddress | null
+  asSection?: boolean
 }
 
-export function ClientAddressSection({ clientId, initialAddress }: ClientAddressSectionProps) {
+export function ClientAddressSection({ clientId, initialAddress, asSection = false }: ClientAddressSectionProps) {
   const [address, setAddress] = useState<ClientAddress | null>(initialAddress || null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -104,64 +105,102 @@ export function ClientAddressSection({ clientId, initialAddress }: ClientAddress
 
   const municipios = selectedDepartamento ? getMunicipiosPorDepartamento(selectedDepartamento) : []
 
+  const addressContent = address ? (
+    asSection ? (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 pl-6">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Departamento</p>
+          <p className="text-sm">{getDepartamentoLabel(address.departamento)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Municipio</p>
+          <p className="text-sm">{address.municipio}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Ciudad</p>
+          <p className="text-sm">{address.ciudad || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Dirección Completa</p>
+          <p className="text-sm">{address.direccion}</p>
+        </div>
+      </div>
+    ) : (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Departamento</p>
+            <p className="text-sm">{getDepartamentoLabel(address.departamento)}</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Municipio</p>
+            <p className="text-sm">{address.municipio}</p>
+          </div>
+        </div>
+        {address.ciudad && (
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Ciudad</p>
+            <p className="text-sm">{address.ciudad}</p>
+          </div>
+        )}
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Dirección Completa</p>
+          <p className="text-sm">{address.direccion}</p>
+        </div>
+      </div>
+    )
+  ) : (
+    <p className="text-sm text-muted-foreground text-center py-4">
+      No hay dirección registrada
+    </p>
+  )
+
+  const editButton = (
+    <Button onClick={handleOpenDialog} size="sm" variant={asSection ? 'ghost' : 'default'}>
+      {address ? (
+        <>
+          <Edit className="mr-2 h-4 w-4" />
+          Editar
+        </>
+      ) : (
+        <>
+          <MapPin className="mr-2 h-4 w-4" />
+          Agregar
+        </>
+      )}
+    </Button>
+  )
+
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
+      {asSection ? (
+        <div>
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <CardTitle>Dirección</CardTitle>
-                <CardDescription>Ubicación geográfica del cliente</CardDescription>
-              </div>
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-medium">Dirección</p>
             </div>
-            <Button onClick={handleOpenDialog} size="sm">
-              {address ? (
-                <>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Editar
-                </>
-              ) : (
-                <>
-                  <MapPin className="mr-2 h-4 w-4" />
-                  Agregar Dirección
-                </>
-              )}
-            </Button>
+            {editButton}
           </div>
-        </CardHeader>
-        <CardContent>
-          {address ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
+          {addressContent}
+        </div>
+      ) : (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Departamento</p>
-                  <p className="text-sm">{getDepartamentoLabel(address.departamento)}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Municipio</p>
-                  <p className="text-sm">{address.municipio}</p>
+                  <CardTitle>Dirección</CardTitle>
+                  <CardDescription>Ubicación geográfica del cliente</CardDescription>
                 </div>
               </div>
-              {address.ciudad && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Ciudad</p>
-                  <p className="text-sm">{address.ciudad}</p>
-                </div>
-              )}
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Dirección Completa</p>
-                <p className="text-sm">{address.direccion}</p>
-              </div>
+              {editButton}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No hay dirección registrada
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>{addressContent}</CardContent>
+        </Card>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
