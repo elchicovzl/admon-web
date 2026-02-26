@@ -52,14 +52,14 @@ export function AffiliationsClient({
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Listado de Afiliaciones</CardTitle>
+              <CardTitle>Listado de Procesos</CardTitle>
               <CardDescription>
                 Todas las afiliaciones registradas en el sistema
               </CardDescription>
             </div>
             <Button onClick={() => setCreateDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Crear Afiliación
+              Crear Proceso
             </Button>
           </div>
         </CardHeader>

@@ -93,7 +93,7 @@ export function ClientCredentialsQuickView({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Credenciales de Administradoras</DialogTitle>
+          <DialogTitle>Claves de Administradoras</DialogTitle>
           <DialogDescription>
             Credenciales para portales de administradoras de {clientName}
           </DialogDescription>

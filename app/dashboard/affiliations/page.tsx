@@ -106,7 +106,7 @@ export default async function AffiliationsPage() {
     <div className="space-y-6">
       {/* Header - renders immediately */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Afiliaciones a Seguridad Social</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Procesos de Seguridad Social</h1>
         <p className="text-muted-foreground">
           Gestiona los procesos de afiliación de clientes a ARL, EPS, AFP y CCF
         </p>

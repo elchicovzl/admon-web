@@ -368,8 +368,9 @@ model ClientAdditionalInfo {
   actividadComercial String?
   salario            Decimal? @db.Decimal(12, 2)
 
-  // Income novelties (stored as JSON array)
-  novedadesIngreso   String[] @default([])
+  // Entry/exit dates
+  fechaIngreso       DateTime?
+  fechaRetiro        DateTime?
 
   // Timestamps
   createdAt          DateTime @default(now())

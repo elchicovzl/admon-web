@@ -26,7 +26,8 @@ export const clientAdditionalInfoSchema = z.object({
     .positive('El salario debe ser un número positivo')
     .optional()
     .nullable(),
-  novedadesIngreso: z.array(z.string()).default([]),
+  fechaIngreso: z.string().optional().nullable(),
+  fechaRetiro: z.string().optional().nullable(),
 })
 
 export type ClientAdditionalInfoInput = z.infer<typeof clientAdditionalInfoSchema>

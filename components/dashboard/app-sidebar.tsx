@@ -89,7 +89,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
       roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
     },
     {
-      title: 'Afiliaciones',
+      title: 'Procesos',
       href: '/dashboard/affiliations',
       icon: ClipboardList,
       roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
@@ -115,12 +115,6 @@ export function AppSidebar({ user }: AppSidebarProps) {
           icon: Archive,
         },
       ],
-    },
-    {
-      title: 'Incapacidades',
-      href: '/dashboard/disabilities',
-      icon: FileText,
-      roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
     },
     {
       title: 'Usuarios',

@@ -429,7 +429,7 @@ export function AffiliationCreateWizard({
                           onClick={() => setCredentialsModalOpen(true)}
                         >
                           <Key className="mr-2 h-4 w-4" />
-                          Ver Credenciales de Administradoras
+                          Ver Claves de Administradoras
                         </Button>
                       </CardContent>
                     </Card>
@@ -622,7 +622,7 @@ export function AffiliationCreateWizard({
                   ) : (
                     <Button type="submit" disabled={loading}>
                       {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Crear Afiliación
+                      Crear Proceso
                     </Button>
                   )}
                 </div>

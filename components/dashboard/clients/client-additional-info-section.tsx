@@ -29,10 +29,8 @@ import {
 } from '@/components/ui/form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
 import { Briefcase, Edit, Loader2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 
 interface ClientAdditionalInfoSectionProps {
   clientId: string
@@ -40,13 +38,20 @@ interface ClientAdditionalInfoSectionProps {
   asSection?: boolean
 }
 
-const NOVEDADES_OPTIONS = [
-  { id: 'novedad_1', label: 'Novedad 1' },
-  { id: 'novedad_2', label: 'Novedad 2' },
-  { id: 'novedad_3', label: 'Novedad 3' },
-  { id: 'novedad_4', label: 'Novedad 4' },
-  { id: 'novedad_5', label: 'Novedad 5' },
-]
+function toDateInputValue(date?: Date | null): string {
+  if (!date) return ''
+  const d = new Date(date)
+  return d.toISOString().split('T')[0]
+}
+
+function formatDate(date?: Date | null): string {
+  if (!date) return '—'
+  return new Date(date).toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
 
 export function ClientAdditionalInfoSection({
   clientId,
@@ -62,7 +67,8 @@ export function ClientAdditionalInfoSection({
     defaultValues: {
       actividadComercial: initialInfo?.actividadComercial || '',
       salario: initialInfo?.salario || undefined,
-      novedadesIngreso: initialInfo?.novedadesIngreso || [],
+      fechaIngreso: toDateInputValue(initialInfo?.fechaIngreso),
+      fechaRetiro: toDateInputValue(initialInfo?.fechaRetiro),
     },
   })
 
@@ -71,7 +77,8 @@ export function ClientAdditionalInfoSection({
       form.reset({
         actividadComercial: info.actividadComercial || '',
         salario: info.salario || undefined,
-        novedadesIngreso: info.novedadesIngreso || [],
+        fechaIngreso: toDateInputValue(info.fechaIngreso),
+        fechaRetiro: toDateInputValue(info.fechaRetiro),
       })
     }
     setIsDialogOpen(true)
@@ -120,18 +127,12 @@ export function ClientAdditionalInfoSection({
           <p className="text-sm font-semibold">{formatCurrency(info.salario)}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Novedades de Ingreso</p>
-          {info.novedadesIngreso && info.novedadesIngreso.length > 0 ? (
-            <div className="flex flex-wrap gap-1 mt-0.5">
-              {info.novedadesIngreso.map((novedad) => (
-                <Badge key={novedad} variant="secondary" className="text-xs">
-                  {NOVEDADES_OPTIONS.find((n) => n.id === novedad)?.label || novedad}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">—</p>
-          )}
+          <p className="text-xs font-medium text-muted-foreground">Novedad de Ingreso</p>
+          <p className="text-sm">{formatDate(info.fechaIngreso)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">Novedad de Retiro</p>
+          <p className="text-sm">{formatDate(info.fechaRetiro)}</p>
         </div>
       </div>
     ) : (
@@ -146,21 +147,15 @@ export function ClientAdditionalInfoSection({
           <p className="text-sm font-medium text-muted-foreground">Salario</p>
           <p className="text-sm font-semibold">{formatCurrency(info.salario)}</p>
         </div>
-        {info.novedadesIngreso && info.novedadesIngreso.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-muted-foreground mb-2">
-              Novedades de Ingreso
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {info.novedadesIngreso.map((novedad) => (
-                <Badge key={novedad} variant="secondary">
-                  {NOVEDADES_OPTIONS.find((n) => n.id === novedad)?.label || novedad}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-        {!info.actividadComercial && !info.salario && info.novedadesIngreso.length === 0 && (
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Novedad de Ingreso</p>
+          <p className="text-sm">{formatDate(info.fechaIngreso)}</p>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Novedad de Retiro</p>
+          <p className="text-sm">{formatDate(info.fechaRetiro)}</p>
+        </div>
+        {!info.actividadComercial && !info.salario && !info.fechaIngreso && !info.fechaRetiro && (
           <p className="text-sm text-muted-foreground text-center py-4">
             No hay información adicional registrada
           </p>
@@ -281,51 +276,39 @@ export function ClientAdditionalInfoSection({
                 )}
               />
 
-              {/* Novedades de Ingreso */}
+              {/* Novedad de Ingreso */}
               <FormField
                 control={form.control}
-                name="novedadesIngreso"
-                render={() => (
+                name="fechaIngreso"
+                render={({ field }) => (
                   <FormItem>
-                    <div className="mb-4">
-                      <FormLabel>Novedades de Ingreso</FormLabel>
-                      <FormDescription className="text-xs">
-                        Seleccione las novedades aplicables
-                      </FormDescription>
-                    </div>
-                    <div className="space-y-2">
-                      {NOVEDADES_OPTIONS.map((option) => (
-                        <FormField
-                          key={option.id}
-                          control={form.control}
-                          name="novedadesIngreso"
-                          render={({ field }) => {
-                            return (
-                              <FormItem
-                                key={option.id}
-                                className="flex flex-row items-start space-x-3 space-y-0"
-                              >
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value?.includes(option.id)}
-                                    onCheckedChange={(checked) => {
-                                      return checked
-                                        ? field.onChange([...field.value, option.id])
-                                        : field.onChange(
-                                            field.value?.filter((value) => value !== option.id)
-                                          )
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormLabel className="font-normal cursor-pointer">
-                                  {option.label}
-                                </FormLabel>
-                              </FormItem>
-                            )
-                          }}
-                        />
-                      ))}
-                    </div>
+                    <FormLabel>Novedad de Ingreso</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Novedad de Retiro */}
+              <FormField
+                control={form.control}
+                name="fechaRetiro"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Novedad de Retiro</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

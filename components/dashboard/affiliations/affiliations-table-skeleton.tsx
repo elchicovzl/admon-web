@@ -15,7 +15,7 @@ export function AffiliationsTableSkeleton() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Listado de Afiliaciones</CardTitle>
+            <CardTitle>Listado de Procesos</CardTitle>
             <CardDescription>Cargando afiliaciones...</CardDescription>
           </div>
           <Skeleton className="h-10 w-[140px]" />

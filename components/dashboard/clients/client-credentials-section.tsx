@@ -105,7 +105,7 @@ export function ClientCredentialsSection({
             <div>
               <CardTitle className="flex items-center gap-2">
                 <KeyRound className="h-5 w-5" />
-                Credenciales de Administradoras
+                Claves de Administradoras
               </CardTitle>
               <CardDescription>
                 Gestiona los accesos a portales de EPS, AFP, ARL, CCF y otros servicios

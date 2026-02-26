@@ -151,7 +151,8 @@ export interface ClientAdditionalInfo {
   clientId: string
   actividadComercial?: string | null
   salario?: number | null
-  novedadesIngreso: string[]
+  fechaIngreso?: Date | null
+  fechaRetiro?: Date | null
   createdAt: Date
   updatedAt: Date
 }

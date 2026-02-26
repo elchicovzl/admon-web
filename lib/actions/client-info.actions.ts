@@ -114,13 +114,20 @@ export async function createOrUpdateClientAdditionalInfo(
       return { success: false, error: 'Cliente no encontrado' }
     }
 
+    const { fechaIngreso, fechaRetiro, ...rest } = validatedFields.data
+    const infoData = {
+      ...rest,
+      fechaIngreso: fechaIngreso ? new Date(fechaIngreso) : null,
+      fechaRetiro: fechaRetiro ? new Date(fechaRetiro) : null,
+    }
+
     // Upsert additional info
     const additionalInfo = await prisma.clientAdditionalInfo.upsert({
       where: { clientId },
-      update: validatedFields.data,
+      update: infoData,
       create: {
         clientId,
-        ...validatedFields.data,
+        ...infoData,
       },
     })
 
