@@ -32,9 +32,8 @@ export function AffiliationsClient({
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   function handleAffiliationCreated() {
-    // Server Action already calls revalidatePath('/dashboard/affiliations')
-    // Page will update automatically without full reload
-    setCreateDialogOpen(false)
+    // Dialog closes naturally when router.push navigates to detail page
+    // No need to close it manually — the wizard shows a loading state during navigation
   }
 
   function handleAffiliationUpdated(

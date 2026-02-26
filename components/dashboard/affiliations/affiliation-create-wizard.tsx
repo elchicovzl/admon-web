@@ -111,6 +111,7 @@ export function AffiliationCreateWizard({
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [comboboxOpen, setComboboxOpen] = useState(false)
   const [processTypeComboboxOpen, setProcessTypeComboboxOpen] = useState(false)
+  const [navigating, setNavigating] = useState(false)
 
   // Employee selection state (for EMPRESA clients)
   const [companyEmployees, setCompanyEmployees] = useState<SafeClient[]>([])
@@ -142,6 +143,7 @@ export function AffiliationCreateWizard({
 
   useEffect(() => {
     if (open) {
+      setNavigating(false)
       loadClients()
       loadManagers()
     }
@@ -306,9 +308,9 @@ export function AffiliationCreateWizard({
         setSelectedClient(null)
         setCompanyEmployees([])
         setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
-        onOpenChange(false)
+        setNavigating(true)
         onAffiliationCreated?.()
-        // Redirect to detail page
+        // Redirect to detail page — modal closes naturally when page navigates
         router.push(`/dashboard/affiliations/${result.data.id}`)
       } else {
         toast.error(result.error || 'Error al crear la afiliación')
@@ -366,6 +368,16 @@ export function AffiliationCreateWizard({
           'max-h-[90vh] overflow-y-auto',
           isEmpresa && step === 2 ? 'sm:max-w-[800px]' : 'sm:max-w-[700px]'
         )}>
+          {navigating ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <div className="text-center">
+                <p className="font-semibold text-lg">Proceso creado</p>
+                <p className="text-sm text-muted-foreground mt-1">Abriendo detalle...</p>
+              </div>
+            </div>
+          ) : (
+          <>
           <DialogHeader>
             <DialogTitle>
               Crear Nueva Afiliación {step === 1 ? '- Paso 1/2' : '- Paso 2/2'}
@@ -763,6 +775,8 @@ export function AffiliationCreateWizard({
               </DialogFooter>
             </form>
           </Form>
+          </>
+          )}
         </DialogContent>
       </Dialog>
 
