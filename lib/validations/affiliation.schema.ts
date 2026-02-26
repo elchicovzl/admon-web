@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { AffiliationSubProcessType, AffiliationSubProcessStatus, AffiliationDocumentCategory } from '@prisma/client'
+import { AffiliationSubProcessType, AffiliationSubProcessStatus, AffiliationDocumentCategory, AffiliationProcessType } from '@prisma/client'
 
 // ========================================
 // AFFILIATION SCHEMAS
@@ -12,6 +12,10 @@ import { AffiliationSubProcessType, AffiliationSubProcessStatus, AffiliationDocu
 
 export const createAffiliationSchema = z.object({
   clientId: z.string().cuid('ID de cliente inválido'),
+  processType: z.nativeEnum(AffiliationProcessType, {
+    required_error: 'El tipo de proceso es requerido',
+  }),
+  processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
   subProcesses: z
     .array(
       z.object({
@@ -23,7 +27,10 @@ export const createAffiliationSchema = z.object({
       })
     )
     .min(1, 'Debe seleccionar al menos un sub-proceso'),
-})
+}).refine(
+  (data) => data.processType !== AffiliationProcessType.OTRO || (!!data.processTypeOther && data.processTypeOther.trim().length >= 2),
+  { message: 'Debe especificar el tipo de proceso', path: ['processTypeOther'] }
+)
 
 export const updateAffiliationSchema = z.object({
   isActive: z.boolean().optional(),

@@ -8,9 +8,10 @@ import {
   AffiliationSubProcessType,
   AffiliationSubProcessStatus,
   AffiliationDocumentCategory,
+  AffiliationProcessType,
 } from '@prisma/client'
 
-export { AffiliationStatus }
+export { AffiliationStatus, AffiliationProcessType }
 
 // ========================================
 // BASE TYPES (from database)
@@ -20,6 +21,8 @@ export interface Affiliation {
   id: string
   affiliationNumber: string
   clientId: string
+  processType: AffiliationProcessType | null
+  processTypeOther: string | null
   status: AffiliationStatus
   sentAt: Date | null
   sentById: string | null
@@ -82,6 +85,8 @@ export interface SafeAffiliation {
   id: string
   affiliationNumber: string
   clientId: string
+  processType: AffiliationProcessType | null
+  processTypeOther: string | null
   status: AffiliationStatus
   sentAt: Date | null
   sentById: string | null
@@ -356,6 +361,25 @@ export const AffiliationStatusLabels: Record<AffiliationStatus, string> = {
   ACTIVE: 'En Progreso',
   SENT: 'Enviada',
   ARCHIVED: 'Archivada',
+}
+
+export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string> = {
+  INDEPENDIENTE: '(3) Independiente',
+  TRABAJADOR_TIEMPO_PARCIAL: '(51) Trabajador de tiempo parcial',
+  INDEPENDIENTE_VOLUNTARIO: '(57) Independiente voluntario',
+  CONTRATISTA_INDEPENDIENTE: '(59) Contratista independiente',
+  BENEFICIARIO_UPC_ADICIONAL: '(40) Beneficiario UPC adicional',
+  COTIZANTE_INDEPENDIENTE_SALUD: '(42) Cotizante independiente pago solo salud',
+  COTIZANTE_PENSIONES_PAGO_TERCERO: '(43) Cotizante a pensiones con pago por tercero',
+  PLANILLA_S_SERVICIO_DOMESTICO: 'Planilla S Servicio doméstico',
+  PLANILLA_E_EMPLEADOS: 'Planilla E (Empleados)',
+  LIQUIDACIONES: 'Liquidaciones',
+  TRASLADO_EPS: 'Traslado de EPS',
+  COBRO_INCAPACIDADES: 'Cobro Incapacidades',
+  LIQUIDACION_PLANILLA_S: 'Liquidacion PlanillaS',
+  INCLUSION_BENEFICIARIOS: 'Inclusion Beneficiarios',
+  ASESORIAS_PENSIONES: 'Asesorias y pensiones',
+  OTRO: 'Otro',
 }
 
 // ========================================

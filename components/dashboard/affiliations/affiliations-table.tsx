@@ -31,8 +31,9 @@ import { Eye, MoreHorizontal, Power, PowerOff, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { toggleAffiliationStatus } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
+import { AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
 import { TypeBadge } from './status-badge'
-import { AffiliationSubProcessStatus } from '@prisma/client'
+import { AffiliationSubProcessStatus, AffiliationProcessType } from '@prisma/client'
 
 interface AffiliationsTableProps {
   affiliations: AffiliationWithRelations[]
@@ -118,12 +119,12 @@ export function AffiliationsTable({
         <TableHeader>
           <TableRow>
             <TableHead>Proceso</TableHead>
+            <TableHead>Tipo de Proceso</TableHead>
             <TableHead>Identificación</TableHead>
             <TableHead>Sub-procesos</TableHead>
             <TableHead>Progreso</TableHead>
             <TableHead>Estado</TableHead>
-            <TableHead>Fecha de Creación</TableHead>
-            <TableHead>Archivo</TableHead>
+            <TableHead>Creado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
@@ -135,14 +136,30 @@ export function AffiliationsTable({
 
             return (
               <TableRow key={affiliation.id}>
-                <TableCell>
+                <TableCell className="max-w-[200px]">
                   <Link
                     href={`/dashboard/affiliations/${affiliation.id}`}
                     className="hover:text-primary cursor-pointer block"
                   >
                     <span className="font-mono text-sm font-bold hover:underline">{affiliation.affiliationNumber}</span>
-                    <div className="text-sm text-muted-foreground">{affiliation.client?.fullName}</div>
+                    <div
+                      className="text-sm text-muted-foreground truncate"
+                      title={affiliation.client?.fullName}
+                    >
+                      {affiliation.client?.fullName}
+                    </div>
                   </Link>
+                </TableCell>
+                <TableCell>
+                  <div className="text-sm max-w-[180px]">
+                    {affiliation.processType ? (
+                      affiliation.processType === AffiliationProcessType.OTRO && affiliation.processTypeOther
+                        ? <span>{affiliation.processTypeOther}</span>
+                        : <span>{AffiliationProcessTypeLabels[affiliation.processType]}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="text-sm">
@@ -187,18 +204,7 @@ export function AffiliationsTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  {format(new Date(affiliation.createdAt), "d 'de' MMM 'de' yyyy", { locale: es })}
-                </TableCell>
-                <TableCell>
-                  {affiliation.status === 'ARCHIVED' || affiliation.archivedAt ? (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300">
-                      Archivada
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
-                      Activa
-                    </Badge>
-                  )}
+                  {format(new Date(affiliation.createdAt), 'dd/MM/yyyy')}
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>

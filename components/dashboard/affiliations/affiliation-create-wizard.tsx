@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AffiliationSubProcessType } from '@prisma/client'
+import { AffiliationSubProcessType, AffiliationProcessType } from '@prisma/client'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/select'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
 import { Loader2, Check, ChevronRight, ChevronLeft, Key, Users, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -52,8 +53,31 @@ import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
 
+const processTypeOptions = [
+  { value: AffiliationProcessType.INDEPENDIENTE, label: '(3) Independiente' },
+  { value: AffiliationProcessType.TRABAJADOR_TIEMPO_PARCIAL, label: '(51) Trabajador de tiempo parcial' },
+  { value: AffiliationProcessType.INDEPENDIENTE_VOLUNTARIO, label: '(57) Independiente voluntario' },
+  { value: AffiliationProcessType.CONTRATISTA_INDEPENDIENTE, label: '(59) Contratista independiente' },
+  { value: AffiliationProcessType.BENEFICIARIO_UPC_ADICIONAL, label: '(40) Beneficiario UPC adicional' },
+  { value: AffiliationProcessType.COTIZANTE_INDEPENDIENTE_SALUD, label: '(42) Cotizante independiente pago solo salud' },
+  { value: AffiliationProcessType.COTIZANTE_PENSIONES_PAGO_TERCERO, label: '(43) Cotizante a pensiones con pago por tercero' },
+  { value: AffiliationProcessType.PLANILLA_S_SERVICIO_DOMESTICO, label: 'Planilla S Servicio doméstico' },
+  { value: AffiliationProcessType.PLANILLA_E_EMPLEADOS, label: 'Planilla E (Empleados)' },
+  { value: AffiliationProcessType.LIQUIDACIONES, label: 'Liquidaciones' },
+  { value: AffiliationProcessType.TRASLADO_EPS, label: 'Traslado de EPS' },
+  { value: AffiliationProcessType.COBRO_INCAPACIDADES, label: 'Cobro Incapacidades' },
+  { value: AffiliationProcessType.LIQUIDACION_PLANILLA_S, label: 'Liquidacion PlanillaS' },
+  { value: AffiliationProcessType.INCLUSION_BENEFICIARIOS, label: 'Inclusion Beneficiarios' },
+  { value: AffiliationProcessType.ASESORIAS_PENSIONES, label: 'Asesorias y pensiones' },
+  { value: AffiliationProcessType.OTRO, label: 'Otro' },
+]
+
 const createAffiliationFormSchema = z.object({
   clientId: z.string().min(1, 'Debe seleccionar un cliente'),
+  processType: z.nativeEnum(AffiliationProcessType, {
+    required_error: 'Debe seleccionar el tipo de proceso',
+  }),
+  processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
   subProcesses: z.array(
     z.object({
       type: z.nativeEnum(AffiliationSubProcessType),
@@ -86,6 +110,7 @@ export function AffiliationCreateWizard({
   const [selectedClient, setSelectedClient] = useState<SafeClient | null>(null)
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [comboboxOpen, setComboboxOpen] = useState(false)
+  const [processTypeComboboxOpen, setProcessTypeComboboxOpen] = useState(false)
 
   // Employee selection state (for EMPRESA clients)
   const [companyEmployees, setCompanyEmployees] = useState<SafeClient[]>([])
@@ -109,6 +134,8 @@ export function AffiliationCreateWizard({
     resolver: zodResolver(createAffiliationFormSchema),
     defaultValues: {
       clientId: '',
+      processType: undefined,
+      processTypeOther: null,
       subProcesses: [],
     },
   })
@@ -172,6 +199,16 @@ export function AffiliationCreateWizard({
     if (step === 1) {
       if (!form.getValues('clientId')) {
         toast.error('Debe seleccionar un cliente')
+        return
+      }
+      if (!form.getValues('processType')) {
+        toast.error('Debe seleccionar el tipo de proceso')
+        return
+      }
+      const pt = form.getValues('processType')
+      const ptOther = form.getValues('processTypeOther')
+      if (pt === AffiliationProcessType.OTRO && (!ptOther || (ptOther as string).trim().length < 2)) {
+        form.setError('processTypeOther', { message: 'Debe especificar el tipo de proceso' })
         return
       }
       // Load employees if EMPRESA
@@ -248,8 +285,17 @@ export function AffiliationCreateWizard({
         }
       }
 
+      // Validate "Otro" manually (can't use refine in local schema without breaking types)
+      if (data.processType === AffiliationProcessType.OTRO && (!data.processTypeOther || (data.processTypeOther as string).trim().length < 2)) {
+        form.setError('processTypeOther', { message: 'Debe especificar el tipo de proceso' })
+        setLoading(false)
+        return
+      }
+
       const result = await createAffiliation({
         clientId: data.clientId,
+        processType: data.processType,
+        processTypeOther: data.processTypeOther ?? null,
         subProcesses: transformedSubProcesses,
       })
 
@@ -441,6 +487,86 @@ export function AffiliationCreateWizard({
                         </Button>
                       </CardContent>
                     </Card>
+                  )}
+
+                  {/* PROCESS TYPE COMBOBOX */}
+                  <FormField
+                    control={form.control}
+                    name="processType"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Tipo de Proceso *</FormLabel>
+                        <Popover open={processTypeComboboxOpen} onOpenChange={setProcessTypeComboboxOpen}>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className={cn(
+                                  'w-full justify-between',
+                                  !field.value && 'text-muted-foreground'
+                                )}
+                              >
+                                {field.value
+                                  ? processTypeOptions.find((o) => o.value === field.value)?.label
+                                  : 'Buscar tipo de proceso...'}
+                                <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-full p-0" style={{ width: 'var(--radix-popover-trigger-width)' }}>
+                            <Command>
+                              <CommandInput placeholder="Buscar tipo de proceso..." />
+                              <CommandList>
+                                <CommandEmpty>No se encontraron resultados</CommandEmpty>
+                                <CommandGroup>
+                                  {processTypeOptions.map((opt) => (
+                                    <CommandItem
+                                      key={opt.value}
+                                      value={opt.label}
+                                      onSelect={() => {
+                                        field.onChange(opt.value)
+                                        setProcessTypeComboboxOpen(false)
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          'mr-2 h-4 w-4',
+                                          field.value === opt.value ? 'opacity-100' : 'opacity-0'
+                                        )}
+                                      />
+                                      {opt.label}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* OTRO: show custom text input */}
+                  {form.watch('processType') === AffiliationProcessType.OTRO && (
+                    <FormField
+                      control={form.control}
+                      name="processTypeOther"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Especificar tipo de proceso *</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Describe el tipo de proceso..."
+                              {...field}
+                              value={field.value ?? ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
                 </div>
               )}

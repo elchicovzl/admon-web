@@ -431,6 +431,26 @@ enum AffiliationStatus {
   ARCHIVED // Archived (permanent)
 }
 
+// Process type for the affiliation (what kind of process it is)
+enum AffiliationProcessType {
+  INDEPENDIENTE                    // (3) Independiente
+  TRABAJADOR_TIEMPO_PARCIAL        // (51) Trabajador de tiempo parcial
+  INDEPENDIENTE_VOLUNTARIO         // (57) Independiente voluntario
+  CONTRATISTA_INDEPENDIENTE        // (59) Contratista independiente
+  BENEFICIARIO_UPC_ADICIONAL       // (40) Beneficiario UPC adicional
+  COTIZANTE_INDEPENDIENTE_SALUD    // (42) Cotizante independiente pago solo salud
+  COTIZANTE_PENSIONES_PAGO_TERCERO // (43) Cotizante a pensiones con pago por tercero
+  PLANILLA_S_SERVICIO_DOMESTICO    // Planilla S Servicio doméstico
+  PLANILLA_E_EMPLEADOS             // Planilla E (Empleados)
+  LIQUIDACIONES                    // Liquidaciones
+  TRASLADO_EPS                     // Traslado de EPS
+  COBRO_INCAPACIDADES              // Cobro Incapacidades
+  LIQUIDACION_PLANILLA_S           // Liquidacion PlanillaS
+  INCLUSION_BENEFICIARIOS          // Inclusion Beneficiarios
+  ASESORIAS_PENSIONES              // Asesorias y pensiones
+  OTRO                             // Otro (texto libre)
+}
+
 // Sub-process types
 enum AffiliationSubProcessType {
   ARL              // Administradora de Riesgos Laborales
@@ -472,6 +492,10 @@ model Affiliation {
   affiliationNumber String                  @unique
   clientId          String
   client            Client                  @relation(fields: [clientId], references: [id])
+
+  // Process type classification
+  processType       AffiliationProcessType? // Tipo de proceso
+  processTypeOther  String?                 // Texto libre cuando processType = OTRO
 
   // Status tracking
   status           AffiliationStatus       @default(ACTIVE)
