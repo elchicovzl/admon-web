@@ -56,6 +56,7 @@ model User {
   uploadedAffiliationDocuments   AffiliationDocument[]    @relation("AffiliationDocumentUploadedBy")
   affiliationObservations        AffiliationObservation[] @relation("AffiliationObservationCreatedBy")
   affiliationStatusLogs          AffiliationStatusLog[]   @relation("StatusLogChangedBy")
+  sentEmails                     SentEmail[]              @relation("SentEmailSentBy")
 
   @@map("users")
 }
@@ -517,6 +518,7 @@ model Affiliation {
 
   // Relations
   subProcesses     AffiliationSubProcess[]
+  sentEmails       SentEmail[]
 
   @@map("affiliations")
   @@index([status])
@@ -628,4 +630,28 @@ model AffiliationStatusLog {
   @@map("affiliation_status_logs")
   @@index([subProcessId])
   @@index([createdAt])
+}
+
+// Sent email history for affiliations
+model SentEmail {
+  id              String      @id @default(cuid())
+  affiliationId   String
+  affiliation     Affiliation @relation(fields: [affiliationId], references: [id])
+
+  // Email fields
+  toEmail         String
+  ccEmails        String?     @db.Text  // JSON array of CC addresses
+  subject         String
+  htmlBody        String      @db.Text
+
+  // Attachments metadata (JSON array of {fileName, fileType, fileSize})
+  attachments     String?     @db.Text
+
+  // Audit trail
+  sentById        String
+  sentBy          User        @relation("SentEmailSentBy", fields: [sentById], references: [id])
+  sentAt          DateTime    @default(now())
+
+  @@map("sent_emails")
+  @@index([affiliationId])
 }

@@ -17,6 +17,7 @@ import { SendAffiliationButton } from '@/components/dashboard/affiliations/send-
 import { AffiliationStatusLabels, AffiliationStatusColors, AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
 import { AffiliationProcessType } from '@prisma/client'
 import { AffiliationSubProcessStatus } from '@prisma/client'
+import { SentEmailViewer } from '@/components/dashboard/affiliations/sent-email-viewer'
 import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -120,6 +121,7 @@ export default async function AffiliationDetailPage({
           <SendAffiliationButton
             affiliationId={affiliation.id}
             clientName={affiliation.client?.fullName || 'Cliente'}
+            clientEmail={affiliation.client?.email || ''}
             allCompleted={allCompleted}
             currentStatus={affiliation.status}
           />
@@ -129,20 +131,23 @@ export default async function AffiliationDetailPage({
       {/* Sent/Archived Information */}
       {(affiliation.status === 'SENT' || affiliation.status === 'ARCHIVED') && (
         <div className="bg-muted/50 border rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-medium">Afiliación Archivada</p>
-              <p className="text-sm text-muted-foreground">
-                Enviada el{' '}
-                {affiliation.sentAt
-                  ? format(new Date(affiliation.sentAt), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", {
-                      locale: es,
-                    })
-                  : 'fecha desconocida'}
-                {affiliation.sentBy && ` por ${affiliation.sentBy.name || affiliation.sentBy.email}`}
-              </p>
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-medium">Afiliación Archivada</p>
+                <p className="text-sm text-muted-foreground">
+                  Enviada el{' '}
+                  {affiliation.sentAt
+                    ? format(new Date(affiliation.sentAt), "d 'de' MMMM 'de' yyyy 'a las' HH:mm", {
+                        locale: es,
+                      })
+                    : 'fecha desconocida'}
+                  {affiliation.sentBy && ` por ${affiliation.sentBy.name || affiliation.sentBy.email}`}
+                </p>
+              </div>
             </div>
+            <SentEmailViewer affiliationId={affiliation.id} />
           </div>
         </div>
       )}
