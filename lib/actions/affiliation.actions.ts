@@ -10,7 +10,8 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { UserRole, AffiliationSubProcessStatus, AffiliationStatus } from '@prisma/client'
+import { UserRole, AffiliationSubProcessStatus, AffiliationStatus, ClientType } from '@prisma/client'
+import { decryptPassword } from '@/lib/encryption/credentials'
 import {
   createAffiliationSchema,
   updateAffiliationSchema,
@@ -35,6 +36,13 @@ import {
   type GenerateUploadUrlInput,
   type ConfirmUploadInput,
 } from '@/lib/validations/affiliation.schema'
+import {
+  sendAffiliationEmailSchema,
+  type SendAffiliationEmailInput,
+} from '@/lib/validations/send-affiliation-email.schema'
+import { sendAffiliationCompletedEmail } from '@/lib/email'
+import { render } from '@react-email/render'
+import AffiliationCompletedEmail from '@/emails/affiliation-completed-email'
 import type {
   SafeAffiliation,
   AffiliationWithRelations,
@@ -45,6 +53,12 @@ import type {
   MyAssignmentsStats,
   SafeAffiliationDocument,
   SubProcessKanbanItem,
+  EmailComposeData,
+  SentEmailData,
+} from '@/lib/types/affiliation.types'
+import {
+  SubProcessTypeLabels,
+  AffiliationProcessTypeLabels,
 } from '@/lib/types/affiliation.types'
 import type { ActionResponse } from '@/lib/types'
 
@@ -1691,5 +1705,707 @@ export async function deleteDocument(documentId: string): Promise<ActionResponse
   } catch (error) {
     console.error('Error deleting document:', error)
     return { success: false, error: 'Error al eliminar el documento' }
+  }
+}
+
+// ========================================
+// EMAIL OPERATIONS
+// ========================================
+
+/**
+ * Get email compose data for an affiliation
+ * Pre-populates the email compose modal with default values
+ */
+export async function getAffiliationEmailData(
+  affiliationId: string
+): Promise<ActionResponse<EmailComposeData>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const affiliation = await prisma.affiliation.findUnique({
+      where: { id: affiliationId },
+      select: {
+        affiliationNumber: true,
+        processType: true,
+        processTypeOther: true,
+        status: true,
+        client: {
+          select: {
+            fullName: true,
+            email: true,
+            phone: true,
+            identificationType: true,
+            identificationNumber: true,
+            clientType: true,
+            companyId: true,
+            company: {
+              select: {
+                fullName: true,
+                identificationType: true,
+                identificationNumber: true,
+                phone: true,
+                email: true,
+                credentials: {
+                  select: {
+                    administratorName: true,
+                    administratorType: true,
+                    username: true,
+                    encryptedPassword: true,
+                    notes: true,
+                  },
+                },
+              },
+            },
+            address: {
+              select: {
+                direccion: true,
+                departamento: true,
+                municipio: true,
+              },
+            },
+            additionalInfo: {
+              select: {
+                salario: true,
+                fechaIngreso: true,
+                actividadComercial: true,
+              },
+            },
+            credentials: {
+              select: {
+                administratorName: true,
+                administratorType: true,
+                username: true,
+                encryptedPassword: true,
+                notes: true,
+              },
+            },
+          },
+        },
+        subProcesses: {
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            employeeId: true,
+            employee: {
+              select: {
+                fullName: true,
+                identificationType: true,
+                identificationNumber: true,
+                phone: true,
+                email: true,
+                address: {
+                  select: {
+                    direccion: true,
+                    departamento: true,
+                    municipio: true,
+                  },
+                },
+                additionalInfo: {
+                  select: {
+                    salario: true,
+                    fechaIngreso: true,
+                    actividadComercial: true,
+                  },
+                },
+              },
+            },
+            documents: {
+              select: {
+                id: true,
+                fileName: true,
+                fileType: true,
+                fileSize: true,
+                s3Key: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!affiliation) {
+      return { success: false, error: 'Afiliación no encontrada' }
+    }
+
+    const client = affiliation.client
+    if (!client) {
+      return { success: false, error: 'Cliente no encontrado' }
+    }
+
+    const processTypeLabel = affiliation.processType
+      ? AffiliationProcessTypeLabels[affiliation.processType] || affiliation.processType
+      : affiliation.processTypeOther || 'Sin tipo'
+
+    const subProcesses = affiliation.subProcesses.map((sp) => ({
+      id: sp.id,
+      type: sp.type,
+      label: SubProcessTypeLabels[sp.type] || sp.type,
+    }))
+
+    const documents = affiliation.subProcesses.flatMap((sp) =>
+      sp.documents.map((doc) => ({
+        id: doc.id,
+        fileName: doc.fileName,
+        fileType: doc.fileType,
+        fileSize: doc.fileSize,
+        s3Key: doc.s3Key,
+        subProcessType: sp.type,
+        subProcessLabel: SubProcessTypeLabels[sp.type] || sp.type,
+      }))
+    )
+
+    // Build email body and subject
+    const emailBody = buildAffiliationEmailBody(affiliation, processTypeLabel)
+    const subject = buildAffiliationSubject(affiliation, processTypeLabel)
+
+    return {
+      success: true,
+      data: {
+        to: client.email,
+        subject,
+        emailBody,
+        clientName: client.fullName,
+        affiliationNumber: affiliation.affiliationNumber,
+        processTypeLabel,
+        subProcesses,
+        documents,
+      },
+    }
+  } catch (error) {
+    console.error('Error getting affiliation email data:', error)
+    return { success: false, error: 'Error al obtener datos de la afiliación' }
+  }
+}
+
+/**
+ * Build the subject line based on affiliation type
+ */
+function buildAffiliationSubject(
+  affiliation: {
+    processType: string | null
+    processTypeOther: string | null
+    client: {
+      fullName: string
+      clientType: string
+      company?: { fullName: string } | null
+    } | null
+    subProcesses: { employee?: { fullName: string } | null }[]
+  },
+  processTypeLabel: string
+): string {
+  const client = affiliation.client
+  if (!client) return 'Afiliación Completada'
+
+  if (client.clientType === ClientType.EMPRESA) {
+    // For empresa: "EMPLOYER / EMPLOYEE"
+    const employees = affiliation.subProcesses
+      .map((sp) => sp.employee?.fullName)
+      .filter(Boolean)
+    const uniqueEmployees = [...new Set(employees)]
+    if (uniqueEmployees.length > 0) {
+      return `${client.fullName} / ${uniqueEmployees.join(', ')}`
+    }
+    return client.fullName
+  }
+
+  // For independiente: "PROCESS_TYPE / CLIENT_NAME"
+  return `${processTypeLabel} / ${client.fullName}`
+}
+
+/**
+ * Safely decrypt a password, returning fallback on error
+ */
+function safeDecrypt(encrypted: string): string {
+  try {
+    return decryptPassword(encrypted)
+  } catch {
+    return '***'
+  }
+}
+
+/**
+ * Build the structured email body based on client data
+ */
+function buildAffiliationEmailBody(
+  affiliation: {
+    processType: string | null
+    client: {
+      fullName: string
+      identificationType: string
+      identificationNumber: string
+      phone: string
+      email: string
+      clientType: string
+      company?: {
+        fullName: string
+        identificationType: string
+        identificationNumber: string
+        phone: string
+        email: string
+        credentials: {
+          administratorName: string
+          administratorType: string
+          username: string
+          encryptedPassword: string
+          notes: string | null
+        }[]
+      } | null
+      address?: {
+        direccion: string
+        departamento: string
+        municipio: string
+      } | null
+      additionalInfo?: {
+        salario: unknown
+        fechaIngreso: Date | null
+        actividadComercial: string | null
+      } | null
+      credentials: {
+        administratorName: string
+        administratorType: string
+        username: string
+        encryptedPassword: string
+        notes: string | null
+      }[]
+    } | null
+    subProcesses: {
+      type: string
+      employee?: {
+        fullName: string
+        identificationType: string
+        identificationNumber: string
+        phone: string
+        email: string
+        address?: {
+          direccion: string
+          departamento: string
+          municipio: string
+        } | null
+        additionalInfo?: {
+          salario: unknown
+          fechaIngreso: Date | null
+          actividadComercial: string | null
+        } | null
+      } | null
+    }[]
+  },
+  processTypeLabel: string
+): string {
+  const client = affiliation.client
+  if (!client) return 'Cordial saludo,\n\nAdjunto enviamos certificados de afiliación solicitados.\n\nCordialmente;'
+
+  const lines: string[] = []
+  lines.push('Cordial saludo,')
+  lines.push('')
+  lines.push('Adjunto enviamos certificados de afiliación solicitados:')
+  lines.push('')
+
+  const isEmpresa = client.clientType === ClientType.EMPRESA
+
+  if (isEmpresa && client.company) {
+    // Employer section
+    const employer = client.company
+    lines.push(`EMPLEADOR: ${employer.fullName}`)
+    lines.push(`${employer.identificationType} ${employer.identificationNumber}`)
+    lines.push(`CEL ${employer.phone}`)
+
+    // Employer credentials
+    for (const cred of employer.credentials) {
+      const password = safeDecrypt(cred.encryptedPassword)
+      if (cred.administratorType === 'PILA_OPERATOR') {
+        lines.push(`CLAVE ${cred.administratorName}: ${password}`)
+      } else {
+        lines.push(`${cred.administratorName}: ${cred.username} CLAVE: ${password}`)
+      }
+    }
+    lines.push('')
+
+    // Employee sections
+    const employees = affiliation.subProcesses
+      .map((sp) => sp.employee)
+      .filter(Boolean)
+    const uniqueEmployees = new Map<string, typeof employees[0]>()
+    for (const emp of employees) {
+      if (emp && !uniqueEmployees.has(emp.identificationNumber)) {
+        uniqueEmployees.set(emp.identificationNumber, emp)
+      }
+    }
+
+    for (const emp of uniqueEmployees.values()) {
+      if (!emp) continue
+      lines.push(`EMPLEADO: ${emp.fullName}`)
+      lines.push(`${emp.identificationType} ${emp.identificationNumber}`)
+      if (emp.address) {
+        lines.push(`Dirección: ${emp.address.direccion}`)
+        if (emp.address.departamento || emp.address.municipio) {
+          lines.push(`${emp.address.municipio}${emp.address.departamento ? `, ${emp.address.departamento}` : ''}`)
+        }
+      }
+      lines.push(`Celular: ${emp.phone}`)
+      if (emp.additionalInfo?.salario) {
+        lines.push(`SALARIO: $${Number(emp.additionalInfo.salario).toLocaleString('es-CO')}`)
+      }
+      if (emp.additionalInfo?.fechaIngreso) {
+        lines.push(`Fecha de ingreso: ${new Date(emp.additionalInfo.fechaIngreso).toLocaleDateString('es-CO')}`)
+      }
+      if (emp.additionalInfo?.actividadComercial) {
+        lines.push(`Ocupación: ${emp.additionalInfo.actividadComercial}`)
+      }
+      lines.push(`Correo: ${emp.email}`)
+      lines.push('')
+    }
+
+    // If no employee sub-processes, show the main client as employee
+    if (uniqueEmployees.size === 0) {
+      appendClientDetails(lines, client)
+    }
+  } else {
+    // Independent / single client
+    lines.push(`${client.fullName}`)
+    lines.push(`${client.identificationType} ${client.identificationNumber}`)
+    lines.push(`CEL ${client.phone}`)
+
+    // Client credentials (portal passwords)
+    for (const cred of client.credentials) {
+      const password = safeDecrypt(cred.encryptedPassword)
+      if (cred.administratorType === 'PILA_OPERATOR') {
+        lines.push(`CLAVE ${cred.administratorName}: ${password}`)
+      } else {
+        lines.push(`${cred.administratorName}: ${cred.username} CLAVE: ${password}`)
+      }
+    }
+
+    if (client.address) {
+      lines.push(`Dirección: ${client.address.direccion}`)
+      if (client.address.departamento || client.address.municipio) {
+        lines.push(`${client.address.municipio}${client.address.departamento ? `, ${client.address.departamento}` : ''}`)
+      }
+    }
+    lines.push(`Correo: ${client.email}`)
+    if (client.additionalInfo?.salario) {
+      lines.push(`SALARIO: $${Number(client.additionalInfo.salario).toLocaleString('es-CO')}`)
+    }
+    if (client.additionalInfo?.fechaIngreso) {
+      lines.push(`FECHA DE INGRESO: ${new Date(client.additionalInfo.fechaIngreso).toLocaleDateString('es-CO')}`)
+    }
+    if (client.additionalInfo?.actividadComercial) {
+      lines.push(`OCUPACIÓN: ${client.additionalInfo.actividadComercial}`)
+    }
+    lines.push('')
+  }
+
+  // Entity affiliations (from credentials)
+  const allCreds = isEmpresa && client.company
+    ? [...client.company.credentials, ...client.credentials]
+    : client.credentials
+  const entityLines: string[] = []
+  const entityCreds = allCreds.filter((c) =>
+    ['EPS', 'AFP', 'ARL', 'CCF'].includes(c.administratorType)
+  )
+  for (const cred of entityCreds) {
+    const typeLabel =
+      cred.administratorType === 'AFP' ? 'PENSIÓN' :
+      cred.administratorType === 'CCF' ? 'CCF' :
+      cred.administratorType
+    entityLines.push(`${typeLabel}: ${cred.administratorName}`)
+  }
+  if (entityLines.length > 0) {
+    lines.push(...entityLines)
+    lines.push('')
+  }
+
+  // Payment instructions (standard text)
+  lines.push('')
+  lines.push('PUNTOS PARA PAGO DE LA PLANILLA PRESENCIAL')
+  lines.push('Puedes acudir a puntos de pago como Efecty, utilizando el convenio 113237.')
+  lines.push('Bancos del Grupo Aval, Puntos Vía, Almacenes Éxito, Carulla, Surtimax y Pago Cerca, utilizando el convenio 113237.')
+  lines.push('Además, para pagos inmediatos, puedes usar Reval o Puntored, con el convenio 1225739 y el PIN de tu planilla.')
+  lines.push('')
+  lines.push('PARA PAGO VIRTUAL:')
+  lines.push('1. https://pagosimple.com/pagodigitalsimple/')
+  lines.push('2. CLIC EN INICIAR PAGO')
+  lines.push('')
+  lines.push('RECUERDE: si va a dejar de pagar, es muy importante marcar la novedad de RETIRO en el operador para que no quede en MORA.')
+  lines.push('')
+  lines.push('')
+  lines.push('Cordialmente;')
+
+  return lines.join('\n')
+}
+
+/**
+ * Append client personal details to email body lines
+ */
+function appendClientDetails(
+  lines: string[],
+  client: {
+    fullName: string
+    identificationType: string
+    identificationNumber: string
+    phone: string
+    email: string
+    address?: { direccion: string; departamento: string; municipio: string } | null
+    additionalInfo?: { salario: unknown; fechaIngreso: Date | null; actividadComercial: string | null } | null
+  }
+) {
+  lines.push(`${client.fullName}`)
+  lines.push(`${client.identificationType} ${client.identificationNumber}`)
+  lines.push(`CEL ${client.phone}`)
+  if (client.address) {
+    lines.push(`Dirección: ${client.address.direccion}`)
+  }
+  if (client.additionalInfo?.salario) {
+    lines.push(`SALARIO: $${Number(client.additionalInfo.salario).toLocaleString('es-CO')}`)
+  }
+  if (client.additionalInfo?.fechaIngreso) {
+    lines.push(`Fecha de ingreso: ${new Date(client.additionalInfo.fechaIngreso).toLocaleDateString('es-CO')}`)
+  }
+  if (client.additionalInfo?.actividadComercial) {
+    lines.push(`Ocupación: ${client.additionalInfo.actividadComercial}`)
+  }
+  lines.push(`Correo: ${client.email}`)
+  lines.push('')
+}
+
+/**
+ * Send affiliation email with attachments and archive the affiliation
+ */
+export async function sendAffiliationWithEmail(
+  data: SendAffiliationEmailInput
+): Promise<ActionResponse<{ sentEmailId: string }>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const validatedFields = sendAffiliationEmailSchema.safeParse(data)
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    const { affiliationId, to, cc, subject, emailBody, selectedDocumentIds } =
+      validatedFields.data
+
+    // Fetch affiliation with all data
+    const affiliation = await prisma.affiliation.findUnique({
+      where: { id: affiliationId },
+      include: {
+        client: {
+          select: { fullName: true, email: true },
+        },
+        subProcesses: {
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            documents: {
+              select: {
+                id: true,
+                fileName: true,
+                fileType: true,
+                fileSize: true,
+                s3Key: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!affiliation) {
+      return { success: false, error: 'Afiliación no encontrada' }
+    }
+
+    if (affiliation.status !== AffiliationStatus.ACTIVE) {
+      return { success: false, error: 'Solo se pueden enviar afiliaciones activas' }
+    }
+
+    const allCompleted = affiliation.subProcesses.every(
+      (sp) => sp.status === AffiliationSubProcessStatus.COMPLETED
+    )
+    if (!allCompleted) {
+      return {
+        success: false,
+        error: 'Todos los sub-procesos deben estar completados antes de enviar la afiliación',
+      }
+    }
+
+    // Get process type label
+    const processTypeLabel = affiliation.processType
+      ? AffiliationProcessTypeLabels[affiliation.processType] || affiliation.processType
+      : affiliation.processTypeOther || 'Sin tipo'
+
+    // Get sub-processes labels
+    const subProcesses = affiliation.subProcesses.map((sp) => ({
+      type: sp.type,
+      label: SubProcessTypeLabels[sp.type] || sp.type,
+    }))
+
+    // Get selected documents for attachments
+    const allDocuments = affiliation.subProcesses.flatMap((sp) => sp.documents)
+    const selectedDocuments = selectedDocumentIds?.length
+      ? allDocuments.filter((doc) => selectedDocumentIds.includes(doc.id))
+      : []
+
+    // Check total attachment size (25MB limit)
+    const totalSize = selectedDocuments.reduce((sum, doc) => sum + doc.fileSize, 0)
+    const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25MB
+    if (totalSize > MAX_ATTACHMENT_SIZE) {
+      return {
+        success: false,
+        error: `El tamaño total de los adjuntos (${(totalSize / 1024 / 1024).toFixed(1)}MB) excede el límite de 25MB`,
+      }
+    }
+
+    // Send email
+    const { html } = await sendAffiliationCompletedEmail({
+      to,
+      cc: cc?.length ? cc : undefined,
+      subject,
+      emailBody,
+      hasAttachments: selectedDocuments.length > 0,
+      attachmentFiles: selectedDocuments.map((doc) => ({
+        fileName: doc.fileName,
+        s3Key: doc.s3Key,
+        fileType: doc.fileType,
+      })),
+    })
+
+    // Create sent email record and archive affiliation in transaction
+    const now = new Date()
+    const attachmentsMetadata = selectedDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      fileType: doc.fileType,
+      fileSize: doc.fileSize,
+    }))
+
+    const sentEmail = await prisma.$transaction(async (tx) => {
+      const email = await tx.sentEmail.create({
+        data: {
+          affiliationId,
+          toEmail: to,
+          ccEmails: cc?.length ? JSON.stringify(cc) : null,
+          subject,
+          htmlBody: html,
+          attachments: attachmentsMetadata.length
+            ? JSON.stringify(attachmentsMetadata)
+            : null,
+          sentById: authCheck.userId!,
+        },
+      })
+
+      await tx.affiliation.update({
+        where: { id: affiliationId },
+        data: {
+          status: AffiliationStatus.ARCHIVED,
+          sentAt: now,
+          sentById: authCheck.userId,
+          archivedAt: now,
+        },
+      })
+
+      return email
+    })
+
+    console.log(
+      `✉️ Afiliación ${affiliationId} enviada a ${to}${cc?.length ? ` (CC: ${cc.join(', ')})` : ''}`
+    )
+
+    revalidatePath('/dashboard/affiliations')
+    revalidatePath('/dashboard/affiliations/kanban')
+    revalidatePath(`/dashboard/affiliations/${affiliationId}`)
+    revalidatePath('/dashboard/affiliations/archived')
+
+    return {
+      success: true,
+      message: `Afiliación enviada exitosamente a ${affiliation.client?.fullName || to}`,
+      data: { sentEmailId: sentEmail.id },
+    }
+  } catch (error) {
+    console.error('Error sending affiliation email:', error)
+    return { success: false, error: 'Error al enviar el correo de la afiliación' }
+  }
+}
+
+/**
+ * Preview affiliation email HTML
+ * Returns rendered HTML for the email preview tab
+ */
+export async function previewAffiliationEmail(data: {
+  emailBody: string
+  hasAttachments?: boolean
+}): Promise<ActionResponse<string>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const html = await render(
+      AffiliationCompletedEmail({
+        emailBody: data.emailBody,
+        hasAttachments: data.hasAttachments,
+      })
+    )
+
+    return { success: true, data: html }
+  } catch (error) {
+    console.error('Error previewing affiliation email:', error)
+    return { success: false, error: 'Error al generar la vista previa del correo' }
+  }
+}
+
+/**
+ * Get sent emails for an affiliation
+ */
+export async function getSentEmailsByAffiliationId(
+  affiliationId: string
+): Promise<ActionResponse<SentEmailData[]>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const sentEmails = await prisma.sentEmail.findMany({
+      where: { affiliationId },
+      select: {
+        id: true,
+        toEmail: true,
+        ccEmails: true,
+        subject: true,
+        htmlBody: true,
+        attachments: true,
+        sentAt: true,
+        sentBy: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: { sentAt: 'desc' },
+    })
+
+    const data: SentEmailData[] = sentEmails.map((email) => ({
+      id: email.id,
+      toEmail: email.toEmail,
+      ccEmails: email.ccEmails ? JSON.parse(email.ccEmails) : [],
+      subject: email.subject,
+      htmlBody: email.htmlBody,
+      attachments: email.attachments ? JSON.parse(email.attachments) : [],
+      sentAt: email.sentAt,
+      sentBy: email.sentBy,
+    }))
+
+    return { success: true, data }
+  } catch (error) {
+    console.error('Error fetching sent emails:', error)
+    return { success: false, error: 'Error al obtener los correos enviados' }
   }
 }

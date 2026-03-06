@@ -383,6 +383,55 @@ export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string
 }
 
 // ========================================
+// EMAIL TYPES
+// ========================================
+
+export interface SentEmailData {
+  id: string
+  toEmail: string
+  ccEmails: string[]
+  subject: string
+  htmlBody: string
+  attachments: SentEmailAttachment[]
+  sentAt: Date
+  sentBy: {
+    name: string | null
+    email: string
+  }
+}
+
+export interface SentEmailAttachment {
+  fileName: string
+  fileType: string
+  fileSize: number
+}
+
+export interface EmailComposeData {
+  to: string
+  subject: string
+  emailBody: string
+  clientName: string
+  affiliationNumber: string
+  processTypeLabel: string
+  subProcesses: {
+    id: string
+    type: string
+    label: string
+  }[]
+  documents: EmailComposeDocument[]
+}
+
+export interface EmailComposeDocument {
+  id: string
+  fileName: string
+  fileType: string
+  fileSize: number
+  s3Key: string
+  subProcessType: string
+  subProcessLabel: string
+}
+
+// ========================================
 // STATUS COLORS (for badges)
 // ========================================
 

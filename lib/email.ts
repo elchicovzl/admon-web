@@ -1,7 +1,9 @@
 import nodemailer from 'nodemailer'
 import { render } from '@react-email/render'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import OtpEmail from '@/emails/otp-email'
 import LoginSuccessEmail from '@/emails/login-success-email'
+import AffiliationCompletedEmail from '@/emails/affiliation-completed-email'
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -11,23 +13,122 @@ const transporter = nodemailer.createTransport({
   },
 })
 
+interface EmailAttachment {
+  filename: string
+  content: Buffer
+  contentType?: string
+}
+
 interface EmailOptions {
   to: string
+  cc?: string[]
   subject: string
   html: string
   replyTo?: string
+  attachments?: EmailAttachment[]
 }
 
-export async function sendEmail({ to, subject, html, replyTo }: EmailOptions) {
+export async function sendEmail({ to, cc, subject, html, replyTo, attachments }: EmailOptions) {
   const mailOptions = {
     from: `"Administración Segura Web" <${process.env.GMAIL_USER}>`,
     to,
+    cc: cc?.length ? cc : undefined,
     subject,
     html,
     replyTo,
+    attachments: attachments?.map((att) => ({
+      filename: att.filename,
+      content: att.content,
+      contentType: att.contentType,
+    })),
   }
 
   return transporter.sendMail(mailOptions)
+}
+
+/**
+ * Initialize S3 Client for Cloudflare R2
+ */
+function getR2Client() {
+  const accountId = process.env.R2_ACCOUNT_ID
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY
+
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error('Cloudflare R2 credentials not configured')
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  })
+}
+
+/**
+ * Fetch a file from R2 storage as a Buffer
+ */
+export async function fetchR2FileAsBuffer(s3Key: string): Promise<Buffer> {
+  const r2Client = getR2Client()
+  const command = new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME!,
+    Key: s3Key,
+  })
+
+  const response = await r2Client.send(command)
+
+  if (!response.Body) {
+    throw new Error(`No body returned for R2 key: ${s3Key}`)
+  }
+
+  const chunks: Uint8Array[] = []
+  const stream = response.Body as AsyncIterable<Uint8Array>
+  for await (const chunk of stream) {
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
+}
+
+/**
+ * Send affiliation completed email with attachments
+ */
+export async function sendAffiliationCompletedEmail({
+  to,
+  cc,
+  subject,
+  emailBody,
+  hasAttachments,
+  attachmentFiles,
+}: {
+  to: string
+  cc?: string[]
+  subject: string
+  emailBody: string
+  hasAttachments?: boolean
+  attachmentFiles?: { fileName: string; s3Key: string; fileType: string }[]
+}) {
+  const html = await render(
+    AffiliationCompletedEmail({
+      emailBody,
+      hasAttachments,
+    })
+  )
+
+  let attachments: EmailAttachment[] | undefined
+  if (attachmentFiles?.length) {
+    attachments = await Promise.all(
+      attachmentFiles.map(async (file) => ({
+        filename: file.fileName,
+        content: await fetchR2FileAsBuffer(file.s3Key),
+        contentType: file.fileType,
+      }))
+    )
+  }
+
+  return { html, result: await sendEmail({ to, cc, subject, html, attachments }) }
 }
 
 export function generateContactEmailHtml({
