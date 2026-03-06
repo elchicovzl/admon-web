@@ -11,9 +11,9 @@ export function EmailHeader({ title, subtitle }: EmailHeaderProps) {
   return (
     <Section style={headerStyle}>
       <Img
-        src={`${BASE_URL}/images/logoadmon.webp`}
+        src={`${BASE_URL}/images/logoadmon2.webp`}
         alt="Administración Segura"
-        width="180"
+        width="90"
         style={logoStyle}
       />
       <Heading style={titleStyle}>{title}</Heading>
