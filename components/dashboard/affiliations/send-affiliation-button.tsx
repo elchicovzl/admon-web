@@ -1,13 +1,14 @@
 /**
  * Send Affiliation Button Component
- * Navigates to the email compose page
+ * Navigates to the email compose page with loading state
  */
 
 'use client'
 
-import Link from 'next/link'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Send } from 'lucide-react'
+import { Send, Loader2 } from 'lucide-react'
 
 interface SendAffiliationButtonProps {
   affiliationId: string
@@ -22,17 +23,32 @@ export function SendAffiliationButton({
   allCompleted,
   currentStatus,
 }: SendAffiliationButtonProps) {
+  const [isNavigating, setIsNavigating] = useState(false)
+  const router = useRouter()
+
   // Only show button if affiliation is ACTIVE and all sub-processes are COMPLETED
   if (currentStatus !== 'ACTIVE' || !allCompleted) {
     return null
   }
 
+  const handleClick = () => {
+    setIsNavigating(true)
+    router.push(`/dashboard/affiliations/${affiliationId}/send`)
+  }
+
   return (
-    <Button className="gap-2" asChild>
-      <Link href={`/dashboard/affiliations/${affiliationId}/send`}>
-        <Send className="h-4 w-4" />
-        Enviar Afiliación al Cliente
-      </Link>
+    <Button className="gap-2" onClick={handleClick} disabled={isNavigating}>
+      {isNavigating ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando...
+        </>
+      ) : (
+        <>
+          <Send className="h-4 w-4" />
+          Enviar Afiliación al Cliente
+        </>
+      )}
     </Button>
   )
 }

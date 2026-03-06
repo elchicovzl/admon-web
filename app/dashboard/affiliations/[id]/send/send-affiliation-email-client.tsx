@@ -453,12 +453,12 @@ export function SendAffiliationEmailClient({
                         </span>
                       </div>
                     ) : previewHtml ? (
-                      <ScrollArea className="h-[500px] border rounded-lg">
-                        <div
-                          className="p-4"
-                          dangerouslySetInnerHTML={{ __html: previewHtml }}
-                        />
-                      </ScrollArea>
+                      <iframe
+                        srcDoc={previewHtml}
+                        className="w-full h-[500px] border rounded-lg"
+                        title="Vista previa del correo"
+                        sandbox="allow-same-origin"
+                      />
                     ) : (
                       <div className="flex items-center justify-center py-12 text-muted-foreground">
                         Haga clic en &quot;Vista Previa&quot; para ver el correo
