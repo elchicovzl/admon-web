@@ -13,6 +13,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -90,6 +98,8 @@ export function SendAffiliationEmailClient({
   const router = useRouter()
   const [isSending, setIsSending] = useState(false)
   const [isSendingTest, setIsSendingTest] = useState(false)
+  const [testEmailOpen, setTestEmailOpen] = useState(false)
+  const [testEmailTo, setTestEmailTo] = useState('')
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(
     new Set(emailData.documents.map((d) => d.id))
   )
@@ -232,20 +242,21 @@ export function SendAffiliationEmailClient({
 
   // Send test email
   const handleSendTest = async () => {
-    const to = form.getValues('to')
     const subject = form.getValues('subject')
     const emailBody = form.getValues('emailBody')
 
-    if (!to || !subject || !emailBody) {
-      toast.error('Completa el destinatario, asunto y cuerpo antes de enviar una prueba')
+    if (!testEmailTo || !subject || !emailBody) {
+      toast.error('Completa el asunto y cuerpo antes de enviar una prueba')
       return
     }
 
     setIsSendingTest(true)
     try {
-      const result = await sendTestAffiliationEmail({ to, subject, emailBody })
+      const result = await sendTestAffiliationEmail({ to: testEmailTo, subject, emailBody })
       if (result.success) {
-        toast.success(result.message || `Correo de prueba enviado a ${to}`)
+        toast.success(result.message || `Correo de prueba enviado a ${testEmailTo}`)
+        setTestEmailOpen(false)
+        setTestEmailTo('')
       } else {
         toast.error(result.error || 'Error al enviar el correo de prueba')
       }
@@ -524,21 +535,12 @@ export function SendAffiliationEmailClient({
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={handleSendTest}
+                        onClick={() => setTestEmailOpen(true)}
                         disabled={isSending || isSendingTest}
                         className="gap-2"
                       >
-                        {isSendingTest ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Enviando prueba...
-                          </>
-                        ) : (
-                          <>
-                            <FlaskConical className="h-4 w-4" />
-                            Enviar Prueba
-                          </>
-                        )}
+                        <FlaskConical className="h-4 w-4" />
+                        Enviar Prueba
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -594,6 +596,58 @@ export function SendAffiliationEmailClient({
           </div>
         </div>
       </form>
+
+      {/* Test email dialog */}
+      <Dialog open={testEmailOpen} onOpenChange={(open) => { setTestEmailOpen(open); if (!open) setTestEmailTo('') }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar correo de prueba</DialogTitle>
+            <DialogDescription>
+              Ingresa el correo al que deseas enviar la prueba. No archivará la afiliación.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="test-email">Destinatario</Label>
+            <Input
+              id="test-email"
+              type="email"
+              placeholder="correo@ejemplo.com"
+              value={testEmailTo}
+              onChange={(e) => setTestEmailTo(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSendTest() } }}
+              disabled={isSendingTest}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setTestEmailOpen(false); setTestEmailTo('') }}
+              disabled={isSendingTest}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSendTest}
+              disabled={isSendingTest || !testEmailTo.trim()}
+              className="gap-2"
+            >
+              {isSendingTest ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <FlaskConical className="h-4 w-4" />
+                  Enviar prueba
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Form>
   )
 }
