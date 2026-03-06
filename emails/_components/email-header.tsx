@@ -5,7 +5,7 @@ interface EmailHeaderProps {
   subtitle?: string
 }
 
-const BASE_URL = process.env.AUTH_URL ?? 'https://administracionsegura.com'
+const BASE_URL = process.env.AUTH_URL ?? 'https://administracionsegura.co'
 
 export function EmailHeader({ title, subtitle }: EmailHeaderProps) {
   return (

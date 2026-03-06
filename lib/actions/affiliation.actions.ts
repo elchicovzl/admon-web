@@ -103,6 +103,9 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
     }
 
     const affiliations = await prisma.affiliation.findMany({
+      where: {
+        status: { not: AffiliationStatus.ARCHIVED },
+      },
       select: {
         id: true,
         affiliationNumber: true,
@@ -2357,6 +2360,47 @@ export async function previewAffiliationEmail(data: {
   } catch (error) {
     console.error('Error previewing affiliation email:', error)
     return { success: false, error: 'Error al generar la vista previa del correo' }
+  }
+}
+
+/**
+ * Send a test affiliation email (no DB changes, no attachments, subject prefixed with [PRUEBA])
+ */
+export async function sendTestAffiliationEmail(data: {
+  emailBody: string
+  subject: string
+  to: string
+}): Promise<ActionResponse<string>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    if (!data.to || !data.subject || !data.emailBody) {
+      return { success: false, error: 'Faltan campos requeridos para el correo de prueba' }
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(data.to)) {
+      return { success: false, error: 'El destinatario no es un email válido' }
+    }
+
+    await sendAffiliationCompletedEmail({
+      to: data.to,
+      subject: `[PRUEBA] ${data.subject}`,
+      emailBody: data.emailBody,
+      hasAttachments: false,
+    })
+
+    return {
+      success: true,
+      data: `Correo de prueba enviado a ${data.to}`,
+      message: `Correo de prueba enviado exitosamente a ${data.to}`,
+    }
+  } catch (error) {
+    console.error('Error sending test affiliation email:', error)
+    return { success: false, error: 'Error al enviar el correo de prueba' }
   }
 }
 
