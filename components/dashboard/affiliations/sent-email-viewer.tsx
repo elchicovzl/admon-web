@@ -72,7 +72,7 @@ export function SentEmailViewer({ affiliationId, trigger }: SentEmailViewerProps
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:w-[90vw] sm:max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Correo Enviado</DialogTitle>
           <DialogDescription>
@@ -160,9 +160,11 @@ export function SentEmailViewer({ affiliationId, trigger }: SentEmailViewerProps
                   {/* Email body preview */}
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Contenido del correo</h4>
-                    <div
-                      className="border rounded-lg p-4 bg-white"
-                      dangerouslySetInnerHTML={{ __html: email.htmlBody }}
+                    <iframe
+                      srcDoc={email.htmlBody}
+                      className="w-full h-[420px] border rounded-lg"
+                      title="Contenido del correo"
+                      sandbox="allow-same-origin"
                     />
                   </div>
                 </div>

@@ -5,11 +5,13 @@ interface EmailHeaderProps {
   subtitle?: string
 }
 
+const BASE_URL = process.env.AUTH_URL ?? 'https://administracionsegura.com'
+
 export function EmailHeader({ title, subtitle }: EmailHeaderProps) {
   return (
     <Section style={headerStyle}>
       <Img
-        src="https://administracionsegura.com/images/logoadmon.webp"
+        src={`${BASE_URL}/images/logoadmon.webp`}
         alt="Administración Segura"
         width="180"
         style={logoStyle}
