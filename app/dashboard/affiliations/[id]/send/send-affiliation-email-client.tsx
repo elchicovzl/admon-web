@@ -41,7 +41,19 @@ import {
   Hash,
   User,
   Mail,
+  FlaskConical,
 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   sendAffiliationEmailSchema,
   type SendAffiliationEmailInput,
@@ -49,6 +61,7 @@ import {
 import {
   sendAffiliationWithEmail,
   previewAffiliationEmail,
+  sendTestAffiliationEmail,
 } from '@/lib/actions/affiliation.actions'
 import type { EmailComposeData, EmailComposeDocument } from '@/lib/types/affiliation.types'
 
@@ -76,6 +89,7 @@ export function SendAffiliationEmailClient({
 }: SendAffiliationEmailClientProps) {
   const router = useRouter()
   const [isSending, setIsSending] = useState(false)
+  const [isSendingTest, setIsSendingTest] = useState(false)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(
     new Set(emailData.documents.map((d) => d.id))
   )
@@ -213,6 +227,33 @@ export function SendAffiliationEmailClient({
       toast.error('Error inesperado al enviar la afiliación')
     } finally {
       setIsSending(false)
+    }
+  }
+
+  // Send test email
+  const handleSendTest = async () => {
+    const to = form.getValues('to')
+    const subject = form.getValues('subject')
+    const emailBody = form.getValues('emailBody')
+
+    if (!to || !subject || !emailBody) {
+      toast.error('Completa el destinatario, asunto y cuerpo antes de enviar una prueba')
+      return
+    }
+
+    setIsSendingTest(true)
+    try {
+      const result = await sendTestAffiliationEmail({ to, subject, emailBody })
+      if (result.success) {
+        toast.success(result.message || `Correo de prueba enviado a ${to}`)
+      } else {
+        toast.error(result.error || 'Error al enviar el correo de prueba')
+      }
+    } catch (error) {
+      console.error('Error sending test email:', error)
+      toast.error('Error inesperado al enviar el correo de prueba')
+    } finally {
+      setIsSendingTest(false)
     }
   }
 
@@ -476,27 +517,75 @@ export function SendAffiliationEmailClient({
                         type="button"
                         variant="outline"
                         onClick={() => router.back()}
-                        disabled={isSending}
+                        disabled={isSending || isSendingTest}
                       >
                         Cancelar
                       </Button>
                       <Button
-                        type="submit"
-                        disabled={isSending || exceedsLimit}
-                        className="gap-2 bg-green-600 hover:bg-green-700"
+                        type="button"
+                        variant="outline"
+                        onClick={handleSendTest}
+                        disabled={isSending || isSendingTest}
+                        className="gap-2"
                       >
-                        {isSending ? (
+                        {isSendingTest ? (
                           <>
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            Enviando...
+                            Enviando prueba...
                           </>
                         ) : (
                           <>
-                            <Send className="h-4 w-4" />
-                            Enviar Afiliación
+                            <FlaskConical className="h-4 w-4" />
+                            Enviar Prueba
                           </>
                         )}
                       </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            type="button"
+                            disabled={isSending || isSendingTest || exceedsLimit}
+                            className="gap-2 bg-green-600 hover:bg-green-700"
+                          >
+                            {isSending ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Enviando...
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-4 w-4" />
+                                Enviar Afiliación
+                              </>
+                            )}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Confirmar envío?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta acción archivará permanentemente la afiliación y enviará el correo al cliente. ¿Deseas continuar?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isSending}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => form.handleSubmit(onSubmit)()}
+                              disabled={isSending}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {isSending ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Enviando...
+                                </>
+                              ) : (
+                                'Confirmar envío'
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 </CardContent>
