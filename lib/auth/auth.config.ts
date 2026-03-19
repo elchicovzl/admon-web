@@ -40,7 +40,7 @@ export const authConfig = {
             id: user.id,
             name: user.name,
             email: user.email,
-            image: user.image,
+            image: user.image ? `/api/avatar/${user.id}` : null,
             role: user.role,
           }
         } catch (error) {
@@ -55,7 +55,7 @@ export const authConfig = {
     error: '/login',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id
         token.role = user.role
@@ -63,6 +63,21 @@ export const authConfig = {
         token.name = user.name
         token.picture = user.image
       }
+
+      // Re-fetch user data when session update is triggered
+      if (trigger === 'update' && token.id) {
+        const freshUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { name: true, email: true, image: true, role: true },
+        })
+        if (freshUser) {
+          token.name = freshUser.name
+          token.email = freshUser.email
+          token.picture = freshUser.image ? `/api/avatar/${token.id}` : null
+          token.role = freshUser.role
+        }
+      }
+
       return token
     },
     async session({ session, token }) {

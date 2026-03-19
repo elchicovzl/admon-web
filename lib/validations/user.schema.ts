@@ -51,6 +51,16 @@ export const getUserSchema = z.object({
 
 export type GetUserInput = z.infer<typeof getUserSchema>
 
+// Update own profile schema (for any authenticated user)
+export const updateProfileSchema = z.object({
+  name: z
+    .string()
+    .min(2, 'El nombre debe tener al menos 2 caracteres')
+    .max(50, 'El nombre no puede exceder 50 caracteres'),
+})
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>
+
 // Toggle user status schema
 export const toggleUserStatusSchema = z.object({
   userId: z.string().cuid('ID de usuario inválido'),

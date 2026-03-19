@@ -8,10 +8,12 @@ import { UserRole } from '@prisma/client'
 import {
   createUserSchema,
   updateUserSchema,
+  updateProfileSchema,
   deleteUserSchema,
   toggleUserStatusSchema,
   type CreateUserInput,
   type UpdateUserInput,
+  type UpdateProfileInput,
 } from '@/lib/validations/user.schema'
 import type { ActionResponse, SafeUser } from '@/lib/types/auth.types'
 import { revalidatePath } from 'next/cache'
@@ -519,5 +521,53 @@ export async function toggleUserStatus(
   } catch (error) {
     console.error('Toggle user status error:', error)
     return { success: false, error: 'Error al cambiar status del usuario' }
+  }
+}
+
+/**
+ * Update own profile (any authenticated user)
+ */
+export async function updateProfile(
+  data: UpdateProfileInput
+): Promise<ActionResponse<SafeUser>> {
+  try {
+    const session = await auth()
+
+    if (!session?.user) {
+      return { success: false, error: 'No autenticado' }
+    }
+
+    const validatedFields = updateProfileSchema.safeParse(data)
+
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: session.user.id },
+      data: { name: validatedFields.data.name },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        image: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    revalidatePath('/dashboard/settings')
+    revalidatePath('/dashboard')
+
+    return {
+      success: true,
+      message: 'Perfil actualizado exitosamente',
+      data: updatedUser,
+    }
+  } catch (error) {
+    console.error('Update profile error:', error)
+    return { success: false, error: 'Error al actualizar perfil' }
   }
 }

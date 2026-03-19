@@ -1233,6 +1233,7 @@ export const getSubProcessesForKanban = cache(async (): Promise<ActionResponse<S
             id: true,
             name: true,
             email: true,
+            image: true,
           },
         },
         employee: {

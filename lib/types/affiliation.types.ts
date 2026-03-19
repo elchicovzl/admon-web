@@ -315,6 +315,7 @@ export interface SubProcessKanbanItem {
     id: string
     name: string | null
     email: string
+    image: string | null
   } | null
   _count: {
     documents: number

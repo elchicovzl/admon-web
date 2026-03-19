@@ -20,6 +20,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { StatusBadge, TypeBadge } from './status-badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { FileText, MessageSquare, User, Loader2, Check, ExternalLink, AlertCircle, Building2, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -149,7 +150,23 @@ export function SubProcessKanbanCard({
   // Compact mode render - simplified for Kanban view
   if (compact) {
     return (
-      <Card className={`h-full hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing ${priority.borderColor}`}>
+      <Card className={`h-full hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing relative ${priority.borderColor}`}>
+        {/* Manager avatar - centered on top border */}
+        {subProcess.assignedTo && (
+          <div className="absolute -top-2 -right-2 z-10">
+            <Avatar className="h-9 w-9 border-2 border-background shadow-sm">
+              <AvatarImage
+                src={subProcess.assignedTo.image ? `/api/avatar/${subProcess.assignedTo.id}` : undefined}
+                alt={subProcess.assignedTo.name || subProcess.assignedTo.email}
+              />
+              <AvatarFallback className="text-[9px] font-medium">
+                {subProcess.assignedTo.name
+                  ? subProcess.assignedTo.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  : subProcess.assignedTo.email[0].toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        )}
         <CardContent className="p-2 space-y-1.5">
           {/* Row 1: Type badge + Process number */}
           <div className="flex items-center justify-between gap-1">
