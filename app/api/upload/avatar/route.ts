@@ -58,7 +58,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const userId = session.user.id
+    // Allow SUPER_ADMIN to upload avatar for another user
+    const targetUserId = formData.get('userId') as string | null
+    let userId = session.user.id
+
+    if (targetUserId && targetUserId !== session.user.id) {
+      if (session.user.role !== UserRole.SUPER_ADMIN) {
+        return NextResponse.json({ error: 'No autorizado para modificar otro usuario' }, { status: 403 })
+      }
+      userId = targetUserId
+    }
     const timestamp = Date.now()
     const ext = file.name.split('.').pop() || 'jpg'
     const s3Key = `avatars/${userId}/${timestamp}-avatar.${ext}`

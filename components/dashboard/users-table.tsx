@@ -23,10 +23,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle } from 'lucide-react'
+import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { EditUserForm } from './edit-user-form'
 
 interface UsersTableProps {
   users: SafeUser[]
@@ -34,6 +35,8 @@ interface UsersTableProps {
 
 export function UsersTable({ users }: UsersTableProps) {
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  const [editingUser, setEditingUser] = useState<SafeUser | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const getUserInitials = (name: string | null, email: string) => {
     if (name) {
@@ -55,7 +58,6 @@ export function UsersTable({ users }: UsersTableProps) {
 
       if (result.success) {
         toast.success(result.message || 'Status actualizado exitosamente')
-        // Server Action already calls revalidatePath
       } else {
         toast.error(result.error || 'Error al cambiar status')
       }
@@ -65,6 +67,11 @@ export function UsersTable({ users }: UsersTableProps) {
     } finally {
       setIsTogglingStatus(false)
     }
+  }
+
+  const handleEdit = (user: SafeUser) => {
+    setEditingUser(user)
+    setEditDialogOpen(true)
   }
 
   return (
@@ -93,7 +100,10 @@ export function UsersTable({ users }: UsersTableProps) {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.image || undefined} alt={user.name || user.email} />
+                        <AvatarImage
+                          src={user.image ? `/api/avatar/${user.id}` : undefined}
+                          alt={user.name || user.email}
+                        />
                         <AvatarFallback>
                           {getUserInitials(user.name, user.email)}
                         </AvatarFallback>
@@ -145,6 +155,10 @@ export function UsersTable({ users }: UsersTableProps) {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleEdit(user)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar Usuario
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
                             {user.isActive ? (
                               <>
@@ -168,6 +182,14 @@ export function UsersTable({ users }: UsersTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      {editingUser && (
+        <EditUserForm
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          user={editingUser}
+        />
+      )}
     </>
   )
 }

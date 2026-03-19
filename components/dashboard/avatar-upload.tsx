@@ -25,6 +25,9 @@ interface AvatarUploadProps {
   currentImage: string | null
   userName: string | null
   userEmail: string
+  /** When set, uploads avatar for this user instead of the authenticated user (SUPER_ADMIN only) */
+  targetUserId?: string
+  onAvatarUpdated?: (imageUrl: string) => void
 }
 
 /**
@@ -69,7 +72,7 @@ async function getCroppedImage(imageSrc: string, cropPixels: Area): Promise<Blob
   })
 }
 
-export function AvatarUpload({ currentImage, userName, userEmail }: AvatarUploadProps) {
+export function AvatarUpload({ currentImage, userName, userEmail, targetUserId, onAvatarUpdated }: AvatarUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentImage)
   const [cropDialogOpen, setCropDialogOpen] = useState(false)
@@ -135,6 +138,9 @@ export function AvatarUpload({ currentImage, userName, userEmail }: AvatarUpload
 
       const formData = new FormData()
       formData.append('file', croppedBlob, 'avatar.webp')
+      if (targetUserId) {
+        formData.append('userId', targetUserId)
+      }
 
       const response = await fetch('/api/upload/avatar', {
         method: 'POST',
@@ -150,8 +156,11 @@ export function AvatarUpload({ currentImage, userName, userEmail }: AvatarUpload
       setPreviewUrl(result.data.imageUrl)
       toast.success('Avatar actualizado exitosamente')
       setCropDialogOpen(false)
-      // Refresh JWT token so session picks up the new image
-      await updateSession()
+      onAvatarUpdated?.(result.data.imageUrl)
+      // Refresh JWT token so session picks up the new image (only for own avatar)
+      if (!targetUserId) {
+        await updateSession()
+      }
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error al subir avatar')
