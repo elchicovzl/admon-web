@@ -382,6 +382,7 @@ export function AffiliationDetailClient({
           open={detailModalOpen}
           onOpenChange={setDetailModalOpen}
           subProcess={selectedSubProcess}
+          clientId={client?.id}
           clientName={client?.fullName}
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}

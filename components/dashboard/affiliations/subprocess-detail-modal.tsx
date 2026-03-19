@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { X, User, Calendar, Clock, FileText, MessageSquare, History, Loader2 } from 'lucide-react'
+import { X, User, Calendar, Clock, FileText, MessageSquare, History, Loader2, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatusBadge, TypeBadge } from './status-badge'
 import { SubProcessObservationsSection } from './subprocess-observations-section'
@@ -43,11 +43,13 @@ import type {
   SafeAffiliationDocument,
 } from '@/lib/types/affiliation.types'
 import { SubProcessStatusLabels } from '@/lib/types/affiliation.types'
+import { SubProcessClientTab } from './subprocess-client-tab'
 
 interface SubProcessDetailModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   subProcess: AffiliationSubProcessWithRelations
+  clientId?: string
   clientName?: string
   currentUserId?: string
   currentUserRole?: string
@@ -62,6 +64,7 @@ export function SubProcessDetailModal({
   open,
   onOpenChange,
   subProcess,
+  clientId,
   clientName,
   currentUserId,
   currentUserRole,
@@ -175,8 +178,14 @@ export function SubProcessDetailModal({
           <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-6 shrink-0">
             <TabsTrigger value="info" className="gap-2">
               <FileText className="h-4 w-4" />
-              Información
+              Info
             </TabsTrigger>
+            {clientId && (
+              <TabsTrigger value="client" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                Cliente
+              </TabsTrigger>
+            )}
             <TabsTrigger value="documents" className="gap-2">
               <FileText className="h-4 w-4" />
               Documentos ({subProcess.documents?.length || 0})
@@ -329,6 +338,13 @@ export function SubProcessDetailModal({
                     </Card>
                   )}
               </TabsContent>
+
+              {/* CLIENT TAB */}
+              {clientId && (
+                <TabsContent value="client" className="mt-0">
+                  <SubProcessClientTab clientId={clientId} active={activeTab === 'client'} />
+                </TabsContent>
+              )}
 
               {/* DOCUMENTS TAB */}
               <TabsContent value="documents" className="mt-0">
