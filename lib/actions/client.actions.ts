@@ -3,7 +3,7 @@
 import { cache } from 'react'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole, ClientType } from '@prisma/client'
+import { UserRole, ClientType, AdministradoraType } from '@prisma/client'
 import {
   createClientSchema,
   createEmployeeSchema,
@@ -246,6 +246,12 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
           },
         },
         legalRepresentative: true,
+        // Administradoras
+        eps: { select: { id: true, name: true, code: true, type: true } },
+        afp: { select: { id: true, name: true, code: true, type: true } },
+        arl: { select: { id: true, name: true, code: true, type: true } },
+        arlRiskLevel: true,
+        ccf: { select: { id: true, name: true, code: true, type: true } },
       },
     })
 
@@ -936,6 +942,78 @@ export async function updateLegalRepresentative(
     return {
       success: false,
       error: 'Error al actualizar representante legal',
+    }
+  }
+}
+
+/**
+ * Get all active administradoras grouped by type
+ */
+export const getAdministradoras = cache(async () => {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const administradoras = await prisma.administradora.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, code: true, type: true },
+    })
+
+    const grouped = {
+      EPS: administradoras.filter((a) => a.type === AdministradoraType.EPS),
+      AFP: administradoras.filter((a) => a.type === AdministradoraType.AFP),
+      ARL: administradoras.filter((a) => a.type === AdministradoraType.ARL),
+      CCF: administradoras.filter((a) => a.type === AdministradoraType.CCF),
+    }
+
+    return { success: true, data: grouped }
+  } catch (error) {
+    console.error('Get administradoras error:', error)
+    return { success: false, error: 'Error al obtener administradoras' }
+  }
+})
+
+/**
+ * Update client administradoras (EPS, AFP, ARL, CCF)
+ */
+export async function updateClientAdministradoras(
+  clientId: string,
+  data: { epsId: string | null; afpId: string | null; arlId: string | null; arlRiskLevel?: number | null; ccfId: string | null }
+): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    if (!client) {
+      return { success: false, error: 'Cliente no encontrado' }
+    }
+
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        epsId: data.epsId,
+        afpId: data.afpId,
+        arlId: data.arlId,
+        arlRiskLevel: data.arlId ? (data.arlRiskLevel ?? null) : null,
+        ccfId: data.ccfId,
+      },
+    })
+
+    return {
+      success: true,
+      message: 'Administradoras actualizadas exitosamente',
+    }
+  } catch (error) {
+    console.error('Update client administradoras error:', error)
+    return {
+      success: false,
+      error: 'Error al actualizar administradoras',
     }
   }
 }

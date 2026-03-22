@@ -5,13 +5,13 @@
 
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ExternalLink, User } from 'lucide-react'
+import { ExternalLink, User, Loader2 } from 'lucide-react'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
 import type { AffiliationSubProcessWithRelations } from '@/lib/types/affiliation.types'
 import { AffiliationSubProcessStatus } from '@prisma/client'
@@ -27,6 +27,8 @@ export function MyAssignmentsClient({
   currentUserId,
   currentUserRole,
 }: MyAssignmentsClientProps) {
+  const router = useRouter()
+  const [isNavigating, startTransition] = useTransition()
   const [assignments] = useState<AffiliationSubProcessWithRelations[]>(initialAssignments)
 
   // Group assignments by status
@@ -92,11 +94,19 @@ export function MyAssignmentsClient({
           )}
 
           <div className="flex gap-2">
-            <Button variant="default" size="sm" asChild className="flex-1">
-              <Link href={`/dashboard/affiliations/${assignment.affiliationId}`}>
+            <Button
+              variant="default"
+              size="sm"
+              className="flex-1"
+              disabled={isNavigating}
+              onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${assignment.affiliationId}/subprocess/${assignment.id}`))}
+            >
+              {isNavigating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Ver Afiliación
-              </Link>
+              )}
+              Ver Sub-proceso
             </Button>
           </div>
         </CardContent>
@@ -105,7 +115,15 @@ export function MyAssignmentsClient({
   }
 
   return (
-    <Card>
+    <Card className="relative">
+      {isNavigating && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+          <div className="flex items-center gap-3 bg-card border shadow-lg rounded-lg px-6 py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm font-medium">Cargando sub-proceso...</span>
+          </div>
+        </div>
+      )}
       <CardHeader>
         <CardTitle>Tus Sub-procesos Asignados</CardTitle>
         <CardDescription>

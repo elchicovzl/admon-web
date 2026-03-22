@@ -52,6 +52,19 @@ export interface ClientWithRelations extends SafeClient {
   additionalInfo?: ClientAdditionalInfo | null
   beneficiaries?: ClientBeneficiary[]
   legalRepresentative?: LegalRepresentative | null
+  // Administradoras
+  eps?: AdministradoraInfo | null
+  afp?: AdministradoraInfo | null
+  arl?: AdministradoraInfo | null
+  arlRiskLevel?: number | null
+  ccf?: AdministradoraInfo | null
+}
+
+export interface AdministradoraInfo {
+  id: string
+  name: string
+  code: string
+  type: string
 }
 
 export interface ClientNote {

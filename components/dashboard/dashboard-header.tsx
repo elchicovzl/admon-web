@@ -11,9 +11,23 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { usePathname } from 'next/navigation'
+import { useDashboardStore } from '@/lib/stores/use-dashboard-store'
+
+const STATIC_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  users: 'Usuarios',
+  settings: 'Configuración',
+  affiliations: 'Procesos',
+  subprocess: 'Sub-proceso',
+  clients: 'Clientes',
+  disabilities: 'Incapacidades',
+  kanban: 'Kanban',
+  'my-assignments': 'Mis Asignaciones',
+}
 
 export function DashboardHeader() {
   const pathname = usePathname()
+  const breadcrumbLabels = useDashboardStore((s) => s.breadcrumbLabels)
 
   const getBreadcrumbs = () => {
     const paths = pathname.split('/').filter(Boolean)
@@ -24,12 +38,10 @@ export function DashboardHeader() {
       currentPath += `/${path}`
       const isLast = index === paths.length - 1
 
-      let label = path.charAt(0).toUpperCase() + path.slice(1)
-
-      // Custom labels
-      if (path === 'dashboard') label = 'Dashboard'
-      if (path === 'users') label = 'Usuarios'
-      if (path === 'settings') label = 'Configuración'
+      // Priority: page-set override > static label > capitalize
+      let label = breadcrumbLabels[path]
+        || STATIC_LABELS[path]
+        || path.charAt(0).toUpperCase() + path.slice(1)
 
       breadcrumbs.push({
         label,

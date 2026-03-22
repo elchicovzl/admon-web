@@ -54,6 +54,7 @@ import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
 
 const processTypeOptions = [
+  { value: AffiliationProcessType.DEPENDIENTE, label: '(01) Dependiente' },
   { value: AffiliationProcessType.INDEPENDIENTE, label: '(3) Independiente' },
   { value: AffiliationProcessType.TRABAJADOR_TIEMPO_PARCIAL, label: '(51) Trabajador de tiempo parcial' },
   { value: AffiliationProcessType.INDEPENDIENTE_VOLUNTARIO, label: '(57) Independiente voluntario' },
@@ -110,7 +111,6 @@ export function AffiliationCreateWizard({
   const [selectedClient, setSelectedClient] = useState<SafeClient | null>(null)
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [comboboxOpen, setComboboxOpen] = useState(false)
-  const [processTypeComboboxOpen, setProcessTypeComboboxOpen] = useState(false)
   const [navigating, setNavigating] = useState(false)
 
   // Employee selection state (for EMPRESA clients)
@@ -508,53 +508,20 @@ export function AffiliationCreateWizard({
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
                         <FormLabel>Tipo de Proceso *</FormLabel>
-                        <Popover open={processTypeComboboxOpen} onOpenChange={setProcessTypeComboboxOpen}>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                role="combobox"
-                                className={cn(
-                                  'w-full justify-between',
-                                  !field.value && 'text-muted-foreground'
-                                )}
-                              >
-                                {field.value
-                                  ? processTypeOptions.find((o) => o.value === field.value)?.label
-                                  : 'Buscar tipo de proceso...'}
-                                <ChevronRight className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-full p-0" style={{ width: 'var(--radix-popover-trigger-width)' }}>
-                            <Command>
-                              <CommandInput placeholder="Buscar tipo de proceso..." />
-                              <CommandList>
-                                <CommandEmpty>No se encontraron resultados</CommandEmpty>
-                                <CommandGroup>
-                                  {processTypeOptions.map((opt) => (
-                                    <CommandItem
-                                      key={opt.value}
-                                      value={opt.label}
-                                      onSelect={() => {
-                                        field.onChange(opt.value)
-                                        setProcessTypeComboboxOpen(false)
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          'mr-2 h-4 w-4',
-                                          field.value === opt.value ? 'opacity-100' : 'opacity-0'
-                                        )}
-                                      />
-                                      {opt.label}
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className={cn(!field.value && 'text-muted-foreground')}>
+                              <SelectValue placeholder="Seleccionar tipo de proceso..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {processTypeOptions.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}

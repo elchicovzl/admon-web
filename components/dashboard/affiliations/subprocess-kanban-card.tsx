@@ -5,8 +5,8 @@
 
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -49,8 +49,17 @@ export function SubProcessKanbanCard({
   compact = false,
   clientName,
 }: SubProcessKanbanCardProps) {
+  const router = useRouter()
+  const [isNavigating, startTransition] = useTransition()
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState(false)
+
+  const subProcessUrl = `/dashboard/affiliations/${subProcess.affiliationId}/subprocess/${subProcess.id}`
+
+  function navigateToDetail(e: React.MouseEvent) {
+    e.stopPropagation()
+    startTransition(() => router.push(subProcessUrl))
+  }
   const [showStatusChange, setShowStatusChange] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState<AffiliationSubProcessStatus | ''>('' )
   const [statusReason, setStatusReason] = useState('')
@@ -172,13 +181,12 @@ export function SubProcessKanbanCard({
           <div className="flex items-center justify-between gap-1">
             <TypeBadge type={subProcess.type} className="text-[10px] px-1.5 py-0.5" />
             {affiliationNumber && (
-              <Link
-                href={`/dashboard/affiliations/${subProcess.affiliationId}`}
+              <button
                 className="text-[10px] font-mono text-primary hover:underline"
-                onClick={(e) => e.stopPropagation()}
+                onClick={navigateToDetail}
               >
                 {affiliationNumber}
-              </Link>
+              </button>
             )}
           </div>
 
@@ -237,14 +245,17 @@ export function SubProcessKanbanCard({
               </div>
 
               {/* View detail link */}
-              <Link
-                href={`/dashboard/affiliations/${subProcess.affiliationId}`}
+              <button
                 className="flex items-center gap-1 text-[11px] text-primary hover:underline"
-                onClick={(e) => e.stopPropagation()}
+                onClick={navigateToDetail}
               >
-                <ExternalLink className="h-3 w-3" />
+                {isNavigating ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-3 w-3" />
+                )}
                 Ver detalle
-              </Link>
+              </button>
             </div>
           )}
         </CardContent>

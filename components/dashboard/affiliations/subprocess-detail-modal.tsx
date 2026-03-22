@@ -29,13 +29,16 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { X, User, Calendar, Clock, FileText, MessageSquare, History, Loader2, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatusBadge, TypeBadge } from './status-badge'
 import { SubProcessObservationsSection } from './subprocess-observations-section'
 import { SubProcessDocumentsSection } from './subprocess-documents-section'
-import { updateSubProcessStatus, getSubProcessStatusLogs } from '@/lib/actions/affiliation.actions'
+import { updateSubProcessStatus, assignSubProcess, getSubProcessStatusLogs } from '@/lib/actions/affiliation.actions'
+import { getManagers } from '@/lib/actions/user.actions'
 import { AffiliationSubProcessStatus } from '@prisma/client'
+import type { SafeUser } from '@/lib/types/auth.types'
 import type {
   AffiliationSubProcessWithRelations,
   AffiliationObservationWithRelations,
@@ -76,13 +79,15 @@ export function SubProcessDetailModal({
 }: SubProcessDetailModalProps) {
   const [activeTab, setActiveTab] = useState('info')
   const [loading, setLoading] = useState(false)
-  const [showStatusChange, setShowStatusChange] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState<AffiliationSubProcessStatus | ''>('')
   const [statusReason, setStatusReason] = useState('')
   const [statusLogs, setStatusLogs] = useState<AffiliationStatusLogWithRelations[]>([])
   const [loadingLogs, setLoadingLogs] = useState(false)
 
-  const canManage = currentUserRole === 'SUPER_ADMIN' || subProcess.assignedToId === currentUserId
+  const canManage = true // Any manager or admin can edit/reassign
+  const [showReassign, setShowReassign] = useState(false)
+  const [managers, setManagers] = useState<SafeUser[]>([])
+  const [reassignLoading, setReassignLoading] = useState(false)
 
   useEffect(() => {
     if (open && activeTab === 'history') {
@@ -129,7 +134,6 @@ export function SubProcessDetailModal({
           status: selectedStatus,
           statusReason: statusReason.trim() || null,
         })
-        setShowStatusChange(false)
         setSelectedStatus('')
         setStatusReason('')
         // Reload logs if on history tab
@@ -144,6 +148,47 @@ export function SubProcessDetailModal({
       toast.error('Error al actualizar el estado')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleShowReassign() {
+    setShowReassign(true)
+    if (managers.length === 0) {
+      const result = await getManagers()
+      if (result.success && result.data) {
+        setManagers(result.data)
+      }
+    }
+  }
+
+  async function handleReassign(managerId: string) {
+    setReassignLoading(true)
+    try {
+      const result = await assignSubProcess({
+        subProcessId: subProcess.id,
+        managerId: managerId === 'unassigned' ? null : managerId,
+      })
+      if (result.success) {
+        toast.success(result.message || 'Reasignado exitosamente')
+        const assignedManager = managers.find((m) => m.id === managerId)
+        onSubProcessUpdated?.({
+          assignedToId: managerId === 'unassigned' ? null : managerId,
+          assignedTo: managerId === 'unassigned' ? null : assignedManager ? {
+            id: assignedManager.id,
+            name: assignedManager.name,
+            email: assignedManager.email,
+            image: assignedManager.image ?? null,
+          } : null,
+        })
+        setShowReassign(false)
+      } else {
+        toast.error(result.error || 'Error al reasignar')
+      }
+    } catch (error) {
+      console.error('Reassign error:', error)
+      toast.error('Error al reasignar')
+    } finally {
+      setReassignLoading(false)
     }
   }
 
@@ -207,11 +252,30 @@ export function SubProcessDetailModal({
                 {/* Manager Info */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg">Asignación</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">Asignación</CardTitle>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleShowReassign}
+                        disabled={reassignLoading}
+                      >
+                        Reasignar
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex items-center gap-3">
-                      <User className="h-5 w-5 text-muted-foreground" />
+                      {subProcess.assignedTo ? (
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={subProcess.assignedTo.image ? `/api/avatar/${subProcess.assignedTo.id}` : undefined} />
+                          <AvatarFallback>
+                            {(subProcess.assignedTo.name || subProcess.assignedTo.email).substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      ) : (
+                        <User className="h-5 w-5 text-muted-foreground" />
+                      )}
                       <div>
                         <p className="text-sm text-muted-foreground">Manager Asignado</p>
                         <p className="font-medium">
@@ -221,6 +285,32 @@ export function SubProcessDetailModal({
                         </p>
                       </div>
                     </div>
+
+                    {showReassign && (
+                      <>
+                        <Separator />
+                        <div className="space-y-2">
+                          <Label>Reasignar a</Label>
+                          <Select
+                            onValueChange={handleReassign}
+                            defaultValue={subProcess.assignedToId ?? 'unassigned'}
+                            disabled={reassignLoading}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar manager..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unassigned">Sin asignar</SelectItem>
+                              {managers.map((manager) => (
+                                <SelectItem key={manager.id} value={manager.id}>
+                                  {manager.name || manager.email}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    )}
                     <Separator />
                     <div className="grid grid-cols-2 gap-4">
                       <div className="flex items-center gap-3">
@@ -253,69 +343,49 @@ export function SubProcessDetailModal({
                 {canManage && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="text-lg">Cambiar Estado</CardTitle>
-                      <CardDescription>
-                        Actualiza el estado del sub-proceso según el progreso
-                      </CardDescription>
+                      <CardTitle className="text-lg">Estado</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {!showStatusChange ? (
-                        <Button onClick={() => setShowStatusChange(true)} className="w-full">
-                          Cambiar Estado
-                        </Button>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label>Nuevo Estado</Label>
-                            <Select
-                              value={selectedStatus}
-                              onValueChange={(value) =>
-                                setSelectedStatus(value as AffiliationSubProcessStatus)
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar estado..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {statusOptions.map((status) => (
-                                  <SelectItem key={status} value={status}>
-                                    {SubProcessStatusLabels[status]}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+                      <Select
+                        value={selectedStatus || subProcess.status}
+                        onValueChange={(value) => {
+                          const newStatus = value as AffiliationSubProcessStatus
+                          setSelectedStatus(newStatus)
+                          if (newStatus !== AffiliationSubProcessStatus.RETURNED) {
+                            setStatusReason('')
+                          }
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {SubProcessStatusLabels[status]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
 
-                          {selectedStatus === AffiliationSubProcessStatus.RETURNED && (
-                            <div className="space-y-2">
-                              <Label>Razón de Devolución *</Label>
-                              <Textarea
-                                placeholder="Describe la razón por la cual se devuelve el sub-proceso..."
-                                value={statusReason}
-                                onChange={(e) => setStatusReason(e.target.value)}
-                                rows={4}
-                              />
-                            </div>
-                          )}
-
-                          <div className="flex gap-2">
-                            <Button onClick={handleStatusChange} disabled={loading} className="flex-1">
-                              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              Guardar Cambios
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setShowStatusChange(false)
-                                setSelectedStatus('')
-                                setStatusReason('')
-                              }}
-                              disabled={loading}
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
+                      {(selectedStatus || subProcess.status) === AffiliationSubProcessStatus.RETURNED &&
+                        selectedStatus && (
+                        <div className="space-y-2">
+                          <Label>Razón de Devolución *</Label>
+                          <Textarea
+                            placeholder="Describe la razón por la cual se devuelve el sub-proceso..."
+                            value={statusReason}
+                            onChange={(e) => setStatusReason(e.target.value)}
+                            rows={3}
+                          />
                         </div>
+                      )}
+
+                      {selectedStatus && selectedStatus !== subProcess.status && (
+                        <Button onClick={handleStatusChange} disabled={loading} className="w-full">
+                          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Guardar
+                        </Button>
                       )}
                     </CardContent>
                   </Card>
@@ -342,7 +412,7 @@ export function SubProcessDetailModal({
               {/* CLIENT TAB */}
               {clientId && (
                 <TabsContent value="client" className="mt-0">
-                  <SubProcessClientTab clientId={clientId} active={activeTab === 'client'} />
+                  <SubProcessClientTab clientId={clientId} employeeId={subProcess.employeeId ?? undefined} active={activeTab === 'client'} />
                 </TabsContent>
               )}
 

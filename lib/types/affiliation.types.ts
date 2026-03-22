@@ -173,6 +173,7 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
     id: string
     name: string | null
     email: string
+    image: string | null
   } | null
   employee?: {
     id: string
@@ -365,6 +366,7 @@ export const AffiliationStatusLabels: Record<AffiliationStatus, string> = {
 }
 
 export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string> = {
+  DEPENDIENTE: '(01) Dependiente',
   INDEPENDIENTE: '(3) Independiente',
   TRABAJADOR_TIEMPO_PARCIAL: '(51) Trabajador de tiempo parcial',
   INDEPENDIENTE_VOLUNTARIO: '(57) Independiente voluntario',

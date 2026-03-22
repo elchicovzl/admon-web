@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -16,6 +16,7 @@ import {
 import { Menu as MenuIcon, X, ChevronDown, Shield, FileText, Heart, Car, Stethoscope, Umbrella, PawPrint, Building2, Package } from 'lucide-react'
 import { useSmoothScroll } from '@/hooks/use-smooth-scroll'
 import { cn } from '@/lib/utils'
+import { getSession } from '@/lib/actions/auth.actions'
 
 // Service menu items
 const mainServices = [
@@ -62,8 +63,15 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [servicesOpen, setServicesOpen] = useState(false)
   const [insuranceOpen, setInsuranceOpen] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const { scrollToSection } = useSmoothScroll()
   const pathname = usePathname()
+
+  useEffect(() => {
+    getSession().then((session) => {
+      setIsAuthenticated(!!session?.user)
+    })
+  }, [])
 
   // Hover menu state
   const menuRef = useRef<HTMLButtonElement>(null!)
@@ -181,8 +189,16 @@ export default function Header() {
             ))}
           </nav>
 
-          {/* CTA Button */}
-          <div className="hidden lg:block">
+          {/* CTA Buttons */}
+          <div className="hidden lg:flex items-center gap-3">
+            <Link href={isAuthenticated ? '/dashboard' : '/login'}>
+              <Button
+                variant="outline"
+                className="rounded-full px-6 text-sm cursor-pointer"
+              >
+                {isAuthenticated ? 'Dashboard' : 'Login'}
+              </Button>
+            </Link>
             <Button
               className="bg-black text-white hover:bg-gray-800 rounded-full px-6 text-sm cursor-pointer"
               onClick={() => handleNavClick('#contacto')}
@@ -269,8 +285,16 @@ export default function Header() {
                 </button>
               ))}
 
+              <Link href={isAuthenticated ? '/dashboard' : '/login'} className="w-full">
+                <Button
+                  variant="outline"
+                  className="rounded-full w-full mt-4 cursor-pointer"
+                >
+                  {isAuthenticated ? 'Dashboard' : 'Login'}
+                </Button>
+              </Link>
               <Button
-                className="bg-black text-white hover:bg-gray-800 rounded-full w-full mt-4 cursor-pointer"
+                className="bg-black text-white hover:bg-gray-800 rounded-full w-full mt-2 cursor-pointer"
                 onClick={() => handleNavClick('#contacto')}
               >
                 Contáctanos

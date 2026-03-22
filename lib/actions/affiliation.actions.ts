@@ -139,7 +139,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
             assignedToId: true,
             employeeId: true,
             statusReason: true,
-            createdAt: true,
+              createdAt: true,
             updatedAt: true,
             assignedTo: {
               select: {
@@ -226,13 +226,14 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
             assignedToId: true,
             employeeId: true,
             statusReason: true,
-            createdAt: true,
+              createdAt: true,
             updatedAt: true,
             assignedTo: {
               select: {
                 id: true,
                 name: true,
                 email: true,
+                image: true,
               },
             },
             employee: {
@@ -661,6 +662,7 @@ export const getSubProcessById = cache(async (
             id: true,
             name: true,
             email: true,
+            image: true,
           },
         },
         employee: {
@@ -763,17 +765,6 @@ export async function updateSubProcessStatus(
       return { success: false, error: 'Sub-proceso no encontrado' }
     }
 
-    // Verify permissions: must be assigned manager or SUPER_ADMIN
-    if (
-      authCheck.role !== UserRole.SUPER_ADMIN &&
-      subProcess.assignedToId !== authCheck.userId
-    ) {
-      return {
-        success: false,
-        error: 'Solo el manager asignado o un SUPER_ADMIN puede cambiar el status',
-      }
-    }
-
     // Validate reason is provided for RETURNED status
     if (data.status === AffiliationSubProcessStatus.RETURNED && !data.reason) {
       return {
@@ -798,7 +789,7 @@ export async function updateSubProcessStatus(
           assignedToId: true,
           employeeId: true,
           statusReason: true,
-          createdAt: true,
+            createdAt: true,
           updatedAt: true,
         },
       }),
@@ -851,14 +842,6 @@ export async function assignSubProcess(
 
     if (!subProcess) {
       return { success: false, error: 'Sub-proceso no encontrado' }
-    }
-
-    // Only SUPER_ADMIN can reassign from another manager
-    if (authCheck.role !== UserRole.SUPER_ADMIN && subProcess.assignedToId !== null) {
-      return {
-        success: false,
-        error: 'Solo un SUPER_ADMIN puede reasignar un sub-proceso ya asignado',
-      }
     }
 
     // If assigning (not unassigning), verify manager exists
@@ -1008,7 +991,7 @@ export async function addSubProcesses(
             assignedToId: true,
             employeeId: true,
             statusReason: true,
-            createdAt: true,
+              createdAt: true,
             updatedAt: true,
           },
         })
@@ -1087,6 +1070,7 @@ export const getMyAssignments = cache(async (
             id: true,
             name: true,
             email: true,
+            image: true,
           },
         },
         employee: {
@@ -1423,7 +1407,7 @@ export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<Af
             assignedToId: true,
             employeeId: true,
             statusReason: true,
-            createdAt: true,
+              createdAt: true,
             updatedAt: true,
             employee: {
               select: {
@@ -2454,3 +2438,64 @@ export async function getSentEmailsByAffiliationId(
     return { success: false, error: 'Error al obtener los correos enviados' }
   }
 }
+
+/**
+ * Delete a sub-process
+ */
+export async function deleteSubProcess(subProcessId: string): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const subProcess = await prisma.affiliationSubProcess.findUnique({
+      where: { id: subProcessId },
+      include: { documents: true },
+    })
+
+    if (!subProcess) {
+      return { success: false, error: 'Sub-proceso no encontrado' }
+    }
+
+    // Delete S3 documents if any
+    if (subProcess.documents.length > 0) {
+      const s3 = new S3Client({
+        region: process.env.AWS_REGION!,
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        },
+      })
+
+      for (const doc of subProcess.documents) {
+        if (doc.s3Key) {
+          try {
+            await s3.send(new DeleteObjectCommand({
+              Bucket: process.env.AWS_S3_BUCKET!,
+              Key: doc.s3Key,
+            }))
+          } catch (e) {
+            console.error('Error deleting S3 object:', e)
+          }
+        }
+      }
+    }
+
+    await prisma.affiliationSubProcess.delete({
+      where: { id: subProcessId },
+    })
+
+    revalidatePath('/dashboard/affiliations')
+    revalidatePath(`/dashboard/affiliations/${subProcess.affiliationId}`)
+
+    return {
+      success: true,
+      message: 'Sub-proceso eliminado exitosamente',
+    }
+  } catch (error) {
+    console.error('Error deleting sub-process:', error)
+    return { success: false, error: 'Error al eliminar el sub-proceso' }
+  }
+}
+

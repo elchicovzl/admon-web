@@ -136,6 +136,13 @@ enum ClientType {
   INDEPENDIENTE
 }
 
+enum AdministradoraType {
+  EPS
+  AFP
+  ARL
+  CCF
+}
+
 enum DocumentCategory {
   GENERAL
   ARL
@@ -183,6 +190,17 @@ model Client {
   additionalInfo      ClientAdditionalInfo?
   beneficiaries       ClientBeneficiary[]
   legalRepresentative LegalRepresentative?
+
+  // Administradoras (EPS, AFP, ARL, CCF)
+  epsId String?
+  eps   Administradora? @relation("ClientEps", fields: [epsId], references: [id])
+  afpId String?
+  afp   Administradora? @relation("ClientAfp", fields: [afpId], references: [id])
+  arlId        String?
+  arl          Administradora? @relation("ClientArl", fields: [arlId], references: [id])
+  arlRiskLevel Int?            // Nivel de riesgo ARL (1-5)
+  ccfId        String?
+  ccf   Administradora? @relation("ClientCcf", fields: [ccfId], references: [id])
 
   @@map("clients")
   @@index([companyId])
@@ -421,6 +439,24 @@ model LegalRepresentative {
   @@map("legal_representatives")
 }
 
+// Administradora catalog (EPS, AFP, ARL, CCF)
+model Administradora {
+  id       String             @id @default(cuid())
+  name     String
+  code     String             // Código PILA
+  type     AdministradoraType
+  isActive Boolean            @default(true)
+
+  // Relations
+  clientsAsEps Client[] @relation("ClientEps")
+  clientsAsAfp Client[] @relation("ClientAfp")
+  clientsAsArl Client[] @relation("ClientArl")
+  clientsAsCcf Client[] @relation("ClientCcf")
+
+  @@unique([code, type])
+  @@map("administradoras")
+}
+
 // ========================================
 // AFFILIATION MODULE (Afiliaciones a Seguridad Social)
 // ========================================
@@ -434,6 +470,7 @@ enum AffiliationStatus {
 
 // Process type for the affiliation (what kind of process it is)
 enum AffiliationProcessType {
+  DEPENDIENTE                      // (01) Dependiente
   INDEPENDIENTE                    // (3) Independiente
   TRABAJADOR_TIEMPO_PARCIAL        // (51) Trabajador de tiempo parcial
   INDEPENDIENTE_VOLUNTARIO         // (57) Independiente voluntario

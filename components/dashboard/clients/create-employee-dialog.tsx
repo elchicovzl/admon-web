@@ -6,8 +6,9 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { IMaskInput } from 'react-imask'
 import { createClient, assignEmployeeToCompany } from '@/lib/actions'
+import { getAdministradoras, updateClientAdministradoras } from '@/lib/actions/client.actions'
 import { createEmployeeSchema, type CreateEmployeeInput } from '@/lib/validations/client.schema'
-import type { SafeClient } from '@/lib/types/client.types'
+import type { SafeClient, AdministradoraInfo } from '@/lib/types/client.types'
 import { ClientType, IdentificationType } from '@prisma/client'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,8 +34,29 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select'
+import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+
+const NO_APLICA_VALUE = '__no_aplica__'
+
+function toSelectOptions(items: AdministradoraInfo[]): SearchableSelectOption[] {
+  return [
+    { value: NO_APLICA_VALUE, label: 'No aplica' },
+    ...items.map((adm) => ({
+      value: adm.id,
+      label: `${adm.name} (${adm.code})`,
+    })),
+  ]
+}
+
+interface AdministradorasGrouped {
+  EPS: AdministradoraInfo[]
+  AFP: AdministradoraInfo[]
+  ARL: AdministradoraInfo[]
+  CCF: AdministradoraInfo[]
+}
 
 // ID types allowed for employees (natural persons)
 const PERSON_ID_TYPES: { value: IdentificationType; label: string }[] = [
@@ -84,6 +106,13 @@ export function CreateEmployeeDialog({
 }: CreateEmployeeDialogProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [catalogo, setCatalogo] = useState<AdministradorasGrouped | null>(null)
+  const [admSelections, setAdmSelections] = useState({
+    epsId: null as string | null,
+    afpId: null as string | null,
+    arlId: null as string | null,
+    ccfId: null as string | null,
+  })
 
   const form = useForm<CreateEmployeeInput>({
     resolver: zodResolver(createEmployeeSchema),
@@ -100,6 +129,20 @@ export function CreateEmployeeDialog({
 
   const identificationType = form.watch('identificationType')
   const currentMask = ID_MASK_CONFIG[identificationType]
+
+  // Load administradoras catalog when dialog opens
+  useEffect(() => {
+    if (isOpen && !catalogo) {
+      getAdministradoras().then((result) => {
+        if (result.success && result.data) {
+          setCatalogo(result.data as AdministradorasGrouped)
+        }
+      })
+    }
+    if (isOpen) {
+      setAdmSelections({ epsId: null, afpId: null, arlId: null, ccfId: null })
+    }
+  }, [isOpen, catalogo])
 
   // Track previous identification type to clear number only when it actually changes
   const prevIdTypeRef = useRef<IdentificationType | null>(null)
@@ -134,6 +177,12 @@ export function CreateEmployeeDialog({
         toast.error(assignResult.error || 'Empleado creado pero no pudo ser asignado a la empresa')
         setIsLoading(false)
         return
+      }
+
+      // Save administradoras if any selected
+      const hasAdm = admSelections.epsId || admSelections.afpId || admSelections.arlId || admSelections.ccfId
+      if (hasAdm) {
+        await updateClientAdministradoras(newEmployee.id, admSelections)
       }
 
       toast.success('Empleado creado y asignado exitosamente')
@@ -299,6 +348,60 @@ export function CreateEmployeeDialog({
                 </FormItem>
               )}
             />
+
+            {/* Administradoras (optional) */}
+            {catalogo && (
+              <>
+                <Separator />
+                <p className="text-sm font-medium text-muted-foreground">Administradoras (opcional)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">EPS</label>
+                    <SearchableSelect
+                      options={toSelectOptions(catalogo.EPS)}
+                      value={admSelections.epsId ?? NO_APLICA_VALUE}
+                      onValueChange={(val) => setAdmSelections((prev) => ({ ...prev, epsId: val === NO_APLICA_VALUE ? null : val }))}
+                      placeholder="No aplica"
+                      searchPlaceholder="Buscar EPS..."
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">AFP</label>
+                    <SearchableSelect
+                      options={toSelectOptions(catalogo.AFP)}
+                      value={admSelections.afpId ?? NO_APLICA_VALUE}
+                      onValueChange={(val) => setAdmSelections((prev) => ({ ...prev, afpId: val === NO_APLICA_VALUE ? null : val }))}
+                      placeholder="No aplica"
+                      searchPlaceholder="Buscar AFP..."
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">ARL</label>
+                    <SearchableSelect
+                      options={toSelectOptions(catalogo.ARL)}
+                      value={admSelections.arlId ?? NO_APLICA_VALUE}
+                      onValueChange={(val) => setAdmSelections((prev) => ({ ...prev, arlId: val === NO_APLICA_VALUE ? null : val }))}
+                      placeholder="No aplica"
+                      searchPlaceholder="Buscar ARL..."
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">CCF</label>
+                    <SearchableSelect
+                      options={toSelectOptions(catalogo.CCF)}
+                      value={admSelections.ccfId ?? NO_APLICA_VALUE}
+                      onValueChange={(val) => setAdmSelections((prev) => ({ ...prev, ccfId: val === NO_APLICA_VALUE ? null : val }))}
+                      placeholder="No aplica"
+                      searchPlaceholder="Buscar CCF..."
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Client Type (hidden, always EMPLEADO) */}
             <input type="hidden" {...form.register('clientType')} value={ClientType.EMPLEADO} />

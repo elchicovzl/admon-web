@@ -7,6 +7,7 @@ import { getMyAssignmentsStats } from '@/lib/actions/affiliation.actions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Users, UserCheck, Shield, FileText, Clock, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react'
+import { DashboardQuickLinks } from '@/components/dashboard/dashboard-quick-links'
 import { DashboardStatsSkeleton } from '@/components/dashboard/dashboard-stats-skeleton'
 import { MyAssignmentsWidgetSkeleton } from '@/components/dashboard/my-assignments-widget-skeleton'
 
@@ -199,42 +200,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Accesos Rápidos</CardTitle>
-            <CardDescription>
-              Funciones principales del dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Link href="/dashboard/affiliations" className="block">
-              <div className="rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
-                <h4 className="text-sm font-medium">Afiliaciones</h4>
-                <p className="text-xs text-muted-foreground">
-                  Gestionar procesos de afiliación a seguridad social
-                </p>
-              </div>
-            </Link>
-            {session?.user?.role === 'SUPER_ADMIN' && (
-              <Link href="/dashboard/users" className="block">
-                <div className="rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
-                  <h4 className="text-sm font-medium">Gestión de Usuarios</h4>
-                  <p className="text-xs text-muted-foreground">
-                    Crear, editar y eliminar usuarios del sistema
-                  </p>
-                </div>
-              </Link>
-            )}
-            <Link href="/dashboard/clients" className="block">
-              <div className="rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
-                <h4 className="text-sm font-medium">Clientes</h4>
-                <p className="text-xs text-muted-foreground">
-                  Ver y gestionar clientes registrados
-                </p>
-              </div>
-            </Link>
-          </CardContent>
-        </Card>
+        <DashboardQuickLinks />
       </div>
     </div>
   )

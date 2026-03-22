@@ -5,7 +5,8 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -44,6 +45,8 @@ export function AffiliationsTable({
   affiliations,
   onAffiliationUpdated,
 }: AffiliationsTableProps) {
+  const router = useRouter()
+  const [isNavigating, startTransition] = useTransition()
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
   async function handleToggleStatus(affiliationId: string, currentStatus: boolean) {
@@ -114,7 +117,15 @@ export function AffiliationsTable({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border relative">
+      {isNavigating && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+          <div className="flex items-center gap-3 bg-card border shadow-lg rounded-lg px-6 py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm font-medium">Cargando proceso...</span>
+          </div>
+        </div>
+      )}
       <Table>
         <TableHeader>
           <TableRow>
@@ -136,19 +147,17 @@ export function AffiliationsTable({
 
             return (
               <TableRow key={affiliation.id}>
-                <TableCell className="max-w-[200px]">
-                  <Link
-                    href={`/dashboard/affiliations/${affiliation.id}`}
-                    className="hover:text-primary cursor-pointer block"
+                <TableCell
+                  className="max-w-[200px] cursor-pointer"
+                  onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${affiliation.id}`))}
+                >
+                  <span className="font-mono text-sm font-bold hover:underline hover:text-primary">{affiliation.affiliationNumber}</span>
+                  <div
+                    className="text-sm text-muted-foreground truncate"
+                    title={affiliation.client?.fullName}
                   >
-                    <span className="font-mono text-sm font-bold hover:underline">{affiliation.affiliationNumber}</span>
-                    <div
-                      className="text-sm text-muted-foreground truncate"
-                      title={affiliation.client?.fullName}
-                    >
-                      {affiliation.client?.fullName}
-                    </div>
-                  </Link>
+                    {affiliation.client?.fullName}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="text-sm max-w-[180px]">
@@ -220,14 +229,12 @@ export function AffiliationsTable({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                      <DropdownMenuItem asChild>
-                        <Link
-                          href={`/dashboard/affiliations/${affiliation.id}`}
-                          className="cursor-pointer"
-                        >
-                          <Eye className="mr-2 h-4 w-4" />
-                          Ver Detalles
-                        </Link>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${affiliation.id}`))}
+                      >
+                        <Eye className="mr-2 h-4 w-4" />
+                        Ver Detalles
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => handleToggleStatus(affiliation.id, affiliation.isActive)}

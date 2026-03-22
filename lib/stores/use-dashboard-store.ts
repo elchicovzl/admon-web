@@ -11,10 +11,14 @@ interface DashboardState {
   deleteUserModalOpen: boolean
   selectedUserId: string | null
 
+  // Breadcrumb overrides: maps path segment (e.g. cuid) to display label
+  breadcrumbLabels: Record<string, string>
+
   // Actions
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   setSidebarCollapsed: (collapsed: boolean) => void
+  setBreadcrumbLabels: (labels: Record<string, string>) => void
   openCreateUserModal: () => void
   closeCreateUserModal: () => void
   openEditUserModal: (userId: string) => void
@@ -31,11 +35,14 @@ export const useDashboardStore = create<DashboardState>((set) => ({
   editUserModalOpen: false,
   deleteUserModalOpen: false,
   selectedUserId: null,
+  breadcrumbLabels: {},
 
   // Actions
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+
+  setBreadcrumbLabels: (labels) => set({ breadcrumbLabels: labels }),
 
   openCreateUserModal: () => set({ createUserModalOpen: true }),
   closeCreateUserModal: () => set({ createUserModalOpen: false }),

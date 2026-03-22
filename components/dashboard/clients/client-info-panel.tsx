@@ -15,12 +15,15 @@ import {
   Phone,
   Building2,
   Edit,
+  ShieldCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import { ClientFormDialog } from '@/components/dashboard/clients/client-form-dialog'
 import { ClientAddressSection } from '@/components/dashboard/clients/client-address-section'
 import { ClientAdditionalInfoSection } from '@/components/dashboard/clients/client-additional-info-section'
 import { LegalRepresentativeFormDialog } from '@/components/dashboard/clients/legal-representative-form-dialog'
+import { AdministradorasFormDialog } from '@/components/dashboard/clients/administradoras-form-dialog'
+import { getClientById } from '@/lib/actions/client.actions'
 import type { SafeClient } from '@/lib/types/client.types'
 
 interface ClientInfoPanelProps {
@@ -49,6 +52,7 @@ const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProps) {
   const [editPersonalOpen, setEditPersonalOpen] = useState(false)
   const [editLegalRepOpen, setEditLegalRepOpen] = useState(false)
+  const [editAdministradorasOpen, setEditAdministradorasOpen] = useState(false)
   const [legalRep, setLegalRep] = useState<LegalRepresentative | null>(
     client.legalRepresentative ?? null
   )
@@ -249,6 +253,50 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
             </>
           )}
 
+          {/* Administradoras */}
+          <Separator />
+          <div className="py-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">Administradoras</p>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setEditAdministradorasOpen(true)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 pl-6">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">EPS</p>
+                <p className="text-sm">
+                  {client.eps ? `${client.eps.name} (${client.eps.code})` : 'No aplica'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">AFP</p>
+                <p className="text-sm">
+                  {client.afp ? `${client.afp.name} (${client.afp.code})` : 'No aplica'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">ARL</p>
+                <p className="text-sm">
+                  {client.arl ? `${client.arl.name} (${client.arl.code})` : 'No aplica'}
+                  {client.arl && client.arlRiskLevel && (
+                    <span className="ml-1 text-xs text-muted-foreground">· Riesgo {client.arlRiskLevel}</span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">CCF</p>
+                <p className="text-sm">
+                  {client.ccf ? `${client.ccf.name} (${client.ccf.code})` : 'No aplica'}
+                </p>
+              </div>
+            </div>
+          </div>
+
         </CardContent>
       </Card>
 
@@ -270,6 +318,25 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
           onUpdated={handleLegalRepUpdated}
         />
       )}
+
+      <AdministradorasFormDialog
+        open={editAdministradorasOpen}
+        onOpenChange={setEditAdministradorasOpen}
+        clientId={client.id}
+        initialData={{
+          eps: client.eps ?? null,
+          afp: client.afp ?? null,
+          arl: client.arl ?? null,
+          arlRiskLevel: client.arlRiskLevel ?? null,
+          ccf: client.ccf ?? null,
+        }}
+        onUpdated={async () => {
+          const result = await getClientById(client.id)
+          if (result.success && result.data) {
+            onClientUpdated(result.data)
+          }
+        }}
+      />
     </>
   )
 }

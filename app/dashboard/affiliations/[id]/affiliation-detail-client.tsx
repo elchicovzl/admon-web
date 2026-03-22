@@ -5,8 +5,8 @@
 
 'use client'
 
-import { useState } from 'react'
-import dynamic from 'next/dynamic'
+import { useState, useEffect, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -26,18 +26,26 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { ChevronDown, ChevronUp, Mail, Phone, FileText, Key, ExternalLink, Users, Plus, Eye } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ChevronDown, ChevronUp, Mail, Phone, FileText, Key, ExternalLink, Users, Plus, Eye, Trash2, Loader2 } from 'lucide-react'
 import { AffiliationSubProcessType } from '@prisma/client'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
 import { AddSubProcessDialog } from '@/components/dashboard/affiliations/add-subprocess-dialog'
 import { ClientCredentialsQuickView } from '@/components/dashboard/affiliations/client-credentials-quick-view'
-import type { AffiliationWithRelations, AffiliationSubProcessWithRelations, AffiliationObservationWithRelations, SafeAffiliationDocument } from '@/lib/types/affiliation.types'
-
-const SubProcessDetailModal = dynamic(
-  () => import('@/components/dashboard/affiliations/subprocess-detail-modal')
-    .then(mod => ({ default: mod.SubProcessDetailModal })),
-  { ssr: false }
-)
+import { deleteSubProcess } from '@/lib/actions/affiliation.actions'
+import { toast } from 'sonner'
+import type { AffiliationWithRelations, AffiliationSubProcessWithRelations } from '@/lib/types/affiliation.types'
+import { useDashboardStore } from '@/lib/stores/use-dashboard-store'
 
 interface AffiliationDetailClientProps {
   affiliation: AffiliationWithRelations
@@ -50,87 +58,48 @@ export function AffiliationDetailClient({
   currentUserId,
   currentUserRole,
 }: AffiliationDetailClientProps) {
+  const router = useRouter()
+  const [isNavigating, startTransition] = useTransition()
+  const setBreadcrumbLabels = useDashboardStore((s) => s.setBreadcrumbLabels)
+
+  useEffect(() => {
+    setBreadcrumbLabels({ [affiliation.id]: `#${affiliation.affiliationNumber}` })
+    return () => setBreadcrumbLabels({})
+  }, [affiliation.id, affiliation.affiliationNumber, setBreadcrumbLabels])
+
   const [clientInfoOpen, setClientInfoOpen] = useState(false)
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [addSubProcessOpen, setAddSubProcessOpen] = useState(false)
-  const [selectedSubProcess, setSelectedSubProcess] = useState<AffiliationSubProcessWithRelations | null>(null)
-  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [deleteSubProcessId, setDeleteSubProcessId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [subProcesses, setSubProcesses] = useState<AffiliationSubProcessWithRelations[]>(
     affiliation.subProcesses || []
   )
 
-  function handleSubProcessUpdated(
-    subProcessId: string,
-    updates: Partial<AffiliationSubProcessWithRelations>
-  ) {
-    setSubProcesses((prev) =>
-      prev.map((sp) => (sp.id === subProcessId ? { ...sp, ...updates } : sp))
-    )
+  async function handleDeleteSubProcess() {
+    if (!deleteSubProcessId) return
+    setIsDeleting(true)
+    try {
+      const result = await deleteSubProcess(deleteSubProcessId)
+      if (result.success) {
+        toast.success(result.message || 'Sub-proceso eliminado')
+        setSubProcesses((prev) => prev.filter((sp) => sp.id !== deleteSubProcessId))
+      } else {
+        toast.error(result.error || 'Error al eliminar')
+      }
+    } catch (error) {
+      console.error('Delete error:', error)
+      toast.error('Error al eliminar el sub-proceso')
+    } finally {
+      setIsDeleting(false)
+      setDeleteSubProcessId(null)
+    }
   }
 
   function openSubProcessDetail(subProcess: AffiliationSubProcessWithRelations) {
-    setSelectedSubProcess(subProcess)
-    setDetailModalOpen(true)
-  }
-
-  function handleSubProcessUpdatedFromModal(updates: Partial<AffiliationSubProcessWithRelations>) {
-    if (selectedSubProcess) {
-      handleSubProcessUpdated(selectedSubProcess.id, updates)
-      // Update the selected subprocess in state
-      setSelectedSubProcess((prev) => (prev ? { ...prev, ...updates } : null))
-    }
-  }
-
-  function handleObservationAddedFromModal(observation: AffiliationObservationWithRelations) {
-    if (selectedSubProcess) {
-      const updated = {
-        ...selectedSubProcess,
-        observations: [observation, ...(selectedSubProcess.observations || [])],
-      }
-      setSubProcesses((prev) =>
-        prev.map((sp) => (sp.id === selectedSubProcess.id ? updated : sp))
-      )
-      setSelectedSubProcess(updated)
-    }
-  }
-
-  function handleObservationDeletedFromModal(observationId: string) {
-    if (selectedSubProcess) {
-      const updated = {
-        ...selectedSubProcess,
-        observations: (selectedSubProcess.observations || []).filter((o) => o.id !== observationId),
-      }
-      setSubProcesses((prev) =>
-        prev.map((sp) => (sp.id === selectedSubProcess.id ? updated : sp))
-      )
-      setSelectedSubProcess(updated)
-    }
-  }
-
-  function handleDocumentUploadedFromModal(document: SafeAffiliationDocument) {
-    if (selectedSubProcess) {
-      const updated = {
-        ...selectedSubProcess,
-        documents: [...(selectedSubProcess.documents || []), document],
-      }
-      setSubProcesses((prev) =>
-        prev.map((sp) => (sp.id === selectedSubProcess.id ? updated : sp))
-      )
-      setSelectedSubProcess(updated)
-    }
-  }
-
-  function handleDocumentDeletedFromModal(documentId: string) {
-    if (selectedSubProcess) {
-      const updated = {
-        ...selectedSubProcess,
-        documents: (selectedSubProcess.documents || []).filter((d) => d.id !== documentId),
-      }
-      setSubProcesses((prev) =>
-        prev.map((sp) => (sp.id === selectedSubProcess.id ? updated : sp))
-      )
-      setSelectedSubProcess(updated)
-    }
+    startTransition(() => {
+      router.push(`/dashboard/affiliations/${affiliation.id}/subprocess/${subProcess.id}`)
+    })
   }
 
   const client = affiliation.client
@@ -229,7 +198,15 @@ export function AffiliationDetailClient({
       </Collapsible>
 
       {/* Sub-Processes - Compact Cards */}
-      <div className="space-y-4">
+      <div className="space-y-4 relative">
+        {isNavigating && (
+          <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
+            <div className="flex items-center gap-3 bg-card border shadow-lg rounded-lg px-6 py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span className="text-sm font-medium">Cargando sub-proceso...</span>
+            </div>
+          </div>
+        )}
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="text-2xl font-bold">Sub-procesos</h2>
@@ -279,14 +256,34 @@ export function AffiliationDetailClient({
                         <TableRow key={sp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openSubProcessDetail(sp)}>
                           <TableCell className="font-medium">{sp.employee?.fullName || '—'}</TableCell>
                           <TableCell><StatusBadge status={sp.status} className="text-xs" /></TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {sp.assignedTo ? (sp.assignedTo.name || sp.assignedTo.email) : <span className="italic">Sin asignar</span>}
+                          <TableCell>
+                            {sp.assignedTo ? (
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6">
+                                  <AvatarImage src={sp.assignedTo.image ? `/api/avatar/${sp.assignedTo.id}` : undefined} />
+                                  <AvatarFallback className="text-[10px]">
+                                    {(sp.assignedTo.name || sp.assignedTo.email).substring(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm">{sp.assignedTo.name || sp.assignedTo.email}</span>
+                              </div>
+                            ) : <span className="text-sm text-muted-foreground italic">Sin asignar</span>}
                           </TableCell>
                           <TableCell className="text-center text-sm text-muted-foreground">{sp.documents?.length || 0}</TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={(e) => { e.stopPropagation(); setDeleteSubProcessId(sp.id) }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -376,24 +373,6 @@ export function AffiliationDetailClient({
         />
       )}
 
-      {/* SubProcess Detail Modal */}
-      {selectedSubProcess && (
-        <SubProcessDetailModal
-          open={detailModalOpen}
-          onOpenChange={setDetailModalOpen}
-          subProcess={selectedSubProcess}
-          clientId={client?.id}
-          clientName={client?.fullName}
-          currentUserId={currentUserId}
-          currentUserRole={currentUserRole}
-          onSubProcessUpdated={handleSubProcessUpdatedFromModal}
-          onObservationAdded={handleObservationAddedFromModal}
-          onObservationDeleted={handleObservationDeletedFromModal}
-          onDocumentUploaded={handleDocumentUploadedFromModal}
-          onDocumentDeleted={handleDocumentDeletedFromModal}
-        />
-      )}
-
       {/* Add Sub-Process Dialog */}
       {client && (
         <AddSubProcessDialog
@@ -416,6 +395,28 @@ export function AffiliationDetailClient({
           }}
         />
       )}
+
+      {/* Delete Sub-Process Confirmation */}
+      <AlertDialog open={!!deleteSubProcessId} onOpenChange={(open) => !open && setDeleteSubProcessId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar Sub-proceso</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará el sub-proceso y todos sus documentos y observaciones. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteSubProcess}
+              disabled={isDeleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

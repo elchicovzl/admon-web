@@ -350,7 +350,7 @@ export function WhyChooseUsSection() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           <StatCard
             icon={TrendingUp}
-            value="5+"
+            value="7+"
             label="Años de experiencia"
             gradientFrom="rgb(59, 130, 246)"
             gradientTo="rgb(37, 99, 235)"
