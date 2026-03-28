@@ -541,6 +541,7 @@ model Affiliation {
   sentById         String?                 // Manager who sent
   sentBy           User?                   @relation("AffiliationSentBy", fields: [sentById], references: [id], onDelete: SetNull)
   archivedAt       DateTime?               // When archived
+  startDate        DateTime?               // When the process starts
 
   // Audit trail
   createdById      String

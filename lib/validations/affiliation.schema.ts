@@ -16,6 +16,7 @@ export const createAffiliationSchema = z.object({
     required_error: 'El tipo de proceso es requerido',
   }),
   processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
+  startDate: z.coerce.date().optional().nullable(),
   subProcesses: z
     .array(
       z.object({

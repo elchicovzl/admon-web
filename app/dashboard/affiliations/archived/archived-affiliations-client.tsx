@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Eye, Search, Archive, Mail } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Search, Archive, Mail } from 'lucide-react'
 import { SentEmailViewer } from '@/components/dashboard/affiliations/sent-email-viewer'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
 
@@ -29,13 +29,32 @@ interface ArchivedAffiliationsClientProps {
   affiliations: AffiliationWithRelations[]
 }
 
+const PAGE_SIZE = 10
+
 export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliationsClientProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Filter affiliations by client name
-  const filteredAffiliations = affiliations.filter((affiliation) =>
-    affiliation.client?.fullName.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredAffiliations = useMemo(() =>
+    affiliations.filter((affiliation) =>
+      affiliation.client?.fullName.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [affiliations, searchQuery]
   )
+
+  const totalPages = Math.max(1, Math.ceil(filteredAffiliations.length / PAGE_SIZE))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+
+  const paginatedAffiliations = useMemo(() => {
+    const start = (safeCurrentPage - 1) * PAGE_SIZE
+    return filteredAffiliations.slice(start, start + PAGE_SIZE)
+  }, [filteredAffiliations, safeCurrentPage])
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value)
+    setCurrentPage(1)
+  }
 
   if (affiliations.length === 0) {
     return (
@@ -74,7 +93,7 @@ export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliation
           type="text"
           placeholder="Buscar por nombre de cliente..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           className="pl-10"
         />
       </div>
@@ -84,6 +103,7 @@ export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliation
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Proceso</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Identificación</TableHead>
               <TableHead>Fecha de Envío</TableHead>
@@ -95,13 +115,16 @@ export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliation
           <TableBody>
             {filteredAffiliations.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   No se encontraron afiliaciones con ese nombre
                 </TableCell>
               </TableRow>
             ) : (
-              filteredAffiliations.map((affiliation) => (
+              paginatedAffiliations.map((affiliation) => (
                 <TableRow key={affiliation.id}>
+                  <TableCell>
+                    <span className="font-mono text-sm font-bold">{affiliation.affiliationNumber}</span>
+                  </TableCell>
                   <TableCell className="font-medium">
                     {affiliation.client?.fullName || 'Sin nombre'}
                   </TableCell>
@@ -165,14 +188,39 @@ export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliation
             )}
           </TableBody>
         </Table>
-      </Card>
 
-      {/* Results count */}
-      {searchQuery && (
-        <p className="text-sm text-muted-foreground">
-          Mostrando {filteredAffiliations.length} de {affiliations.length} afiliaciones
-        </p>
-      )}
+        {/* Pagination */}
+        {filteredAffiliations.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              {(safeCurrentPage - 1) * PAGE_SIZE + 1}-{Math.min(safeCurrentPage * PAGE_SIZE, filteredAffiliations.length)} de {filteredAffiliations.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safeCurrentPage <= 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {safeCurrentPage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage >= totalPages}
+              >
+                Siguiente
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   )
 }

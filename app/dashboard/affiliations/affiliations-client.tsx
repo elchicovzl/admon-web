@@ -5,12 +5,15 @@
 
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { AffiliationsTable } from '@/components/dashboard/affiliations/affiliations-table'
+import {
+  AffiliationTableFiltersBar,
+  type AffiliationTableFilters,
+} from '@/components/dashboard/affiliations/affiliations-table-filters'
 import type { AffiliationWithRelations, AffiliationStats } from '@/lib/types/affiliation.types'
 
 const AffiliationCreateWizard = dynamic(
@@ -30,6 +33,44 @@ export function AffiliationsClient({
 }: AffiliationsClientProps) {
   const [affiliations, setAffiliations] = useState<AffiliationWithRelations[]>(initialAffiliations)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [filters, setFilters] = useState<AffiliationTableFilters>({
+    searchQuery: '',
+    selectedProcessType: null,
+    selectedSubProcessTypes: [],
+    selectedStatus: null,
+  })
+
+  const filteredAffiliations = useMemo(() => {
+    return affiliations.filter((aff) => {
+      // Text search: process number, client name, identification number
+      if (filters.searchQuery) {
+        const query = filters.searchQuery.toLowerCase()
+        const matchesNumber = aff.affiliationNumber?.toLowerCase().includes(query)
+        const matchesName = aff.client?.fullName?.toLowerCase().includes(query)
+        const matchesId = aff.client?.identificationNumber?.toLowerCase().includes(query)
+        if (!matchesNumber && !matchesName && !matchesId) return false
+      }
+
+      // Process type filter
+      if (filters.selectedProcessType && aff.processType !== filters.selectedProcessType) {
+        return false
+      }
+
+      // Sub-process type filter: affiliation must have at least one matching sub-process
+      if (filters.selectedSubProcessTypes.length > 0) {
+        const affSubTypes = (aff.subProcesses || []).map((sp) => sp.type)
+        const hasMatch = filters.selectedSubProcessTypes.some((t) => affSubTypes.includes(t))
+        if (!hasMatch) return false
+      }
+
+      // Status filter (ACTIVE / SENT / ARCHIVED)
+      if (filters.selectedStatus && aff.status !== filters.selectedStatus) {
+        return false
+      }
+
+      return true
+    })
+  }, [affiliations, filters])
 
   function handleAffiliationCreated() {
     // Dialog closes naturally when router.push navigates to detail page
@@ -47,28 +88,22 @@ export function AffiliationsClient({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Listado de Procesos</CardTitle>
-              <CardDescription>
-                Todas las afiliaciones registradas en el sistema
-              </CardDescription>
-            </div>
-            <Button onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Crear Proceso
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <AffiliationsTable
-            affiliations={affiliations}
-            onAffiliationUpdated={handleAffiliationUpdated}
-          />
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-end">
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Crear Proceso
+        </Button>
+      </div>
+
+      <AffiliationTableFiltersBar
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
+
+      <AffiliationsTable
+        affiliations={filteredAffiliations}
+        onAffiliationUpdated={handleAffiliationUpdated}
+      />
 
       <AffiliationCreateWizard
         open={createDialogOpen}

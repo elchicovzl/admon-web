@@ -98,6 +98,11 @@ export default async function AffiliationDetailPage({
                   : AffiliationProcessTypeLabels[affiliation.processType]}
               </p>
             )}
+            {affiliation.startDate && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Inicio: {format(new Date(affiliation.startDate), "d 'de' MMMM, yyyy", { locale: es })}
+              </p>
+            )}
           </div>
         </div>
 

@@ -27,6 +27,7 @@ export interface Affiliation {
   sentAt: Date | null
   sentById: string | null
   archivedAt: Date | null
+  startDate: Date | null
   createdById: string
   isActive: boolean
   createdAt: Date
@@ -91,6 +92,7 @@ export interface SafeAffiliation {
   sentAt: Date | null
   sentById: string | null
   archivedAt: Date | null
+  startDate: Date | null
   isActive: boolean
   createdAt: Date
   updatedAt: Date
@@ -257,6 +259,10 @@ export interface AffiliationStats {
   }[]
   byStatus: {
     status: AffiliationSubProcessStatus
+    count: number
+  }[]
+  bySubProcessTypeNotStarted: {
+    type: AffiliationSubProcessType
     count: number
   }[]
 }

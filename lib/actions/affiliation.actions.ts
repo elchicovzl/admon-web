@@ -404,6 +404,7 @@ export async function createAffiliation(
         clientId: data.clientId,
         processType: data.processType,
         processTypeOther: data.processTypeOther ?? null,
+        startDate: data.startDate ?? null,
         createdById: authCheck.userId,
         subProcesses: {
           create: data.subProcesses.map((sp) => ({
@@ -420,6 +421,7 @@ export async function createAffiliation(
         clientId: true,
         processType: true,
         processTypeOther: true,
+        startDate: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -595,6 +597,13 @@ export const getAffiliationStats = cache(async (): Promise<ActionResponse<Affili
       `,
     ])
 
+    // Query 5: Subprocess type stats filtered by NOT_STARTED
+    const notStartedByType = await prisma.affiliationSubProcess.groupBy({
+      by: ['type'],
+      where: { status: 'NOT_STARTED' },
+      _count: true,
+    })
+
     const stats: AffiliationStats = {
       total: basicStats[0],
       active: basicStats[1],
@@ -607,6 +616,10 @@ export const getAffiliationStats = cache(async (): Promise<ActionResponse<Affili
       })),
       byStatus: statusStats.map((stat) => ({
         status: stat.status,
+        count: stat._count,
+      })),
+      bySubProcessTypeNotStarted: notStartedByType.map((stat) => ({
+        type: stat.type,
         count: stat._count,
       })),
     }
@@ -1028,6 +1041,7 @@ export const getMyAssignments = cache(async (
       assignedToId: authCheck.userId,
       affiliation: {
         isActive: true,
+        status: AffiliationStatus.ACTIVE,
       },
     }
 
@@ -1142,7 +1156,7 @@ export const getMyAssignmentsStats = cache(async (): Promise<ActionResponse<MyAs
         by: ['status'],
         where: {
           assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
+          affiliation: { isActive: true, status: AffiliationStatus.ACTIVE },
         },
         _count: true,
       }),
@@ -1150,7 +1164,7 @@ export const getMyAssignmentsStats = cache(async (): Promise<ActionResponse<MyAs
       prisma.affiliationSubProcess.count({
         where: {
           assignedToId: authCheck.userId,
-          affiliation: { isActive: true },
+          affiliation: { isActive: true, status: AffiliationStatus.ACTIVE },
         },
       }),
     ])

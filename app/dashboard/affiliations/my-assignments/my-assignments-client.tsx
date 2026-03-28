@@ -8,10 +8,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ExternalLink, User, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
 import type { AffiliationSubProcessWithRelations } from '@/lib/types/affiliation.types'
 import { AffiliationSubProcessStatus } from '@prisma/client'
@@ -54,37 +52,30 @@ export function MyAssignmentsClient({
   function AssignmentCard({ assignment }: { assignment: AffiliationSubProcessWithRelations }) {
     const affiliation = assignment.affiliation as any
     const client = affiliation?.client
+    const employee = assignment.employee as any
     const affiliationNumber = affiliation?.affiliationNumber as string | undefined
 
     return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="space-y-1 flex-1">
-              <CardTitle className="text-lg flex items-center gap-2">
-                {affiliationNumber && (
-                  <span className="font-mono text-sm text-primary">{affiliationNumber}</span>
-                )}
-                <TypeBadge type={assignment.type} className="text-xs" />
-              </CardTitle>
-              <CardDescription>
-                {client?.fullName} · {client?.identificationType} {client?.identificationNumber}
-              </CardDescription>
-            </div>
+      <Card
+        className="cursor-pointer hover:border-primary/50 transition-colors"
+        onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${assignment.affiliationId}/subprocess/${assignment.id}`))}
+      >
+        <CardContent className="pt-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <TypeBadge type={assignment.type} className="text-xs" />
             <StatusBadge status={assignment.status} />
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <p className="text-muted-foreground text-xs">Email</p>
-              <p className="font-medium truncate">{client?.email}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground text-xs">Teléfono</p>
-              <p className="font-medium">{client?.phone}</p>
-            </div>
-          </div>
+          {affiliationNumber && (
+            <p className="font-mono text-sm text-muted-foreground">{affiliationNumber}</p>
+          )}
+          <p className="font-medium text-sm truncate" title={client?.fullName}>
+            {client?.fullName}
+          </p>
+          {employee && (
+            <p className="text-xs text-muted-foreground truncate" title={employee.fullName}>
+              Empleado: {employee.fullName}
+            </p>
+          )}
 
           {assignment.statusReason && (
             <div className="rounded-md bg-yellow-50 border border-yellow-200 p-2">
@@ -92,23 +83,6 @@ export function MyAssignmentsClient({
               <p className="text-xs text-yellow-700 mt-1">{assignment.statusReason}</p>
             </div>
           )}
-
-          <div className="flex gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              className="flex-1"
-              disabled={isNavigating}
-              onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${assignment.affiliationId}/subprocess/${assignment.id}`))}
-            >
-              {isNavigating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <ExternalLink className="mr-2 h-4 w-4" />
-              )}
-              Ver Sub-proceso
-            </Button>
-          </div>
         </CardContent>
       </Card>
     )
@@ -131,7 +105,7 @@ export function MyAssignmentsClient({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="all" className="w-full">
+        <Tabs defaultValue="notStarted" className="w-full">
           <TabsList className="grid w-full grid-cols-4 lg:grid-cols-6">
             <TabsTrigger value="all">
               Todos ({groupedAssignments.all.length})
@@ -160,7 +134,7 @@ export function MyAssignmentsClient({
                   <p>No hay sub-procesos en esta categoría</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {items.map((assignment) => (
                     <AssignmentCard key={assignment.id} assignment={assignment} />
                   ))}

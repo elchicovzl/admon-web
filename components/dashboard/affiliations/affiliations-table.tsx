@@ -5,7 +5,7 @@
 
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -28,7 +28,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Eye, MoreHorizontal, Power, PowerOff, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Power, PowerOff, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { toggleAffiliationStatus } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
@@ -45,9 +45,24 @@ export function AffiliationsTable({
   affiliations,
   onAffiliationUpdated,
 }: AffiliationsTableProps) {
+  const PAGE_SIZE = 10
   const router = useRouter()
   const [isNavigating, startTransition] = useTransition()
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Reset to page 1 when filtered data changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [affiliations])
+
+  const totalPages = Math.max(1, Math.ceil(affiliations.length / PAGE_SIZE))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+
+  const paginatedAffiliations = useMemo(() => {
+    const start = (safeCurrentPage - 1) * PAGE_SIZE
+    return affiliations.slice(start, start + PAGE_SIZE)
+  }, [affiliations, safeCurrentPage])
 
   async function handleToggleStatus(affiliationId: string, currentStatus: boolean) {
     setLoadingId(affiliationId)
@@ -135,12 +150,13 @@ export function AffiliationsTable({
             <TableHead>Sub-procesos</TableHead>
             <TableHead>Progreso</TableHead>
             <TableHead>Estado</TableHead>
+            <TableHead>Inicio</TableHead>
             <TableHead>Creado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {affiliations.map((affiliation) => {
+          {paginatedAffiliations.map((affiliation) => {
             const progress = calculateProgress(affiliation)
             const globalStatus = getGlobalStatus(affiliation)
             const statusConfig = globalStatusConfig[globalStatus as keyof typeof globalStatusConfig]
@@ -213,6 +229,11 @@ export function AffiliationsTable({
                   </Badge>
                 </TableCell>
                 <TableCell>
+                  {affiliation.startDate
+                    ? format(new Date(affiliation.startDate), 'dd/MM/yyyy')
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell>
                   {format(new Date(affiliation.createdAt), 'dd/MM/yyyy')}
                 </TableCell>
                 <TableCell className="text-right">
@@ -260,6 +281,38 @@ export function AffiliationsTable({
           })}
         </TableBody>
       </Table>
+
+      {/* Pagination */}
+      {affiliations.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            {(safeCurrentPage - 1) * PAGE_SIZE + 1}-{Math.min(safeCurrentPage * PAGE_SIZE, affiliations.length)} de {affiliations.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {safeCurrentPage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

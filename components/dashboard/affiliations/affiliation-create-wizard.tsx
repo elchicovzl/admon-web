@@ -43,7 +43,10 @@ import {
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
-import { Loader2, Check, ChevronRight, ChevronLeft, Key, Users, AlertCircle } from 'lucide-react'
+import { Loader2, Check, ChevronRight, ChevronLeft, Key, Users, AlertCircle, CalendarIcon } from 'lucide-react'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { Calendar } from '@/components/ui/calendar'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getClients, getCompanyEmployees } from '@/lib/actions/client.actions'
@@ -79,6 +82,7 @@ const createAffiliationFormSchema = z.object({
     required_error: 'Debe seleccionar el tipo de proceso',
   }),
   processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
+  startDate: z.date().optional().nullable(),
   subProcesses: z.array(
     z.object({
       type: z.nativeEnum(AffiliationSubProcessType),
@@ -298,6 +302,7 @@ export function AffiliationCreateWizard({
         clientId: data.clientId,
         processType: data.processType,
         processTypeOther: data.processTypeOther ?? null,
+        startDate: data.startDate ?? null,
         subProcesses: transformedSubProcesses,
       })
 
@@ -547,6 +552,47 @@ export function AffiliationCreateWizard({
                       )}
                     />
                   )}
+
+                  {/* START DATE */}
+                  <FormField
+                    control={form.control}
+                    name="startDate"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Fecha de Inicio</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  'w-full justify-start text-left font-normal',
+                                  !field.value && 'text-muted-foreground'
+                                )}
+                              >
+                                {field.value
+                                  ? format(field.value, "d 'de' MMMM, yyyy", { locale: es })
+                                  : 'Seleccionar fecha de inicio...'}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value ?? undefined}
+                              onSelect={field.onChange}
+                              locale={es}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormDescription>
+                          Fecha en la que inicia el proceso (puede ser futura)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               )}
 
