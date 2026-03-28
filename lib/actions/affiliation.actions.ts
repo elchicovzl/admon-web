@@ -553,28 +553,32 @@ export const getAffiliationStats = cache(async (): Promise<ActionResponse<Affili
       return { success: false, error: authCheck.error }
     }
 
+    const notArchived = { affiliation: { status: { not: AffiliationStatus.ARCHIVED } } }
+
     // Optimized: 4 queries instead of 6, no full table scan
     const [basicStats, subProcessStats, statusStats, completionStats] = await Promise.all([
-      // Query 1: Basic counts (3 counts efficiently)
+      // Query 1: Basic counts excluding archived
       Promise.all([
-        prisma.affiliation.count(),
-        prisma.affiliation.count({ where: { isActive: true } }),
+        prisma.affiliation.count({ where: { status: { not: AffiliationStatus.ARCHIVED } } }),
+        prisma.affiliation.count({ where: { isActive: true, status: { not: AffiliationStatus.ARCHIVED } } }),
         prisma.affiliation.count({ where: { isActive: false } }),
       ]),
 
-      // Query 2: Subprocess type stats
+      // Query 2: Subprocess type stats (excluding archived affiliations)
       prisma.affiliationSubProcess.groupBy({
         by: ['type'],
+        where: notArchived,
         _count: true,
       }),
 
-      // Query 3: Subprocess status stats
+      // Query 3: Subprocess status stats (excluding archived affiliations)
       prisma.affiliationSubProcess.groupBy({
         by: ['status'],
+        where: notArchived,
         _count: true,
       }),
 
-      // Query 4: Completed/InProgress using SQL aggregation (NO loading all affiliations)
+      // Query 4: Completed/InProgress excluding archived
       prisma.$queryRaw<[{ completed: number; in_progress: number }]>`
         SELECT
           COUNT(DISTINCT a.id) FILTER (
@@ -594,13 +598,14 @@ export const getAffiliationStats = cache(async (): Promise<ActionResponse<Affili
             )
           )::int as in_progress
         FROM affiliations a
+        WHERE a.status != 'ARCHIVED'
       `,
     ])
 
-    // Query 5: Subprocess type stats filtered by NOT_STARTED
+    // Query 5: Subprocess type stats filtered by NOT_STARTED (excluding archived)
     const notStartedByType = await prisma.affiliationSubProcess.groupBy({
       by: ['type'],
-      where: { status: 'NOT_STARTED' },
+      where: { status: 'NOT_STARTED', ...notArchived },
       _count: true,
     })
 

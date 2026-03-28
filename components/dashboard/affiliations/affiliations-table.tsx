@@ -151,7 +151,6 @@ export function AffiliationsTable({
             <TableHead>Progreso</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead>Inicio</TableHead>
-            <TableHead>Creado</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
@@ -232,9 +231,6 @@ export function AffiliationsTable({
                   {affiliation.startDate
                     ? format(new Date(affiliation.startDate), 'dd/MM/yyyy')
                     : <span className="text-muted-foreground">—</span>}
-                </TableCell>
-                <TableCell>
-                  {format(new Date(affiliation.createdAt), 'dd/MM/yyyy')}
                 </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
