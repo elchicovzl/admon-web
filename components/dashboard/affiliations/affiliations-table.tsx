@@ -28,12 +28,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Power, PowerOff, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { toggleAffiliationStatus } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
 import { AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
 import { TypeBadge } from './status-badge'
+import { AffiliationEditDialog } from './affiliation-edit-dialog'
 import { AffiliationSubProcessStatus, AffiliationProcessType } from '@prisma/client'
 
 interface AffiliationsTableProps {
@@ -50,6 +51,7 @@ export function AffiliationsTable({
   const [isNavigating, startTransition] = useTransition()
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [editingAffiliation, setEditingAffiliation] = useState<AffiliationWithRelations | null>(null)
 
   // Reset to page 1 when filtered data changes
   useEffect(() => {
@@ -132,6 +134,7 @@ export function AffiliationsTable({
   }
 
   return (
+    <>
     <div className="rounded-md border relative">
       {isNavigating && (
         <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center rounded-lg">
@@ -229,7 +232,7 @@ export function AffiliationsTable({
                 </TableCell>
                 <TableCell>
                   {affiliation.startDate
-                    ? format(new Date(affiliation.startDate), 'dd/MM/yyyy')
+                    ? format(new Date(affiliation.startDate), "d MMM yyyy", { locale: es })
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-right">
@@ -253,6 +256,15 @@ export function AffiliationsTable({
                         <Eye className="mr-2 h-4 w-4" />
                         Ver Detalles
                       </DropdownMenuItem>
+                      {affiliation.status === 'ACTIVE' && (
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          onClick={() => setEditingAffiliation(affiliation)}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         onClick={() => handleToggleStatus(affiliation.id, affiliation.isActive)}
                         disabled={loadingId === affiliation.id}
@@ -310,5 +322,17 @@ export function AffiliationsTable({
         </div>
       )}
     </div>
+
+      {editingAffiliation && (
+        <AffiliationEditDialog
+          affiliationId={editingAffiliation.id}
+          currentProcessType={editingAffiliation.processType}
+          currentProcessTypeOther={editingAffiliation.processTypeOther}
+          currentStartDate={editingAffiliation.startDate}
+          open={!!editingAffiliation}
+          onOpenChange={(open) => { if (!open) setEditingAffiliation(null) }}
+        />
+      )}
+    </>
   )
 }

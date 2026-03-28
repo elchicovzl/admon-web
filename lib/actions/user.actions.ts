@@ -99,6 +99,7 @@ export const getManagers = cache(async (): Promise<ActionResponse<SafeUser[]>> =
     const managers = await prisma.user.findMany({
       where: {
         role: { in: [UserRole.MANAGER, UserRole.SUPER_ADMIN] },
+        isActive: true,
       },
       select: {
         id: true,

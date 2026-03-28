@@ -117,7 +117,7 @@ export function ClientAddressSection({ clientId, initialAddress, asSection = fal
           <p className="text-sm">{address.municipio}</p>
         </div>
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Ciudad</p>
+          <p className="text-xs font-medium text-muted-foreground">Barrio</p>
           <p className="text-sm">{address.ciudad || '—'}</p>
         </div>
         <div>
@@ -139,7 +139,7 @@ export function ClientAddressSection({ clientId, initialAddress, asSection = fal
         </div>
         {address.ciudad && (
           <div>
-            <p className="text-sm font-medium text-muted-foreground">Ciudad</p>
+            <p className="text-sm font-medium text-muted-foreground">Barrio</p>
             <p className="text-sm">{address.ciudad}</p>
           </div>
         )}
@@ -284,9 +284,9 @@ export function ClientAddressSection({ clientId, initialAddress, asSection = fal
                 name="ciudad"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Ciudad (Opcional)</FormLabel>
+                    <FormLabel>Barrio (Opcional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ej: Medellín" {...field} />
+                      <Input placeholder="Ej: El Poblado" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

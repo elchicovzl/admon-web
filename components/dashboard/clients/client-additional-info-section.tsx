@@ -40,16 +40,23 @@ interface ClientAdditionalInfoSectionProps {
 
 function toDateInputValue(date?: Date | null): string {
   if (!date) return ''
+  // Use UTC to avoid timezone offset shifting the date
   const d = new Date(date)
-  return d.toISOString().split('T')[0]
+  const year = d.getUTCFullYear()
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function formatDate(date?: Date | null): string {
   if (!date) return '—'
-  return new Date(date).toLocaleDateString('es-CO', {
+  // Use UTC to avoid timezone offset shifting the date
+  const d = new Date(date)
+  return d.toLocaleDateString('es-CO', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: 'UTC',
   })
 }
 

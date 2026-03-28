@@ -18,6 +18,7 @@ import { AffiliationStatusLabels, AffiliationStatusColors, AffiliationProcessTyp
 import { AffiliationProcessType } from '@prisma/client'
 import { AffiliationSubProcessStatus } from '@prisma/client'
 import { SentEmailViewer } from '@/components/dashboard/affiliations/sent-email-viewer'
+import { AffiliationEditDialog } from '@/components/dashboard/affiliations/affiliation-edit-dialog'
 import { ArrowLeft, CheckCircle2, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -120,6 +121,16 @@ export default async function AffiliationDetailPage({
               <Clock className="h-3 w-3 mr-1" />
               {completedSubProcesses} de {totalSubProcesses} completados
             </Badge>
+          )}
+
+          {/* Edit Button */}
+          {affiliation.status === 'ACTIVE' && (
+            <AffiliationEditDialog
+              affiliationId={affiliation.id}
+              currentProcessType={affiliation.processType}
+              currentProcessTypeOther={affiliation.processTypeOther}
+              currentStartDate={affiliation.startDate}
+            />
           )}
 
           {/* Send Button */}

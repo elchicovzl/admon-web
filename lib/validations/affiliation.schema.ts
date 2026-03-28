@@ -16,7 +16,7 @@ export const createAffiliationSchema = z.object({
     required_error: 'El tipo de proceso es requerido',
   }),
   processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
-  startDate: z.coerce.date().optional().nullable(),
+  startDate: z.union([z.coerce.date(), z.null()]).optional(),
   subProcesses: z
     .array(
       z.object({
@@ -35,6 +35,9 @@ export const createAffiliationSchema = z.object({
 
 export const updateAffiliationSchema = z.object({
   isActive: z.boolean().optional(),
+  processType: z.nativeEnum(AffiliationProcessType).optional(),
+  processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
+  startDate: z.union([z.coerce.date(), z.null()]).optional(),
 })
 
 export const getAffiliationSchema = z.object({
