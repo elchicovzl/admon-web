@@ -37,7 +37,7 @@ export default function Footer() {
                   className="w-8 h-8 object-contain"
                 />
               </div>
-              <span className="text-xl md:text-2xl" style={{ fontFamily: 'Anton, sans-serif' }}>ADMINISTRACIÓN <span className="bg-[#F1AD32] text-white px-2 py-0.5">SEGURA</span></span>
+              <span className="text-xl md:text-2xl inline-flex items-center gap-2" style={{ fontFamily: 'Anton, sans-serif' }}>ADMINISTRACIÓN <span className="bg-[#F1AD32] text-gray-900 px-2 py-0.5">SEGURA</span></span>
             </div>
           </div>
 

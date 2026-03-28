@@ -106,7 +106,7 @@ export default function Header() {
               <span className="text-xl text-gray-900" style={{ fontFamily: 'Anton, sans-serif' }}>
                 ADMINISTRACIÓN
               </span>
-              <span className="bg-[#F1AD32] text-white px-1 py-0.5 font-bold text-xs">SEGURA</span>
+              <span className="bg-[#F1AD32] text-gray-900 px-1 py-0.5 font-bold text-xs">SEGURA</span>
             </Link>
           </div>
 

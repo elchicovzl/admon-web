@@ -180,9 +180,9 @@ function InteractiveCard({ affiliation, index }: { affiliation: Affiliation; ind
             </motion.div>
 
             {/* Title */}
-            <h3 className="text-2xl font-black text-white mb-4 tracking-tight">
+            <h4 className="text-2xl font-black text-white mb-4 tracking-tight">
               {affiliation.title}
-            </h3>
+            </h4>
 
             {/* Description */}
             <p className="text-base text-white/90 leading-relaxed flex-grow">

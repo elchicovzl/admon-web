@@ -113,6 +113,7 @@ export default function ContactSection() {
             <div className="relative h-80 w-full">
               <iframe
                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3966.061!2d-75.56924158850391!3d6.234085693983!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zNsKwMTQnMDIuNyJOIDc1wrAzNCcwOS4zIlc!5e0!3m2!1ses!2sco!4v1609459200000!5m2!1ses!2sco"
+                title="Mapa de ubicación de Administración Segura en Medellín"
                 width="100%"
                 height="100%"
                 style={{ border: 0 }}

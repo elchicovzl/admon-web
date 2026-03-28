@@ -117,9 +117,9 @@ function BenefitCard({ benefit, index }: { benefit: Benefit; index: number }) {
           </motion.div>
 
           {/* Title */}
-          <h3 className="text-xl font-black text-white mb-4 tracking-tight">
+          <h4 className="text-xl font-black text-white mb-4 tracking-tight">
             {benefit.title}
-          </h3>
+          </h4>
 
           {/* Description */}
           <p className="text-base text-white/90 leading-relaxed flex-grow">

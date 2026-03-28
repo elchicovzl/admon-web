@@ -163,19 +163,23 @@ export default function TestimonialSlider() {
       </div>
 
       {/* Navigation dots */}
-      <div className="flex justify-center space-x-3 mt-8">
+      <div className="flex justify-center space-x-1 mt-8">
         {testimonials.map((_, index) => (
           <button
             key={index}
-            className={cn(
-              "w-3 h-3 rounded-full transition-all duration-300 hover:scale-125",
-              index === currentIndex
-                ? "bg-gradient-to-r from-orange-500 to-blue-600 scale-110"
-                : "bg-gray-300 hover:bg-gray-400",
-            )}
+            className="w-8 h-8 flex items-center justify-center"
             onClick={() => goToSlide(index)}
             aria-label={`Go to testimonial ${index + 1}`}
-          />
+          >
+            <span
+              className={cn(
+                "w-3 h-3 rounded-full transition-all duration-300",
+                index === currentIndex
+                  ? "bg-gradient-to-r from-orange-500 to-blue-600 scale-110"
+                  : "bg-gray-300 hover:bg-gray-400",
+              )}
+            />
+          </button>
         ))}
       </div>
     </div>
