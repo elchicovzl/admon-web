@@ -187,6 +187,14 @@ export default function Header() {
                 {item.label}
               </button>
             ))}
+
+            {/* Blog link */}
+            <Link
+              href="/blog"
+              className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm"
+            >
+              Blog
+            </Link>
           </nav>
 
           {/* CTA Buttons */}
@@ -284,6 +292,15 @@ export default function Header() {
                   {item.label}
                 </button>
               ))}
+
+              {/* Blog link */}
+              <Link
+                href="/blog"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-gray-700 hover:text-[#F1AD32] font-medium transition-colors px-4 py-3 rounded hover:bg-[#F1AD32]/10 text-left"
+              >
+                Blog
+              </Link>
 
               <Link href={isAuthenticated ? '/dashboard' : '/login'} className="w-full">
                 <Button

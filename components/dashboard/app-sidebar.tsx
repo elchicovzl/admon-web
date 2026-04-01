@@ -17,6 +17,7 @@ import {
   UserCheck,
   ChevronDown,
   Archive,
+  PenSquare,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -113,6 +114,24 @@ export function AppSidebar({ user }: AppSidebarProps) {
           title: 'Archivadas',
           href: '/dashboard/affiliations/archived',
           icon: Archive,
+        },
+      ],
+    },
+    {
+      title: 'Blog',
+      href: '/dashboard/blog',
+      icon: FileText,
+      roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
+      subItems: [
+        {
+          title: 'Listado',
+          href: '/dashboard/blog',
+          icon: List,
+        },
+        {
+          title: 'Crear',
+          href: '/dashboard/blog/create',
+          icon: PenSquare,
         },
       ],
     },

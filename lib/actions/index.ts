@@ -74,3 +74,27 @@ export {
   updateClientBeneficiary,
   deleteClientBeneficiary,
 } from './client-info.actions'
+
+// Blog actions
+export {
+  getBlogPosts,
+  getBlogPostById,
+  getBlogPostForPreview,
+  getBlogPostBySlug,
+  getPublishedBlogPosts,
+  getBlogPostsCount,
+  createBlogPost,
+  updateBlogPost,
+  deleteBlogPost,
+  toggleBlogPostStatus,
+  getAllPublishedSlugs,
+  getRelatedPosts,
+  getBlogCategories,
+  createBlogCategory,
+  updateBlogCategory,
+  deleteBlogCategory,
+  getBlogTags,
+  createBlogTag,
+  updateBlogTag,
+  deleteBlogTag,
+} from './blog.actions'
