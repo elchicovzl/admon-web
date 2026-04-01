@@ -2,6 +2,8 @@ import { MetadataRoute } from 'next'
 import { servicePages } from '@/data/services'
 import prisma from '@/lib/db/prisma'
 
+export const dynamic = 'force-dynamic'
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
