@@ -6,7 +6,9 @@ import LoginSuccessEmail from '@/emails/login-success-email'
 import AffiliationCompletedEmail from '@/emails/affiliation-completed-email'
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
