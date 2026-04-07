@@ -7,7 +7,7 @@ export function generateMetadata(
   path: string = '',
   image?: string
 ): Metadata {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://administracionsegura.com'
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://administracionsegura.co'
   const fullUrl = `${siteUrl}${path}`
   const defaultImage = `${siteUrl}/images/og-image.jpg`
 

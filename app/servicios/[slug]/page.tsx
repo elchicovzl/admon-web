@@ -18,7 +18,7 @@ import { getServiceBySlug, servicePages } from '@/data/services'
 import ContactSection from '@/components/sections/contact-section'
 
 // Base URL for canonical and OG URLs
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.co'
 
 interface PageProps {
   params: Promise<{ slug: string }>

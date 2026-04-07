@@ -189,7 +189,7 @@ export function generateContactEmailHtml({
           </div>
         </div>
         <div class="footer">
-          Este mensaje fue enviado desde el formulario de contacto de administracionsegura.com
+          Este mensaje fue enviado desde el formulario de contacto de administracionsegura.co
         </div>
       </div>
     </body>

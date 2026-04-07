@@ -12,7 +12,7 @@ import { BlogShareButtons } from '@/components/blog/blog-share-buttons'
 import { BlogRelatedPosts } from '@/components/blog/blog-related-posts'
 import sanitizeHtml from 'sanitize-html'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.co'
 
 interface PageProps {
   params: Promise<{ slug: string }>

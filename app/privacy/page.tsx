@@ -4,7 +4,7 @@ import WhatsAppWidget from '@/components/ui/whatsapp-widget'
 import { Metadata } from 'next'
 import Link from 'next/link'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.co'
 
 export const metadata: Metadata = {
   title: 'Política de Privacidad | Administración Segura',
@@ -207,7 +207,7 @@ export default function PrivacyPage() {
                 datos personales, puede contactarnos a través de:
               </p>
               <ul className="list-none text-gray-700 mb-4 space-y-2">
-                <li><strong>Correo electrónico:</strong> <Link href="mailto:contacto@administracionsegura.com" className="text-[#00A86B] hover:underline">contacto@administracionsegura.com</Link></li>
+                <li><strong>Correo electrónico:</strong> <Link href="mailto:contacto@administracionsegura.co" className="text-[#00A86B] hover:underline">contacto@administracionsegura.co</Link></li>
                 <li><strong>Teléfono:</strong> <Link href="tel:+573197941064" className="text-[#00A86B] hover:underline">+57 (319) 794-1064</Link></li>
                 <li><strong>Dirección:</strong> Cra 43 # 33 - 57 local 156, Plazuelas de San Diego, Medellín, Colombia</li>
               </ul>

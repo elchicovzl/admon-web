@@ -4,7 +4,7 @@ export const siteConfig: SiteConfig = {
   name: 'Administración Segura',
   title: 'Administración Segura - Auditorías CRO para E-commerce',
   description: 'Aumenta tus conversiones con auditorías CRO profesionales. Identificamos puntos de fricción y creamos planes de acción personalizados para optimizar tu tienda online.',
-  url: 'https://administracionsegura.com',
+  url: 'https://administracionsegura.co',
   keywords: [
     'CRO',
     'optimización de conversiones',
@@ -18,8 +18,8 @@ export const siteConfig: SiteConfig = {
   ],
   author: {
     name: 'Administración Segura',
-    email: 'contacto@administracionsegura.com',
-    url: 'https://administracionsegura.com',
+    email: 'contacto@administracionsegura.co',
+    url: 'https://administracionsegura.co',
   },
   social: {
     linkedin: 'https://linkedin.com/company/administracion-segura',

@@ -6,7 +6,7 @@ interface BlogSeoPreviewProps {
   slug: string
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.co'
 
 export function BlogSeoPreview({ title, description, slug }: BlogSeoPreviewProps) {
   const displayTitle = title || 'Título del artículo'

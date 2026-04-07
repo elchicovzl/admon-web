@@ -5,7 +5,7 @@ import { BlogPagination } from '@/components/blog/blog-pagination'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.com'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://administracionsegura.co'
 
 export const metadata: Metadata = {
   title: 'Blog | Administración Segura',
