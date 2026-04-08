@@ -84,7 +84,7 @@ export function SubProcessDetailModal({
   const [statusLogs, setStatusLogs] = useState<AffiliationStatusLogWithRelations[]>([])
   const [loadingLogs, setLoadingLogs] = useState(false)
 
-  const canManage = true // Any manager or admin can edit/reassign
+  const isSuperAdmin = currentUserRole === 'SUPER_ADMIN'
   const [showReassign, setShowReassign] = useState(false)
   const [managers, setManagers] = useState<SafeUser[]>([])
   const [reassignLoading, setReassignLoading] = useState(false)
@@ -254,14 +254,16 @@ export function SubProcessDetailModal({
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg">Asignación</CardTitle>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleShowReassign}
-                        disabled={reassignLoading}
-                      >
-                        Reasignar
-                      </Button>
+                      {isSuperAdmin && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleShowReassign}
+                          disabled={reassignLoading}
+                        >
+                          Reasignar
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -286,7 +288,7 @@ export function SubProcessDetailModal({
                       </div>
                     </div>
 
-                    {showReassign && (
+                    {isSuperAdmin && showReassign && (
                       <>
                         <Separator />
                         <div className="space-y-2">
