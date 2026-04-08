@@ -105,6 +105,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
     const affiliations = await prisma.affiliation.findMany({
       where: {
         status: { not: AffiliationStatus.ARCHIVED },
+        isActive: true,
       },
       select: {
         id: true,
@@ -550,6 +551,47 @@ export async function toggleAffiliationStatus(
   } catch (error) {
     console.error('Error toggling affiliation status:', error)
     return { success: false, error: 'Error al cambiar el status de la afiliación' }
+  }
+}
+
+/**
+ * Soft delete an affiliation (sets isActive to false and status to DELETED)
+ */
+export async function deleteAffiliation(affiliationId: string): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    if (!affiliationId || typeof affiliationId !== 'string') {
+      return { success: false, error: 'ID de proceso inválido' }
+    }
+
+    const affiliation = await prisma.affiliation.findUnique({
+      where: { id: affiliationId },
+    })
+
+    if (!affiliation) {
+      return { success: false, error: 'Proceso no encontrado' }
+    }
+
+    await prisma.affiliation.update({
+      where: { id: affiliationId },
+      data: {
+        isActive: false,
+      },
+    })
+
+    revalidatePath('/dashboard/affiliations')
+
+    return {
+      success: true,
+      message: 'Proceso eliminado exitosamente',
+    }
+  } catch (error) {
+    console.error('Delete affiliation error:', error)
+    return { success: false, error: 'Error al eliminar el proceso' }
   }
 }
 

@@ -28,9 +28,19 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Loader2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Trash2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { toggleAffiliationStatus } from '@/lib/actions/affiliation.actions'
+import { toggleAffiliationStatus, deleteAffiliation } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
 import { AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
 import { TypeBadge } from './status-badge'
@@ -52,6 +62,8 @@ export function AffiliationsTable({
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [editingAffiliation, setEditingAffiliation] = useState<AffiliationWithRelations | null>(null)
+  const [deleteAffiliationId, setDeleteAffiliationId] = useState<string | null>(null)
+  const [isDeletingAffiliation, setIsDeletingAffiliation] = useState(false)
 
   // Reset to page 1 when filtered data changes
   useEffect(() => {
@@ -81,6 +93,26 @@ export function AffiliationsTable({
       toast.error('Error al actualizar el status')
     } finally {
       setLoadingId(null)
+    }
+  }
+
+  async function handleDeleteAffiliation() {
+    if (!deleteAffiliationId) return
+    setIsDeletingAffiliation(true)
+    try {
+      const result = await deleteAffiliation(deleteAffiliationId)
+      if (result.success) {
+        toast.success(result.message || 'Proceso eliminado exitosamente')
+        onAffiliationUpdated?.(deleteAffiliationId, { isActive: false })
+      } else {
+        toast.error(result.error || 'Error al eliminar el proceso')
+      }
+    } catch (error) {
+      console.error('Delete affiliation error:', error)
+      toast.error('Error al eliminar el proceso')
+    } finally {
+      setIsDeletingAffiliation(false)
+      setDeleteAffiliationId(null)
     }
   }
 
@@ -281,6 +313,13 @@ export function AffiliationsTable({
                           </>
                         )}
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setDeleteAffiliationId(affiliation.id)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Eliminar
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -333,6 +372,28 @@ export function AffiliationsTable({
           onOpenChange={(open) => { if (!open) setEditingAffiliation(null) }}
         />
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteAffiliationId} onOpenChange={(open) => !open && setDeleteAffiliationId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar Proceso</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar este proceso? El proceso será marcado como eliminado y no aparecerá en las listas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingAffiliation}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAffiliation}
+              disabled={isDeletingAffiliation}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {isDeletingAffiliation ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

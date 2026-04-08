@@ -72,6 +72,7 @@ const processTypeOptions = [
   { value: AffiliationProcessType.COBRO_INCAPACIDADES, label: 'Cobro Incapacidades' },
   { value: AffiliationProcessType.LIQUIDACION_PLANILLA_S, label: 'Liquidacion PlanillaS' },
   { value: AffiliationProcessType.INCLUSION_BENEFICIARIOS, label: 'Inclusion Beneficiarios' },
+  { value: AffiliationProcessType.EXCLUSION_BENEFICIARIOS, label: 'Exclusión de Beneficiarios' },
   { value: AffiliationProcessType.ASESORIAS_PENSIONES, label: 'Asesorias y pensiones' },
   { value: AffiliationProcessType.OTRO, label: 'Otro' },
 ]

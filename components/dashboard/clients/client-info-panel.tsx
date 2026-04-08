@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { ClientWithRelations, LegalRepresentative } from '@/lib/types/client.types'
-import { ClientType, IdentificationType } from '@prisma/client'
+import { ClientType, IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -40,6 +40,7 @@ const ID_TYPE_LABELS: Record<IdentificationType, string> = {
   PPT: 'PPT',
   PEP: 'PEP',
   NUIP: 'NUIP',
+  SALVOCONDUCTO: 'Salvoconducto',
   NIT: 'NIT',
 }
 
@@ -47,6 +48,18 @@ const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   EMPLEADO: 'Empleado',
   EMPRESA: 'Empresa',
   INDEPENDIENTE: 'Independiente',
+}
+
+const EMPLOYEE_TYPE_LABELS: Record<EmployeeType, string> = {
+  TIEMPO_COMPLETO: 'Tiempo completo',
+  TIEMPO_PARCIAL: 'Tiempo parcial',
+}
+
+const WORK_DAYS_LABELS: Record<WorkDaysRange, string> = {
+  DIAS_1_7: '1 a 7 días al mes',
+  DIAS_8_14: '8 a 14 días al mes',
+  DIAS_15_21: '15 a 21 días al mes',
+  DIAS_22_30: '22 a 30 días al mes',
 }
 
 export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProps) {
@@ -88,7 +101,7 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                 Editar
               </Button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 pl-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 pl-6">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Nombre Completo</p>
                 <p className="text-sm">{client.fullName}</p>
@@ -97,6 +110,18 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                 <p className="text-xs font-medium text-muted-foreground">Tipo de Cliente</p>
                 <p className="text-sm">{CLIENT_TYPE_LABELS[client.clientType]}</p>
               </div>
+              {client.clientType === ClientType.EMPLEADO && client.employeeType && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Tipo de Empleado</p>
+                  <p className="text-sm">{EMPLOYEE_TYPE_LABELS[client.employeeType]}</p>
+                </div>
+              )}
+              {client.clientType === ClientType.EMPLEADO && client.workDaysRange && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Días Laborados</p>
+                  <p className="text-sm">{WORK_DAYS_LABELS[client.workDaysRange]}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Identificación</p>
                 <p className="text-sm">

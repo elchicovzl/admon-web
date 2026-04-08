@@ -1,4 +1,4 @@
-import { ClientType, IdentificationType, AdministratorType, DocumentCategory } from '@prisma/client'
+import { ClientType, IdentificationType, AdministratorType, DocumentCategory, EmployeeType, WorkDaysRange } from '@prisma/client'
 
 export interface Client {
   id: string
@@ -22,6 +22,8 @@ export interface SafeClient {
   identificationType: IdentificationType
   identificationNumber: string
   clientType: ClientType
+  employeeType?: EmployeeType | null
+  workDaysRange?: WorkDaysRange | null
   email: string
   phone: string
   status: string

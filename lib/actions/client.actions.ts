@@ -52,12 +52,17 @@ export const getClients = cache(async (): Promise<ActionResponse<SafeClient[]>> 
     }
 
     const clients = await prisma.client.findMany({
+      where: {
+        status: { not: 'ELIMINADO' },
+      },
       select: {
         id: true,
         fullName: true,
         identificationType: true,
         identificationNumber: true,
         clientType: true,
+        employeeType: true,
+        workDaysRange: true,
         email: true,
         phone: true,
         status: true,
@@ -108,6 +113,8 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
         identificationType: true,
         identificationNumber: true,
         clientType: true,
+        employeeType: true,
+        workDaysRange: true,
         email: true,
         phone: true,
         status: true,
@@ -130,6 +137,8 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
             identificationType: true,
             identificationNumber: true,
             clientType: true,
+            employeeType: true,
+            workDaysRange: true,
             email: true,
             phone: true,
             status: true,
@@ -147,6 +156,8 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
             identificationType: true,
             identificationNumber: true,
             clientType: true,
+            employeeType: true,
+            workDaysRange: true,
             email: true,
             phone: true,
             status: true,
@@ -298,20 +309,23 @@ export async function createClient(
       return { success: false, error: authCheck.error }
     }
 
-    // Validate input - try employee schema first (more permissive), then full client schema
-    const employeeValidation = createEmployeeSchema.safeParse(data)
-    const clientValidation = createClientSchema.safeParse(data)
+    // Sanitize: convert null values to undefined for Zod optional fields
+    const sanitizedData = Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [key, value === null ? undefined : value])
+    )
 
-    if (!clientValidation.success && !employeeValidation.success) {
+    // Validate input
+    const clientValidation = createClientSchema.safeParse(sanitizedData)
+
+    if (!clientValidation.success) {
+      const firstError = clientValidation.error.errors[0]?.message || 'Datos inválidos'
       return {
         success: false,
-        error: 'Datos inválidos',
+        error: firstError,
       }
     }
 
-    const validatedData = clientValidation.success ? clientValidation.data : employeeValidation.data!
-    const { fullName, identificationType, identificationNumber, clientType, email, phone } = validatedData
-    const legalRepresentative = clientValidation.success ? clientValidation.data.legalRepresentative : undefined
+    const { fullName, identificationType, identificationNumber, clientType, email, phone, employeeType, workDaysRange, legalRepresentative } = clientValidation.data
 
     // Check if identification number already exists
     const existingClient = await prisma.client.findUnique({
@@ -334,6 +348,8 @@ export async function createClient(
         clientType,
         email,
         phone,
+        employeeType: employeeType || null,
+        workDaysRange: workDaysRange || null,
         createdById: authCheck.userId!,
         // Create legal representative if client is a company
         ...(clientType === ClientType.EMPRESA && legalRepresentative && {
@@ -354,6 +370,8 @@ export async function createClient(
         identificationType: true,
         identificationNumber: true,
         clientType: true,
+        employeeType: true,
+        workDaysRange: true,
         email: true,
         phone: true,
         status: true,
@@ -428,16 +446,28 @@ export async function updateClient(
       }
     }
 
+    // Clean up conditional fields
+    const updateData = { ...validatedFields.data }
+    if (updateData.employeeType && updateData.employeeType !== 'TIEMPO_PARCIAL') {
+      updateData.workDaysRange = null
+    }
+    if (updateData.clientType && updateData.clientType !== 'EMPLEADO') {
+      updateData.employeeType = null
+      updateData.workDaysRange = null
+    }
+
     // Update client
     const updatedClient = await prisma.client.update({
       where: { id },
-      data: validatedFields.data,
+      data: updateData,
       select: {
         id: true,
         fullName: true,
         identificationType: true,
         identificationNumber: true,
         clientType: true,
+        employeeType: true,
+        workDaysRange: true,
         email: true,
         phone: true,
         status: true,
@@ -506,6 +536,41 @@ export async function toggleClientStatus(
   } catch (error) {
     console.error('Toggle client status error:', error)
     return { success: false, error: 'Error al cambiar status del cliente' }
+  }
+}
+
+/**
+ * Soft delete a client (sets isActive to false and marks as deleted)
+ */
+export async function deleteClient(clientId: string): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    if (!client) {
+      return { success: false, error: 'Cliente no encontrado' }
+    }
+
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        isActive: false,
+        status: 'ELIMINADO',
+      },
+    })
+
+    revalidatePath('/dashboard/clients')
+
+    return {
+      success: true,
+      message: 'Cliente eliminado exitosamente',
+    }
+  } catch (error) {
+    console.error('Delete client error:', error)
+    return { success: false, error: 'Error al eliminar el cliente' }
   }
 }
 
@@ -803,6 +868,8 @@ export const getAvailableEmployees = cache(async (): Promise<ActionResponse<Safe
         identificationType: true,
         identificationNumber: true,
         clientType: true,
+        employeeType: true,
+        workDaysRange: true,
         email: true,
         phone: true,
         status: true,
@@ -867,6 +934,8 @@ export const getCompanyEmployees = cache(async (companyId: string): Promise<Acti
         identificationType: true,
         identificationNumber: true,
         clientType: true,
+        employeeType: true,
+        workDaysRange: true,
         email: true,
         phone: true,
         status: true,

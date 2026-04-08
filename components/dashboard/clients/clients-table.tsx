@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClientType, IdentificationType } from '@prisma/client'
 import type { SafeClient } from '@/lib/types/client.types'
-import { toggleClientStatus } from '@/lib/actions'
+import { toggleClientStatus, deleteClient } from '@/lib/actions'
 import {
   Table,
   TableBody,
@@ -31,7 +31,17 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { MoreHorizontal, Eye, Edit, Ban, CheckCircle, FileText, Building2, Search, X } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { MoreHorizontal, Eye, Edit, Ban, CheckCircle, Trash2, Building2, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -47,6 +57,7 @@ const getIdentificationTypeLabel = (type: IdentificationType) => {
     PPT: 'PPT',
     PEP: 'PEP',
     NUIP: 'NUIP',
+    SALVOCONDUCTO: 'Salvoconducto',
     NIT: 'NIT',
   }
   return labels[type]
@@ -80,6 +91,8 @@ const PAGE_SIZE = 50
 export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
   const router = useRouter()
   const [isTogglingStatus, setIsTogglingStatus] = useState(false)
+  const [deleteClientId, setDeleteClientId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [page, setPage] = useState(1)
@@ -148,6 +161,25 @@ export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
       setIsTogglingStatus(false)
     }
   }, [])
+
+  const handleDeleteClient = useCallback(async () => {
+    if (!deleteClientId) return
+    setIsDeleting(true)
+    try {
+      const result = await deleteClient(deleteClientId)
+      if (result.success) {
+        toast.success(result.message || 'Cliente eliminado exitosamente')
+      } else {
+        toast.error(result.error || 'Error al eliminar cliente')
+      }
+    } catch (error) {
+      console.error('Delete client error:', error)
+      toast.error('Error inesperado al eliminar cliente')
+    } finally {
+      setIsDeleting(false)
+      setDeleteClientId(null)
+    }
+  }, [deleteClientId])
 
   const handleViewDetails = useCallback((client: SafeClient) => {
     router.push(`/dashboard/clients/${client.id}`)
@@ -291,6 +323,13 @@ export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
                             </>
                           )}
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setDeleteClientId(client.id)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Eliminar
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -330,6 +369,28 @@ export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteClientId} onOpenChange={(open) => !open && setDeleteClientId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar Cliente</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar este cliente? El cliente será marcado como eliminado y no aparecerá en las listas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteClient}
+              disabled={isDeleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

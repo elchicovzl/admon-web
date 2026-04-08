@@ -387,6 +387,7 @@ export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string
   COBRO_INCAPACIDADES: 'Cobro Incapacidades',
   LIQUIDACION_PLANILLA_S: 'Liquidacion PlanillaS',
   INCLUSION_BENEFICIARIOS: 'Inclusion Beneficiarios',
+  EXCLUSION_BENEFICIARIOS: 'Exclusión de Beneficiarios',
   ASESORIAS_PENSIONES: 'Asesorias y pensiones',
   OTRO: 'Otro',
 }

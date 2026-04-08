@@ -129,6 +129,7 @@ enum IdentificationType {
   PPT                   //      Permiso de Protección Temporal
   PEP                   //      Permiso Especial de Permanencia
   NUIP                  //      Número Único de Identificación Personal
+  SALVOCONDUCTO         //      Salvoconducto
   // Personas Jurídicas
   NIT                   //      Número de Identificación Tributaria
 }
@@ -137,6 +138,18 @@ enum ClientType {
   EMPLEADO
   EMPRESA
   INDEPENDIENTE
+}
+
+enum EmployeeType {
+  TIEMPO_COMPLETO
+  TIEMPO_PARCIAL
+}
+
+enum WorkDaysRange {
+  DIAS_1_7
+  DIAS_8_14
+  DIAS_15_21
+  DIAS_22_30
 }
 
 enum AdministradoraType {
@@ -161,6 +174,8 @@ model Client {
   identificationType   IdentificationType
   identificationNumber String             @unique
   clientType           ClientType
+  employeeType         EmployeeType?
+  workDaysRange        WorkDaysRange?
   email                String
   phone                String
   status               String             @default("ACTIVO")
@@ -488,6 +503,7 @@ enum AffiliationProcessType {
   COBRO_INCAPACIDADES              // Cobro Incapacidades
   LIQUIDACION_PLANILLA_S           // Liquidacion PlanillaS
   INCLUSION_BENEFICIARIOS          // Inclusion Beneficiarios
+  EXCLUSION_BENEFICIARIOS          // Exclusion de Beneficiarios
   ASESORIAS_PENSIONES              // Asesorias y pensiones
   OTRO                             // Otro (texto libre)
 }

@@ -81,9 +81,13 @@ export function AffiliationsClient({
     affiliationId: string,
     updates: Partial<AffiliationWithRelations>
   ) {
-    setAffiliations((prev) =>
-      prev.map((aff) => (aff.id === affiliationId ? { ...aff, ...updates } : aff))
-    )
+    if (updates.isActive === false) {
+      setAffiliations((prev) => prev.filter((aff) => aff.id !== affiliationId))
+    } else {
+      setAffiliations((prev) =>
+        prev.map((aff) => (aff.id === affiliationId ? { ...aff, ...updates } : aff))
+      )
+    }
   }
 
   return (

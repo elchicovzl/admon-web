@@ -27,6 +27,7 @@ export {
   createClient,
   updateClient,
   toggleClientStatus,
+  deleteClient,
   addClientNote,
   deleteClientNote,
   getClientsCount,

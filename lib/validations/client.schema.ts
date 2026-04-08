@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ClientType, IdentificationType, DocumentCategory } from '@prisma/client'
+import { ClientType, IdentificationType, DocumentCategory, EmployeeType, WorkDaysRange } from '@prisma/client'
 
 // Legal Representative schema (for companies)
 export const legalRepresentativeSchema = z.object({
@@ -60,12 +60,14 @@ export const createClientSchema = z
       .min(1, 'El teléfono es requerido')
       .min(7, 'El teléfono debe tener al menos 7 caracteres')
       .max(20, 'El teléfono no puede exceder 20 caracteres'),
+    // Employee type (conditional - only for employees)
+    employeeType: z.nativeEnum(EmployeeType).optional(),
+    workDaysRange: z.nativeEnum(WorkDaysRange).optional(),
     // Legal representative (conditional - required for companies)
     legalRepresentative: legalRepresentativeSchema.optional(),
   })
   .refine(
     (data) => {
-      // If clientType is EMPRESA, legalRepresentative is required
       if (data.clientType === ClientType.EMPRESA) {
         return !!data.legalRepresentative
       }
@@ -74,6 +76,30 @@ export const createClientSchema = z
     {
       message: 'El representante legal es requerido para empresas',
       path: ['legalRepresentative'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.clientType === ClientType.EMPLEADO) {
+        return !!data.employeeType
+      }
+      return true
+    },
+    {
+      message: 'El tipo de empleado es requerido',
+      path: ['employeeType'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.employeeType === EmployeeType.TIEMPO_PARCIAL) {
+        return !!data.workDaysRange
+      }
+      return true
+    },
+    {
+      message: 'Los días laborados son requeridos para tiempo parcial',
+      path: ['workDaysRange'],
     }
   )
 
@@ -120,6 +146,14 @@ export const updateClientSchema = z.object({
   clientType: z
     .nativeEnum(ClientType)
     .optional(),
+  employeeType: z
+    .nativeEnum(EmployeeType)
+    .optional()
+    .nullable(),
+  workDaysRange: z
+    .nativeEnum(WorkDaysRange)
+    .optional()
+    .nullable(),
   identificationType: z
     .nativeEnum(IdentificationType)
     .optional(),
