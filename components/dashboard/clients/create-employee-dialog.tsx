@@ -9,7 +9,7 @@ import { createClient, assignEmployeeToCompany } from '@/lib/actions'
 import { getAdministradoras, updateClientAdministradoras } from '@/lib/actions/client.actions'
 import { createEmployeeSchema, type CreateEmployeeInput } from '@/lib/validations/client.schema'
 import type { SafeClient, AdministradoraInfo } from '@/lib/types/client.types'
-import { ClientType, IdentificationType } from '@prisma/client'
+import { ClientType, IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -124,10 +124,14 @@ export function CreateEmployeeDialog({
       identificationNumber: '',
       email: '',
       phone: '',
+      employeeType: undefined,
+      workDaysRange: undefined,
     },
   })
 
   const identificationType = form.watch('identificationType')
+  const employeeType = form.watch('employeeType')
+  const isPartTime = employeeType === EmployeeType.TIEMPO_PARCIAL
   const currentMask = ID_MASK_CONFIG[identificationType]
 
   // Load administradoras catalog when dialog opens
@@ -143,6 +147,13 @@ export function CreateEmployeeDialog({
       setAdmSelections({ epsId: null, afpId: null, arlId: null, ccfId: null })
     }
   }, [isOpen, catalogo])
+
+  // Clear workDaysRange when switching away from part-time
+  useEffect(() => {
+    if (employeeType !== EmployeeType.TIEMPO_PARCIAL) {
+      form.setValue('workDaysRange', undefined)
+    }
+  }, [employeeType, form])
 
   // Track previous identification type to clear number only when it actually changes
   const prevIdTypeRef = useRef<IdentificationType | null>(null)
@@ -233,6 +244,68 @@ export function CreateEmployeeDialog({
                 </FormItem>
               )}
             />
+
+            {/* Employee Type */}
+            <FormField
+              control={form.control}
+              name="employeeType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipo de Empleado</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value || ''}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar tipo de empleado" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value={EmployeeType.TIEMPO_COMPLETO}>
+                        Trabajador tiempo completo
+                      </SelectItem>
+                      <SelectItem value={EmployeeType.TIEMPO_PARCIAL}>
+                        Trabajador tiempo parcial
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Work Days Range (only for part-time) */}
+            {isPartTime && (
+              <FormField
+                control={form.control}
+                name="workDaysRange"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Días laborados al mes</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ''}
+                      disabled={isLoading}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar rango de días" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={WorkDaysRange.DIAS_1_7}>1 a 7 días al mes</SelectItem>
+                        <SelectItem value={WorkDaysRange.DIAS_8_14}>8 a 14 días al mes</SelectItem>
+                        <SelectItem value={WorkDaysRange.DIAS_15_21}>15 a 21 días al mes</SelectItem>
+                        <SelectItem value={WorkDaysRange.DIAS_22_30}>22 a 30 días al mes</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Identification Type and Number */}
             <div className="grid grid-cols-2 gap-4">
