@@ -37,7 +37,7 @@ const AFILIACIONES_TYPES = [
   AffiliationProcessType.PLANILLA_S_SERVICIO_DOMESTICO,
   AffiliationProcessType.PLANILLA_E_EMPLEADOS,
   AffiliationProcessType.LIQUIDACIONES,
-  AffiliationProcessType.LIQUIDACION_PLANILLA_S,
+  AffiliationProcessType.PENSIONADO,
   AffiliationProcessType.INCLUSION_BENEFICIARIOS,
   AffiliationProcessType.EXCLUSION_BENEFICIARIOS,
   AffiliationProcessType.OTRO,

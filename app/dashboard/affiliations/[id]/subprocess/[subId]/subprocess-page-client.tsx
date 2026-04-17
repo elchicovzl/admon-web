@@ -23,9 +23,11 @@ import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/stat
 import { SubProcessObservationsSection } from '@/components/dashboard/affiliations/subprocess-observations-section'
 import { SubProcessDocumentsSection } from '@/components/dashboard/affiliations/subprocess-documents-section'
 import { SubProcessClientTab } from '@/components/dashboard/affiliations/subprocess-client-tab'
+import { SubProcessDisabilityFields } from '@/components/dashboard/affiliations/subprocess-disability-fields'
+import { SubProcessBeneficiariesSection } from '@/components/dashboard/affiliations/subprocess-beneficiaries-section'
 import { updateSubProcessStatus, assignSubProcess } from '@/lib/actions/affiliation.actions'
 import { getManagers } from '@/lib/actions/user.actions'
-import { AffiliationSubProcessStatus } from '@prisma/client'
+import { AffiliationSubProcessStatus, AffiliationSubProcessType } from '@prisma/client'
 import type { SafeUser } from '@/lib/types/auth.types'
 import type {
   AffiliationSubProcessWithRelations,
@@ -363,6 +365,44 @@ export function SubProcessPageClient({
               )}
             </CardContent>
           </Card>
+
+          {/* Beneficiaries section (only INCLUSION/EXCLUSION_BENEFICIARIOS process types) */}
+          {(subProcess.affiliation?.processType === 'INCLUSION_BENEFICIARIOS' ||
+            subProcess.affiliation?.processType === 'EXCLUSION_BENEFICIARIOS') && (
+            <SubProcessBeneficiariesSection
+              subProcessId={subProcess.id}
+              ownerClientId={subProcess.employeeId ?? clientId}
+              processType={subProcess.affiliation.processType}
+              initialBeneficiaryIds={
+                (subProcess.beneficiaries ?? []).map((link) => link.beneficiary.id)
+              }
+              readonly={subProcess.status === AffiliationSubProcessStatus.COMPLETED}
+            />
+          )}
+
+          {/* Disability fields (only INCAPACIDADES) */}
+          {subProcess.type === AffiliationSubProcessType.INCAPACIDADES && (
+            <SubProcessDisabilityFields
+              subProcessId={subProcess.id}
+              initial={{
+                disabilityStartDate: subProcess.disabilityStartDate
+                  ? new Date(subProcess.disabilityStartDate)
+                  : null,
+                disabilityEndDate: subProcess.disabilityEndDate
+                  ? new Date(subProcess.disabilityEndDate)
+                  : null,
+                bankRegistry: subProcess.bankRegistry ?? false,
+                transcription: subProcess.transcription ?? false,
+                collection: subProcess.collection ?? false,
+              }}
+              onUpdated={(fields) =>
+                setSubProcess((prev) => ({
+                  ...prev,
+                  ...fields,
+                }))
+              }
+            />
+          )}
 
           {/* Status Reason (if RETURNED) */}
           {subProcess.status === AffiliationSubProcessStatus.RETURNED &&

@@ -269,6 +269,9 @@ export function CreateEmployeeDialog({
                       <SelectItem value={EmployeeType.TIEMPO_PARCIAL}>
                         Trabajador tiempo parcial
                       </SelectItem>
+                      <SelectItem value={EmployeeType.INDEPENDIENTE_CONTRATISTA}>
+                        Independiente Contratista
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
