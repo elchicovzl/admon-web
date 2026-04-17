@@ -25,6 +25,12 @@ export const createAffiliationSchema = z.object({
         }),
         assignedToId: z.string().cuid('ID de manager inválido').optional().nullable(),
         employeeId: z.string().cuid('ID de empleado inválido').optional().nullable(),
+        disabilityStartDate: z.union([z.coerce.date(), z.null()]).optional(),
+        disabilityEndDate: z.union([z.coerce.date(), z.null()]).optional(),
+        bankRegistry: z.boolean().optional(),
+        transcription: z.boolean().optional(),
+        collection: z.boolean().optional(),
+        beneficiaryIds: z.array(z.string().cuid('ID de beneficiario inválido')).optional(),
       })
     )
     .min(1, 'Debe seleccionar al menos un sub-proceso'),
@@ -70,6 +76,24 @@ export const assignSubProcessSchema = z.object({
   subProcessId: z.string().cuid('ID de sub-proceso inválido'),
   managerId: z.string().cuid('ID de manager inválido').nullable(),
 })
+
+export const updateSubProcessBeneficiariesSchema = z.object({
+  subProcessId: z.string().cuid('ID de sub-proceso inválido'),
+  beneficiaryIds: z.array(z.string().cuid('ID de beneficiario inválido')),
+})
+
+export type UpdateSubProcessBeneficiariesInput = z.infer<typeof updateSubProcessBeneficiariesSchema>
+
+export const updateSubProcessDisabilityFieldsSchema = z.object({
+  subProcessId: z.string().cuid('ID de sub-proceso inválido'),
+  disabilityStartDate: z.union([z.coerce.date(), z.null()]).optional(),
+  disabilityEndDate: z.union([z.coerce.date(), z.null()]).optional(),
+  bankRegistry: z.boolean().optional(),
+  transcription: z.boolean().optional(),
+  collection: z.boolean().optional(),
+})
+
+export type UpdateSubProcessDisabilityFieldsInput = z.infer<typeof updateSubProcessDisabilityFieldsSchema>
 
 export const addSubProcessesSchema = z.object({
   affiliationId: z.string().cuid('ID de afiliación inválido'),

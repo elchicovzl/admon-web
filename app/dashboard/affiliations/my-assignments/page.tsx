@@ -117,26 +117,75 @@ async function AssignmentsStats() {
   )
 }
 
+type SearchParams = {
+  page?: string
+  pageSize?: string
+  company?: string
+  employee?: string
+  processType?: string
+  subProcess?: string
+  status?: string
+  sortBy?: string
+  sortDir?: string
+}
+
+function parseArgs(sp: SearchParams) {
+  return {
+    page: sp.page ? Math.max(1, parseInt(sp.page, 10) || 1) : 1,
+    pageSize: sp.pageSize ? Math.min(200, Math.max(5, parseInt(sp.pageSize, 10) || 25)) : 25,
+    company: sp.company?.trim() || undefined,
+    employee: sp.employee?.trim() || undefined,
+    processType: (sp.processType || undefined) as any,
+    subProcess: (sp.subProcess || undefined) as any,
+    status: (sp.status || undefined) as any,
+    sortBy: (sp.sortBy || undefined) as any,
+    sortDir: (sp.sortDir === 'asc' || sp.sortDir === 'desc' ? sp.sortDir : undefined) as
+      | 'asc'
+      | 'desc'
+      | undefined,
+  }
+}
+
 // Async component for table
-async function AssignmentsTable({ userId, userRole }: { userId: string; userRole: string }) {
-  const assignmentsResult = await getMyAssignments()
-  const assignments = assignmentsResult.success ? assignmentsResult.data || [] : []
+async function AssignmentsTable({
+  userId,
+  userRole,
+  args,
+}: {
+  userId: string
+  userRole: string
+  args: ReturnType<typeof parseArgs>
+}) {
+  const result = await getMyAssignments(args)
+  const pageData = result.success && result.data
+    ? result.data
+    : { data: [], total: 0, page: args.page, pageSize: args.pageSize, totalPages: 1 }
 
   return (
     <MyAssignmentsClient
-      initialAssignments={assignments}
+      initialPage={pageData}
       currentUserId={userId}
       currentUserRole={userRole}
     />
   )
 }
 
-export default async function MyAssignmentsPage() {
+export default async function MyAssignmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>
+}) {
   const session = await auth()
 
   if (!session?.user) {
     redirect('/login')
   }
+
+  const sp = await searchParams
+  const args = parseArgs(sp)
+
+  // Suspense key forces re-mount when args change so skeleton shows during navigation
+  const suspenseKey = JSON.stringify(args)
 
   return (
     <div className="space-y-6">
@@ -154,8 +203,8 @@ export default async function MyAssignmentsPage() {
       </Suspense>
 
       {/* Table - progressive rendering */}
-      <Suspense fallback={<MyAssignmentsTableSkeleton />}>
-        <AssignmentsTable userId={session.user.id} userRole={session.user.role} />
+      <Suspense key={suspenseKey} fallback={<MyAssignmentsTableSkeleton />}>
+        <AssignmentsTable userId={session.user.id} userRole={session.user.role} args={args} />
       </Suspense>
     </div>
   )

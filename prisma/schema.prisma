@@ -143,6 +143,7 @@ enum ClientType {
 enum EmployeeType {
   TIEMPO_COMPLETO
   TIEMPO_PARCIAL
+  INDEPENDIENTE_CONTRATISTA
 }
 
 enum WorkDaysRange {
@@ -428,13 +429,35 @@ model ClientBeneficiary {
   identificationType   IdentificationType
   identificationNumber String
 
+  // Exclusion state
+  isExcluded           Boolean            @default(false)
+  excludedAt           DateTime?
+
   // Timestamps
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
+  // Relations
+  subProcessLinks      AffiliationSubProcessBeneficiary[]
+
   @@map("client_beneficiaries")
   @@index([clientId])
   @@unique([clientId, identificationNumber])
+}
+
+// Junction: sub-process ↔ beneficiary (used for INCLUSION/EXCLUSION_BENEFICIARIOS process types)
+model AffiliationSubProcessBeneficiary {
+  id              String                @id @default(cuid())
+  subProcessId   String
+  subProcess     AffiliationSubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  beneficiaryId  String
+  beneficiary    ClientBeneficiary     @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  createdAt      DateTime              @default(now())
+
+  @@map("affiliation_subprocess_beneficiaries")
+  @@unique([subProcessId, beneficiaryId])
+  @@index([subProcessId])
+  @@index([beneficiaryId])
 }
 
 // Legal Representative model (for companies)
@@ -501,7 +524,7 @@ enum AffiliationProcessType {
   LIQUIDACIONES                    // Liquidaciones
   TRASLADO_EPS                     // Traslado de EPS
   COBRO_INCAPACIDADES              // Cobro Incapacidades
-  LIQUIDACION_PLANILLA_S           // Liquidacion PlanillaS
+  PENSIONADO                       // Pensionado
   INCLUSION_BENEFICIARIOS          // Inclusion Beneficiarios
   EXCLUSION_BENEFICIARIOS          // Exclusion de Beneficiarios
   ASESORIAS_PENSIONES              // Asesorias y pensiones
@@ -604,6 +627,13 @@ model AffiliationSubProcess {
   employeeId        String?
   employee          Client?                       @relation("SubProcessEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
 
+  // Disability-specific fields (only used when type = INCAPACIDADES)
+  disabilityStartDate DateTime?
+  disabilityEndDate   DateTime?
+  bankRegistry        Boolean                     @default(false)
+  transcription       Boolean                     @default(false)
+  collection          Boolean                     @default(false)
+
   // Timestamps
   createdAt         DateTime                      @default(now())
   updatedAt         DateTime                      @updatedAt
@@ -612,6 +642,7 @@ model AffiliationSubProcess {
   documents         AffiliationDocument[]
   observations      AffiliationObservation[]
   statusLogs        AffiliationStatusLog[]
+  beneficiaries     AffiliationSubProcessBeneficiary[]
 
   @@map("affiliation_subprocesses")
   @@index([affiliationId])
@@ -703,6 +734,9 @@ model SentEmail {
 
   // Attachments metadata (JSON array of {fileName, fileType, fileSize})
   attachments     String?     @db.Text
+
+  // Optional free-text notes ("novedades") included in the email body and kept for audit
+  emailNotes      String?     @db.Text
 
   // Audit trail
   sentById        String

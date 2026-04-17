@@ -51,7 +51,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getClients, getCompanyEmployees } from '@/lib/actions/client.actions'
 import { getManagers } from '@/lib/actions'
-import { createAffiliation } from '@/lib/actions/affiliation.actions'
+import { createAffiliation, getClientBeneficiaries } from '@/lib/actions/affiliation.actions'
 import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
@@ -70,7 +70,7 @@ const processTypeOptions = [
   { value: AffiliationProcessType.LIQUIDACIONES, label: 'Liquidaciones' },
   { value: AffiliationProcessType.TRASLADO_EPS, label: 'Traslado de EPS' },
   { value: AffiliationProcessType.COBRO_INCAPACIDADES, label: 'Cobro Incapacidades' },
-  { value: AffiliationProcessType.LIQUIDACION_PLANILLA_S, label: 'Liquidacion PlanillaS' },
+  { value: AffiliationProcessType.PENSIONADO, label: 'Pensionado' },
   { value: AffiliationProcessType.INCLUSION_BENEFICIARIOS, label: 'Inclusion Beneficiarios' },
   { value: AffiliationProcessType.EXCLUSION_BENEFICIARIOS, label: 'Exclusión de Beneficiarios' },
   { value: AffiliationProcessType.ASESORIAS_PENSIONES, label: 'Asesorias y pensiones' },
@@ -89,6 +89,11 @@ const createAffiliationFormSchema = z.object({
       type: z.nativeEnum(AffiliationSubProcessType),
       assignedToId: z.string().nullable(),
       assignToSelf: z.boolean(),
+      disabilityStartDate: z.date().nullable().optional(),
+      disabilityEndDate: z.date().nullable().optional(),
+      bankRegistry: z.boolean().optional(),
+      transcription: z.boolean().optional(),
+      collection: z.boolean().optional(),
     })
   ).min(1, 'Debe seleccionar al menos un sub-proceso'),
 })
@@ -117,6 +122,18 @@ export function AffiliationCreateWizard({
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [comboboxOpen, setComboboxOpen] = useState(false)
   const [navigating, setNavigating] = useState(false)
+
+  // Beneficiary selection state (INDIVIDUAL + INCLUSION/EXCLUSION_BENEFICIARIOS)
+  const [beneficiaries, setBeneficiaries] = useState<Array<{
+    id: string
+    tipoRelacion: string
+    nombreCompleto: string
+    identificationType: string
+    identificationNumber: string
+    isExcluded: boolean
+  }>>([])
+  const [selectedBeneficiaryIds, setSelectedBeneficiaryIds] = useState<string[]>([])
+  const [loadingBeneficiaries, setLoadingBeneficiaries] = useState(false)
 
   // Employee selection state (for EMPRESA clients)
   const [companyEmployees, setCompanyEmployees] = useState<SafeClient[]>([])
@@ -176,6 +193,19 @@ export function AffiliationCreateWizard({
     }
   }
 
+  async function loadBeneficiaries(clientId: string) {
+    setLoadingBeneficiaries(true)
+    try {
+      const result = await getClientBeneficiaries(clientId)
+      setBeneficiaries(result.success && result.data ? result.data : [])
+    } catch (error) {
+      console.error('Error loading beneficiaries:', error)
+      setBeneficiaries([])
+    } finally {
+      setLoadingBeneficiaries(false)
+    }
+  }
+
   async function loadCompanyEmployees(companyId: string) {
     setLoadingEmployees(true)
     try {
@@ -197,9 +227,11 @@ export function AffiliationCreateWizard({
     setSelectedClient(client)
     form.setValue('clientId', client.id)
     setComboboxOpen(false)
-    // Reset employee selections when client changes
+    // Reset employee + beneficiary selections when client changes
     setCompanyEmployees([])
     setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
+    setBeneficiaries([])
+    setSelectedBeneficiaryIds([])
   }
 
   function handleNextStep() {
@@ -221,6 +253,14 @@ export function AffiliationCreateWizard({
       // Load employees if EMPRESA
       if (selectedClient?.clientType === 'EMPRESA') {
         loadCompanyEmployees(selectedClient.id)
+      }
+      // Load beneficiaries if INDIVIDUAL + INCLUSION/EXCLUSION
+      const needsBeneficiaries =
+        selectedClient?.clientType !== 'EMPRESA' &&
+        (pt === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
+          pt === AffiliationProcessType.EXCLUSION_BENEFICIARIOS)
+      if (needsBeneficiaries && selectedClient) {
+        loadBeneficiaries(selectedClient.id)
       }
       setStep(2)
     }
@@ -265,6 +305,15 @@ export function AffiliationCreateWizard({
       }
     }
 
+    // Validate beneficiary selection (INDIVIDUAL + INCLUSION/EXCLUSION)
+    const isBeneficiaryProcess =
+      data.processType === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
+      data.processType === AffiliationProcessType.EXCLUSION_BENEFICIARIOS
+    if (isBeneficiaryProcess && !isEmpresa && selectedBeneficiaryIds.length === 0) {
+      toast.error('Debe seleccionar al menos un beneficiario')
+      return
+    }
+
     setLoading(true)
     try {
       // Build sub-processes array
@@ -272,6 +321,25 @@ export function AffiliationCreateWizard({
 
       for (const sp of data.subProcesses) {
         const assignedToId = sp.assignToSelf ? currentUserId : sp.assignedToId
+
+        const isDisability = sp.type === AffiliationSubProcessType.INCAPACIDADES
+        const disabilityFields = isDisability
+          ? {
+              disabilityStartDate: sp.disabilityStartDate ?? null,
+              disabilityEndDate: sp.disabilityEndDate ?? null,
+              bankRegistry: sp.bankRegistry ?? false,
+              transcription: sp.transcription ?? false,
+              collection: sp.collection ?? false,
+            }
+          : {}
+
+        const isBeneficiaryProcess =
+          data.processType === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
+          data.processType === AffiliationProcessType.EXCLUSION_BENEFICIARIOS
+        const beneficiaryFields =
+          isBeneficiaryProcess && !isEmpresa && selectedBeneficiaryIds.length > 0
+            ? { beneficiaryIds: selectedBeneficiaryIds }
+            : {}
 
         if (isEmpresa) {
           // Expand to one sub-process per employee
@@ -281,6 +349,7 @@ export function AffiliationCreateWizard({
               type: sp.type,
               assignedToId,
               employeeId,
+              ...disabilityFields,
             })
           }
         } else {
@@ -288,6 +357,8 @@ export function AffiliationCreateWizard({
           transformedSubProcesses.push({
             type: sp.type,
             assignedToId,
+            ...disabilityFields,
+            ...beneficiaryFields,
           })
         }
       }
@@ -314,6 +385,8 @@ export function AffiliationCreateWizard({
         setSelectedClient(null)
         setCompanyEmployees([])
         setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
+        setBeneficiaries([])
+        setSelectedBeneficiaryIds([])
         setNavigating(true)
         onAffiliationCreated?.()
         // Redirect to detail page — modal closes naturally when page navigates
@@ -363,6 +436,23 @@ export function AffiliationCreateWizard({
     const current = form.getValues('subProcesses')
     const updated = current.map((sp) =>
       sp.type === type ? { ...sp, assignedToId, assignToSelf } : sp
+    )
+    form.setValue('subProcesses', updated)
+  }
+
+  function updateSubProcessDisability(
+    type: AffiliationSubProcessType,
+    patch: Partial<{
+      disabilityStartDate: Date | null
+      disabilityEndDate: Date | null
+      bankRegistry: boolean
+      transcription: boolean
+      collection: boolean
+    }>
+  ) {
+    const current = form.getValues('subProcesses')
+    const updated = current.map((sp) =>
+      sp.type === type ? { ...sp, ...patch } : sp
     )
     form.setValue('subProcesses', updated)
   }
@@ -600,6 +690,105 @@ export function AffiliationCreateWizard({
               {/* STEP 2: CONFIGURE SUB-PROCESSES */}
               {step === 2 && (
                 <div className="space-y-4">
+                  {/* Beneficiary selection (INDIVIDUAL + INCLUSION/EXCLUSION_BENEFICIARIOS) */}
+                  {!isEmpresa &&
+                    (form.watch('processType') === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
+                      form.watch('processType') === AffiliationProcessType.EXCLUSION_BENEFICIARIOS) && (
+                      <Card className="border-primary/40 bg-primary/5">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base">
+                            {form.watch('processType') === AffiliationProcessType.EXCLUSION_BENEFICIARIOS
+                              ? 'Beneficiarios a excluir *'
+                              : 'Beneficiarios a incluir *'}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {loadingBeneficiaries ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Cargando beneficiarios...
+                            </div>
+                          ) : beneficiaries.length === 0 ? (
+                            <div className="flex items-center gap-2 rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
+                              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                              Este cliente no tiene beneficiarios registrados. Agregalos desde el perfil del cliente primero.
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">
+                                  {selectedBeneficiaryIds.length} de {beneficiaries.length} seleccionados
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-auto py-1 px-2 text-xs"
+                                  onClick={() =>
+                                    setSelectedBeneficiaryIds((prev) =>
+                                      prev.length === beneficiaries.length
+                                        ? []
+                                        : beneficiaries.map((b) => b.id)
+                                    )
+                                  }
+                                >
+                                  {selectedBeneficiaryIds.length === beneficiaries.length
+                                    ? 'Deseleccionar todos'
+                                    : 'Seleccionar todos'}
+                                </Button>
+                              </div>
+                              <div className="max-h-56 overflow-y-auto rounded-md border bg-background p-2 space-y-1">
+                                {beneficiaries.map((b) => {
+                                  const checked = selectedBeneficiaryIds.includes(b.id)
+                                  return (
+                                    <div
+                                      key={b.id}
+                                      className={cn(
+                                        'flex items-center gap-2 rounded-sm px-2 py-1.5 cursor-pointer hover:bg-muted/50',
+                                        checked && 'bg-muted/30'
+                                      )}
+                                      onClick={() =>
+                                        setSelectedBeneficiaryIds((prev) =>
+                                          prev.includes(b.id)
+                                            ? prev.filter((id) => id !== b.id)
+                                            : [...prev, b.id]
+                                        )
+                                      }
+                                    >
+                                      <div
+                                        className={cn(
+                                          'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border',
+                                          checked ? 'bg-primary border-primary' : 'border-input'
+                                        )}
+                                      >
+                                        {checked && <Check className="h-3 w-3 text-primary-foreground" />}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">
+                                          {b.nombreCompleto}{' '}
+                                          <span className="text-xs text-muted-foreground">
+                                            ({b.tipoRelacion})
+                                          </span>
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {b.identificationType} {b.identificationNumber}
+                                          {b.isExcluded && (
+                                            <Badge variant="outline" className="ml-2 text-[10px] border-red-300 text-red-700">
+                                              Ya excluido
+                                            </Badge>
+                                          )}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
                   {/* Show employee loading/warning for EMPRESA */}
                   {isEmpresa && loadingEmployees && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -613,6 +802,16 @@ export function AffiliationCreateWizard({
                       Esta empresa no tiene empleados registrados. Debe agregar empleados desde el perfil del cliente antes de crear una afiliación.
                     </div>
                   )}
+                  {isEmpresa &&
+                    (form.watch('processType') === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
+                      form.watch('processType') === AffiliationProcessType.EXCLUSION_BENEFICIARIOS) && (
+                      <div className="flex items-start gap-2 rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                        <span>
+                          Los beneficiarios a {form.watch('processType') === AffiliationProcessType.EXCLUSION_BENEFICIARIOS ? 'excluir' : 'incluir'} se seleccionan por empleado desde el detalle de cada sub-proceso, una vez creado.
+                        </span>
+                      </div>
+                    )}
 
                   <FormField
                     control={form.control}
@@ -653,6 +852,96 @@ export function AffiliationCreateWizard({
                                 </CardHeader>
                                 {isSelected && (
                                   <CardContent className="space-y-3">
+                                    {/* Disability-specific fields (only INCAPACIDADES + non-EMPRESA clients) */}
+                                    {spType.value === AffiliationSubProcessType.INCAPACIDADES && !isEmpresa && (
+                                      <div className="rounded-md border bg-rose-50/50 p-3 space-y-3">
+                                        <p className="text-xs font-semibold text-rose-900">Datos de la incapacidad</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                          <div>
+                                            <label className="text-xs font-medium">Fecha inicio</label>
+                                            <Popover>
+                                              <PopoverTrigger asChild>
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className={cn(
+                                                    'w-full justify-start text-left font-normal mt-1',
+                                                    !subProcess?.disabilityStartDate && 'text-muted-foreground'
+                                                  )}
+                                                >
+                                                  {subProcess?.disabilityStartDate
+                                                    ? format(subProcess.disabilityStartDate as Date, 'd MMM yyyy', { locale: es })
+                                                    : 'Seleccionar...'}
+                                                  <CalendarIcon className="ml-auto h-3 w-3 opacity-50" />
+                                                </Button>
+                                              </PopoverTrigger>
+                                              <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                  mode="single"
+                                                  selected={(subProcess?.disabilityStartDate as Date | undefined) ?? undefined}
+                                                  onSelect={(d) => updateSubProcessDisability(spType.value, { disabilityStartDate: d ?? null })}
+                                                  locale={es}
+                                                />
+                                              </PopoverContent>
+                                            </Popover>
+                                          </div>
+                                          <div>
+                                            <label className="text-xs font-medium">Fecha fin</label>
+                                            <Popover>
+                                              <PopoverTrigger asChild>
+                                                <Button
+                                                  type="button"
+                                                  variant="outline"
+                                                  size="sm"
+                                                  className={cn(
+                                                    'w-full justify-start text-left font-normal mt-1',
+                                                    !subProcess?.disabilityEndDate && 'text-muted-foreground'
+                                                  )}
+                                                >
+                                                  {subProcess?.disabilityEndDate
+                                                    ? format(subProcess.disabilityEndDate as Date, 'd MMM yyyy', { locale: es })
+                                                    : 'Seleccionar...'}
+                                                  <CalendarIcon className="ml-auto h-3 w-3 opacity-50" />
+                                                </Button>
+                                              </PopoverTrigger>
+                                              <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                  mode="single"
+                                                  selected={(subProcess?.disabilityEndDate as Date | undefined) ?? undefined}
+                                                  onSelect={(d) => updateSubProcessDisability(spType.value, { disabilityEndDate: d ?? null })}
+                                                  locale={es}
+                                                />
+                                              </PopoverContent>
+                                            </Popover>
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-4">
+                                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                            <Checkbox
+                                              checked={subProcess?.bankRegistry ?? false}
+                                              onCheckedChange={(v) => updateSubProcessDisability(spType.value, { bankRegistry: !!v })}
+                                            />
+                                            Registro de banco
+                                          </label>
+                                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                            <Checkbox
+                                              checked={subProcess?.transcription ?? false}
+                                              onCheckedChange={(v) => updateSubProcessDisability(spType.value, { transcription: !!v })}
+                                            />
+                                            Transcripción
+                                          </label>
+                                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                                            <Checkbox
+                                              checked={subProcess?.collection ?? false}
+                                              onCheckedChange={(v) => updateSubProcessDisability(spType.value, { collection: !!v })}
+                                            />
+                                            Cobro
+                                          </label>
+                                        </div>
+                                      </div>
+                                    )}
+
                                     {/* Employee selection for EMPRESA clients */}
                                     {isEmpresa && companyEmployees.length > 0 && (
                                       <div className="space-y-2">

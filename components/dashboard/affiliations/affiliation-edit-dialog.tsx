@@ -50,7 +50,7 @@ const processTypeOptions = [
   { value: AffiliationProcessType.LIQUIDACIONES, label: 'Liquidaciones' },
   { value: AffiliationProcessType.TRASLADO_EPS, label: 'Traslado de EPS' },
   { value: AffiliationProcessType.COBRO_INCAPACIDADES, label: 'Cobro Incapacidades' },
-  { value: AffiliationProcessType.LIQUIDACION_PLANILLA_S, label: 'Liquidacion PlanillaS' },
+  { value: AffiliationProcessType.PENSIONADO, label: 'Pensionado' },
   { value: AffiliationProcessType.INCLUSION_BENEFICIARIOS, label: 'Inclusion Beneficiarios' },
   { value: AffiliationProcessType.ASESORIAS_PENSIONES, label: 'Asesorias y pensiones' },
   { value: AffiliationProcessType.OTRO, label: 'Otro' },

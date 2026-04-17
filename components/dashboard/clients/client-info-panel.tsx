@@ -53,6 +53,7 @@ const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
 const EMPLOYEE_TYPE_LABELS: Record<EmployeeType, string> = {
   TIEMPO_COMPLETO: 'Tiempo completo',
   TIEMPO_PARCIAL: 'Tiempo parcial',
+  INDEPENDIENTE_CONTRATISTA: 'Independiente Contratista',
 }
 
 const WORK_DAYS_LABELS: Record<WorkDaysRange, string> = {

@@ -42,6 +42,11 @@ export interface AffiliationSubProcess {
   assignedToId: string | null
   employeeId: string | null
   statusReason: string | null
+  disabilityStartDate: Date | null
+  disabilityEndDate: Date | null
+  bankRegistry: boolean
+  transcription: boolean
+  collection: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -106,6 +111,11 @@ export interface SafeAffiliationSubProcess {
   assignedToId: string | null
   employeeId: string | null
   statusReason: string | null
+  disabilityStartDate: Date | null
+  disabilityEndDate: Date | null
+  bankRegistry: boolean
+  transcription: boolean
+  collection: boolean
   createdAt: Date
   updatedAt: Date
 }
@@ -170,6 +180,19 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
   affiliation?: {
     id: string
     clientId: string
+    affiliationNumber?: string
+    processType?: AffiliationProcessType | null
+    processTypeOther?: string | null
+    startDate?: Date | null
+    client?: {
+      id: string
+      fullName: string
+      email?: string
+      phone?: string
+      identificationType?: string
+      identificationNumber?: string
+      clientType?: string
+    }
   }
   assignedTo?: {
     id: string
@@ -184,6 +207,7 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
   documents?: SafeAffiliationDocument[]
   observations?: AffiliationObservationWithRelations[]
   statusLogs?: AffiliationStatusLogWithRelations[]
+  beneficiaries?: SubProcessBeneficiary[]
 }
 
 export interface AffiliationObservationWithRelations extends SafeAffiliationObservation {
@@ -212,7 +236,27 @@ export interface CreateAffiliationInput {
     type: AffiliationSubProcessType
     assignedToId?: string | null
     employeeId?: string | null
+    disabilityStartDate?: Date | null
+    disabilityEndDate?: Date | null
+    bankRegistry?: boolean
+    transcription?: boolean
+    collection?: boolean
+    beneficiaryIds?: string[]
   }[]
+}
+
+export interface SubProcessBeneficiary {
+  id: string
+  beneficiary: {
+    id: string
+    clientId: string
+    tipoRelacion: string
+    nombreCompleto: string
+    identificationType: string
+    identificationNumber: string
+    isExcluded: boolean
+    excludedAt: Date | null
+  }
 }
 
 export interface UpdateAffiliationInput {
@@ -274,6 +318,35 @@ export interface MyAssignmentsStats {
   inReview: number
   completed: number
   returned: number
+}
+
+export type MyAssignmentsSortBy =
+  | 'createdAt'
+  | 'updatedAt'
+  | 'startDate'
+  | 'status'
+  | 'subProcess'
+  | 'company'
+  | 'employee'
+
+export interface GetMyAssignmentsArgs {
+  page?: number
+  pageSize?: number
+  company?: string
+  employee?: string
+  processType?: AffiliationProcessType
+  subProcess?: AffiliationSubProcessType
+  status?: AffiliationSubProcessStatus
+  sortBy?: MyAssignmentsSortBy
+  sortDir?: 'asc' | 'desc'
+}
+
+export interface MyAssignmentsPage {
+  data: AffiliationSubProcessWithRelations[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 // ========================================
@@ -385,7 +458,7 @@ export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string
   LIQUIDACIONES: 'Liquidaciones',
   TRASLADO_EPS: 'Traslado de EPS',
   COBRO_INCAPACIDADES: 'Cobro Incapacidades',
-  LIQUIDACION_PLANILLA_S: 'Liquidacion PlanillaS',
+  PENSIONADO: 'Pensionado',
   INCLUSION_BENEFICIARIOS: 'Inclusion Beneficiarios',
   EXCLUSION_BENEFICIARIOS: 'Exclusión de Beneficiarios',
   ASESORIAS_PENSIONES: 'Asesorias y pensiones',
@@ -423,10 +496,18 @@ export interface EmailComposeData {
   clientName: string
   affiliationNumber: string
   processTypeLabel: string
+  processTypeAction?: 'INCLUSION_BENEFICIARIOS' | 'EXCLUSION_BENEFICIARIOS' | null
   subProcesses: {
     id: string
     type: string
     label: string
+    employeeName?: string | null
+    beneficiaries?: {
+      nombreCompleto: string
+      tipoRelacion: string
+      identificationType: string
+      identificationNumber: string
+    }[]
   }[]
   documents: EmailComposeDocument[]
 }

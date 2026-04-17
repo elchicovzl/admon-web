@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { UserRole, AffiliationSubProcessStatus, AffiliationStatus, ClientType } from '@prisma/client'
+import { UserRole, AffiliationSubProcessStatus, AffiliationSubProcessType, AffiliationStatus, ClientType } from '@prisma/client'
 import { decryptPassword } from '@/lib/encryption/credentials'
 import {
   createAffiliationSchema,
@@ -415,6 +415,16 @@ export async function createAffiliation(
             status: AffiliationSubProcessStatus.NOT_STARTED,
             assignedToId: sp.assignedToId,
             employeeId: sp.employeeId ?? null,
+            disabilityStartDate: sp.disabilityStartDate ?? null,
+            disabilityEndDate: sp.disabilityEndDate ?? null,
+            bankRegistry: sp.bankRegistry ?? false,
+            transcription: sp.transcription ?? false,
+            collection: sp.collection ?? false,
+            beneficiaries: sp.beneficiaryIds && sp.beneficiaryIds.length > 0
+              ? {
+                  create: sp.beneficiaryIds.map((bId) => ({ beneficiaryId: bId })),
+                }
+              : undefined,
           })),
         },
       },
@@ -719,12 +729,18 @@ export const getSubProcessById = cache(async (
         assignedToId: true,
         employeeId: true,
         statusReason: true,
+        disabilityStartDate: true,
+        disabilityEndDate: true,
+        bankRegistry: true,
+        transcription: true,
+        collection: true,
         createdAt: true,
         updatedAt: true,
         affiliation: {
           select: {
             id: true,
             clientId: true,
+            processType: true,
           },
         },
         assignedTo: {
@@ -739,6 +755,23 @@ export const getSubProcessById = cache(async (
           select: {
             id: true,
             fullName: true,
+          },
+        },
+        beneficiaries: {
+          select: {
+            id: true,
+            beneficiary: {
+              select: {
+                id: true,
+                clientId: true,
+                tipoRelacion: true,
+                nombreCompleto: true,
+                identificationType: true,
+                identificationNumber: true,
+                isExcluded: true,
+                excludedAt: true,
+              },
+            },
           },
         },
         documents: {
@@ -829,6 +862,10 @@ export async function updateSubProcessStatus(
 
     const subProcess = await prisma.affiliationSubProcess.findUnique({
       where: { id: data.subProcessId },
+      include: {
+        affiliation: { select: { processType: true } },
+        beneficiaries: { include: { beneficiary: true } },
+      },
     })
 
     if (!subProcess) {
@@ -859,7 +896,12 @@ export async function updateSubProcessStatus(
           assignedToId: true,
           employeeId: true,
           statusReason: true,
-            createdAt: true,
+          disabilityStartDate: true,
+          disabilityEndDate: true,
+          bankRegistry: true,
+          transcription: true,
+          collection: true,
+          createdAt: true,
           updatedAt: true,
         },
       }),
@@ -873,6 +915,37 @@ export async function updateSubProcessStatus(
         },
       }),
     ])
+
+    // Beneficiary exclusion/inclusion side-effect on COMPLETED
+    if (
+      data.status === AffiliationSubProcessStatus.COMPLETED &&
+      subProcess.beneficiaries.length > 0 &&
+      (subProcess.affiliation.processType === 'EXCLUSION_BENEFICIARIOS' ||
+        subProcess.affiliation.processType === 'INCLUSION_BENEFICIARIOS')
+    ) {
+      const isExclusion = subProcess.affiliation.processType === 'EXCLUSION_BENEFICIARIOS'
+      const beneficiaryIds = subProcess.beneficiaries.map((b) => b.beneficiaryId)
+      const names = subProcess.beneficiaries.map((b) => b.beneficiary.nombreCompleto)
+
+      await prisma.$transaction([
+        prisma.clientBeneficiary.updateMany({
+          where: { id: { in: beneficiaryIds } },
+          data: {
+            isExcluded: isExclusion,
+            excludedAt: isExclusion ? new Date() : null,
+          },
+        }),
+        prisma.affiliationObservation.create({
+          data: {
+            subProcessId: data.subProcessId,
+            createdById: authCheck.userId!,
+            content: isExclusion
+              ? `Se excluyeron los siguientes beneficiarios: ${names.join(', ')}`
+              : `Se incluyeron los siguientes beneficiarios: ${names.join(', ')}`,
+          },
+        }),
+      ])
+    }
 
     revalidatePath('/dashboard/affiliations')
     revalidatePath(`/dashboard/affiliations/${subProcess.affiliationId}`)
@@ -942,6 +1015,11 @@ export async function assignSubProcess(
         assignedToId: true,
         employeeId: true,
         statusReason: true,
+        disabilityStartDate: true,
+        disabilityEndDate: true,
+        bankRegistry: true,
+        transcription: true,
+        collection: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -961,6 +1039,199 @@ export async function assignSubProcess(
   } catch (error) {
     console.error('Error assigning sub-process:', error)
     return { success: false, error: 'Error al asignar el sub-proceso' }
+  }
+}
+
+/**
+ * Get beneficiaries for a client (used when selecting who to include/exclude)
+ */
+export async function getClientBeneficiaries(
+  clientId: string
+): Promise<ActionResponse<Array<{
+  id: string
+  tipoRelacion: string
+  nombreCompleto: string
+  identificationType: string
+  identificationNumber: string
+  isExcluded: boolean
+}>>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const beneficiaries = await prisma.clientBeneficiary.findMany({
+      where: { clientId },
+      select: {
+        id: true,
+        tipoRelacion: true,
+        nombreCompleto: true,
+        identificationType: true,
+        identificationNumber: true,
+        isExcluded: true,
+      },
+      orderBy: { nombreCompleto: 'asc' },
+    })
+
+    return { success: true, data: beneficiaries }
+  } catch (error) {
+    console.error('Error fetching beneficiaries:', error)
+    return { success: false, error: 'Error al obtener beneficiarios' }
+  }
+}
+
+/**
+ * Replace the set of beneficiaries linked to a sub-process.
+ * Only valid for subprocesses of processes with type INCLUSION/EXCLUSION_BENEFICIARIOS.
+ */
+export async function updateSubProcessBeneficiaries(
+  data: import('@/lib/validations/affiliation.schema').UpdateSubProcessBeneficiariesInput
+): Promise<ActionResponse<{ count: number }>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const { updateSubProcessBeneficiariesSchema } = await import('@/lib/validations/affiliation.schema')
+    const validation = updateSubProcessBeneficiariesSchema.safeParse(data)
+    if (!validation.success) {
+      return { success: false, error: validation.error.errors[0].message }
+    }
+
+    const subProcess = await prisma.affiliationSubProcess.findUnique({
+      where: { id: data.subProcessId },
+      select: {
+        id: true,
+        employeeId: true,
+        affiliationId: true,
+        affiliation: { select: { clientId: true, processType: true } },
+      },
+    })
+
+    if (!subProcess) {
+      return { success: false, error: 'Sub-proceso no encontrado' }
+    }
+
+    const pt = subProcess.affiliation.processType
+    if (pt !== 'INCLUSION_BENEFICIARIOS' && pt !== 'EXCLUSION_BENEFICIARIOS') {
+      return {
+        success: false,
+        error: 'Solo procesos de inclusión/exclusión de beneficiarios pueden vincular beneficiarios',
+      }
+    }
+
+    // Validate beneficiary ownership: must belong to the employee (if EMPRESA) or the client
+    const ownerId = subProcess.employeeId ?? subProcess.affiliation.clientId
+    if (data.beneficiaryIds.length > 0) {
+      const count = await prisma.clientBeneficiary.count({
+        where: { id: { in: data.beneficiaryIds }, clientId: ownerId },
+      })
+      if (count !== data.beneficiaryIds.length) {
+        return { success: false, error: 'Uno o más beneficiarios no pertenecen al cliente' }
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.affiliationSubProcessBeneficiary.deleteMany({
+        where: { subProcessId: data.subProcessId },
+      }),
+      ...(data.beneficiaryIds.length > 0
+        ? [
+            prisma.affiliationSubProcessBeneficiary.createMany({
+              data: data.beneficiaryIds.map((bId) => ({
+                subProcessId: data.subProcessId,
+                beneficiaryId: bId,
+              })),
+            }),
+          ]
+        : []),
+    ])
+
+    revalidatePath(`/dashboard/affiliations/${subProcess.affiliationId}`)
+    revalidatePath(`/dashboard/affiliations/${subProcess.affiliationId}/subprocess/${data.subProcessId}`)
+    revalidatePath('/dashboard/affiliations/my-assignments')
+
+    return { success: true, data: { count: data.beneficiaryIds.length } }
+  } catch (error) {
+    console.error('Error updating subprocess beneficiaries:', error)
+    return { success: false, error: 'Error al actualizar beneficiarios' }
+  }
+}
+
+/**
+ * Update disability-specific fields for a sub-process (only valid for INCAPACIDADES)
+ */
+export async function updateSubProcessDisabilityFields(
+  data: import('@/lib/validations/affiliation.schema').UpdateSubProcessDisabilityFieldsInput
+): Promise<ActionResponse<SafeAffiliationSubProcess>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const { updateSubProcessDisabilityFieldsSchema } = await import('@/lib/validations/affiliation.schema')
+    const validation = updateSubProcessDisabilityFieldsSchema.safeParse(data)
+    if (!validation.success) {
+      return { success: false, error: validation.error.errors[0].message }
+    }
+
+    const subProcess = await prisma.affiliationSubProcess.findUnique({
+      where: { id: data.subProcessId },
+      select: { id: true, type: true, affiliationId: true },
+    })
+
+    if (!subProcess) {
+      return { success: false, error: 'Sub-proceso no encontrado' }
+    }
+
+    if (subProcess.type !== AffiliationSubProcessType.INCAPACIDADES) {
+      return { success: false, error: 'Estos campos solo aplican a sub-procesos de INCAPACIDADES' }
+    }
+
+    const updateData: Record<string, unknown> = {}
+    if (data.disabilityStartDate !== undefined) updateData.disabilityStartDate = data.disabilityStartDate
+    if (data.disabilityEndDate !== undefined) updateData.disabilityEndDate = data.disabilityEndDate
+    if (data.bankRegistry !== undefined) updateData.bankRegistry = data.bankRegistry
+    if (data.transcription !== undefined) updateData.transcription = data.transcription
+    if (data.collection !== undefined) updateData.collection = data.collection
+
+    const updated = await prisma.affiliationSubProcess.update({
+      where: { id: data.subProcessId },
+      data: updateData,
+      select: {
+        id: true,
+        affiliationId: true,
+        type: true,
+        status: true,
+        assignedToId: true,
+        employeeId: true,
+        statusReason: true,
+        disabilityStartDate: true,
+        disabilityEndDate: true,
+        bankRegistry: true,
+        transcription: true,
+        collection: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    revalidatePath('/dashboard/affiliations')
+    revalidatePath(`/dashboard/affiliations/${subProcess.affiliationId}`)
+    revalidatePath(`/dashboard/affiliations/${subProcess.affiliationId}/subprocess/${data.subProcessId}`)
+    revalidatePath('/dashboard/affiliations/my-assignments')
+
+    return {
+      success: true,
+      data: updated,
+      message: 'Campos de incapacidad actualizados',
+    }
+  } catch (error) {
+    console.error('Error updating disability fields:', error)
+    return { success: false, error: 'Error al actualizar campos de incapacidad' }
   }
 }
 
@@ -1085,14 +1356,17 @@ export async function addSubProcesses(
 /**
  * Get manager's assigned sub-processes
  */
-export const getMyAssignments = cache(async (
-  statusFilter?: AffiliationSubProcessStatus
-): Promise<ActionResponse<AffiliationSubProcessWithRelations[]>> => {
+export async function getMyAssignments(
+  args: import('@/lib/types/affiliation.types').GetMyAssignmentsArgs = {}
+): Promise<ActionResponse<import('@/lib/types/affiliation.types').MyAssignmentsPage>> {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error }
     }
+
+    const page = Math.max(1, args.page ?? 1)
+    const pageSize = Math.min(200, Math.max(5, args.pageSize ?? 25))
 
     const whereClause: any = {
       assignedToId: authCheck.userId,
@@ -1102,99 +1376,146 @@ export const getMyAssignments = cache(async (
       },
     }
 
-    if (statusFilter) {
-      whereClause.status = statusFilter
+    if (args.status) whereClause.status = args.status
+    if (args.subProcess) whereClause.type = args.subProcess
+
+    if (args.processType) {
+      whereClause.affiliation = { ...whereClause.affiliation, processType: args.processType }
+    }
+    if (args.company) {
+      whereClause.affiliation = {
+        ...whereClause.affiliation,
+        client: { fullName: { contains: args.company, mode: 'insensitive' } },
+      }
+    }
+    if (args.employee) {
+      whereClause.employee = { fullName: { contains: args.employee, mode: 'insensitive' } }
     }
 
-    const subProcesses = await prisma.affiliationSubProcess.findMany({
-      where: whereClause,
-      select: {
-        id: true,
-        affiliationId: true,
-        type: true,
-        status: true,
-        assignedToId: true,
-        employeeId: true,
-        statusReason: true,
-        createdAt: true,
-        updatedAt: true,
-        affiliation: {
-          select: {
-            id: true,
-            affiliationNumber: true,
-            clientId: true,
-            client: {
-              select: {
-                id: true,
-                fullName: true,
-                email: true,
-                phone: true,
-                identificationType: true,
-                identificationNumber: true,
-                clientType: true,
-              },
-            },
-          },
-        },
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-          },
-        },
-        employee: {
-          select: {
-            id: true,
-            fullName: true,
-          },
-        },
-        documents: {
-          select: {
-            id: true,
-            subProcessId: true,
-            fileName: true,
-            fileUrl: true,
-            fileType: true,
-            fileSize: true,
-            s3Key: true,
-            category: true,
-            createdAt: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-        observations: {
-          select: {
-            id: true,
-            content: true,
-            subProcessId: true,
-            createdAt: true,
-            updatedAt: true,
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-      },
-      orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
-    })
+    // Resolve dynamic orderBy
+    const dir: 'asc' | 'desc' = args.sortDir ?? 'desc'
+    let orderBy: any
+    switch (args.sortBy) {
+      case 'startDate':
+        orderBy = { affiliation: { startDate: dir } }
+        break
+      case 'company':
+        orderBy = { affiliation: { client: { fullName: dir } } }
+        break
+      case 'employee':
+        orderBy = { employee: { fullName: dir } }
+        break
+      case 'status':
+        orderBy = { status: dir }
+        break
+      case 'subProcess':
+        orderBy = { type: dir }
+        break
+      case 'updatedAt':
+        orderBy = { updatedAt: dir }
+        break
+      case 'createdAt':
+        orderBy = { createdAt: dir }
+        break
+      default:
+        orderBy = [{ status: 'asc' }, { updatedAt: 'desc' }]
+    }
 
-    return { success: true, data: subProcesses as any }
+    const [subProcesses, total] = await Promise.all([
+      prisma.affiliationSubProcess.findMany({
+        where: whereClause,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy,
+        select: {
+          id: true,
+          affiliationId: true,
+          type: true,
+          status: true,
+          assignedToId: true,
+          employeeId: true,
+          statusReason: true,
+          disabilityStartDate: true,
+          disabilityEndDate: true,
+          bankRegistry: true,
+          transcription: true,
+          collection: true,
+          createdAt: true,
+          updatedAt: true,
+          affiliation: {
+            select: {
+              id: true,
+              affiliationNumber: true,
+              clientId: true,
+              processType: true,
+              processTypeOther: true,
+              startDate: true,
+              client: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                  phone: true,
+                  identificationType: true,
+                  identificationNumber: true,
+                  clientType: true,
+                },
+              },
+            },
+          },
+          assignedTo: {
+            select: { id: true, name: true, email: true, image: true },
+          },
+          employee: {
+            select: { id: true, fullName: true },
+          },
+          documents: {
+            select: {
+              id: true,
+              subProcessId: true,
+              fileName: true,
+              fileUrl: true,
+              fileType: true,
+              fileSize: true,
+              s3Key: true,
+              category: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+          observations: {
+            select: {
+              id: true,
+              content: true,
+              subProcessId: true,
+              createdAt: true,
+              updatedAt: true,
+              createdBy: { select: { id: true, name: true, email: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      }),
+      prisma.affiliationSubProcess.count({ where: whereClause }),
+    ])
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+    return {
+      success: true,
+      data: {
+        data: subProcesses as any,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      },
+    }
   } catch (error) {
     console.error('Error fetching my assignments:', error)
     return { success: false, error: 'Error al obtener las asignaciones' }
   }
-})
+}
 
 /**
  * Get my assignments stats
@@ -1801,6 +2122,13 @@ export async function getAffiliationEmailData(
             identificationNumber: true,
             clientType: true,
             companyId: true,
+            legalRepresentative: {
+              select: {
+                fullName: true,
+                identificationType: true,
+                identificationNumber: true,
+              },
+            },
             company: {
               select: {
                 fullName: true,
@@ -1808,6 +2136,13 @@ export async function getAffiliationEmailData(
                 identificationNumber: true,
                 phone: true,
                 email: true,
+                legalRepresentative: {
+                  select: {
+                    fullName: true,
+                    identificationType: true,
+                    identificationNumber: true,
+                  },
+                },
                 credentials: {
                   select: {
                     administratorName: true,
@@ -1857,6 +2192,11 @@ export async function getAffiliationEmailData(
                 identificationNumber: true,
                 phone: true,
                 email: true,
+                arlRiskLevel: true,
+                eps: { select: { name: true } },
+                afp: { select: { name: true } },
+                arl: { select: { name: true } },
+                ccf: { select: { name: true } },
                 address: {
                   select: {
                     direccion: true,
@@ -1869,6 +2209,18 @@ export async function getAffiliationEmailData(
                     salario: true,
                     fechaIngreso: true,
                     actividadComercial: true,
+                  },
+                },
+              },
+            },
+            beneficiaries: {
+              select: {
+                beneficiary: {
+                  select: {
+                    nombreCompleto: true,
+                    tipoRelacion: true,
+                    identificationType: true,
+                    identificationNumber: true,
                   },
                 },
               },
@@ -1904,6 +2256,13 @@ export async function getAffiliationEmailData(
       id: sp.id,
       type: sp.type,
       label: SubProcessTypeLabels[sp.type] || sp.type,
+      employeeName: sp.employee?.fullName ?? null,
+      beneficiaries: sp.beneficiaries.map((link) => ({
+        nombreCompleto: link.beneficiary.nombreCompleto,
+        tipoRelacion: link.beneficiary.tipoRelacion,
+        identificationType: link.beneficiary.identificationType,
+        identificationNumber: link.beneficiary.identificationNumber,
+      })),
     }))
 
     const documents = affiliation.subProcesses.flatMap((sp) =>
@@ -1922,6 +2281,12 @@ export async function getAffiliationEmailData(
     const emailBody = buildAffiliationEmailBody(affiliation, processTypeLabel)
     const subject = buildAffiliationSubject(affiliation, processTypeLabel)
 
+    const processTypeAction =
+      affiliation.processType === 'INCLUSION_BENEFICIARIOS' ||
+      affiliation.processType === 'EXCLUSION_BENEFICIARIOS'
+        ? affiliation.processType
+        : null
+
     return {
       success: true,
       data: {
@@ -1931,6 +2296,7 @@ export async function getAffiliationEmailData(
         clientName: client.fullName,
         affiliationNumber: affiliation.affiliationNumber,
         processTypeLabel,
+        processTypeAction,
         subProcesses,
         documents,
       },
@@ -1977,6 +2343,24 @@ function buildAffiliationSubject(
 }
 
 /**
+ * Inject free-text notes ("novedades") into the email body right after
+ * the "Adjunto enviamos certificados..." header so they appear prominently.
+ * If the anchor is missing, prepend the notes at the top.
+ */
+function injectEmailNotes(emailBody: string, emailNotes?: string | null): string {
+  const notes = emailNotes?.trim()
+  if (!notes) return emailBody
+  const block = `\n\n* ${notes}\n`
+  const anchor = 'Adjunto enviamos certificados de afiliación solicitados:'
+  const idx = emailBody.indexOf(anchor)
+  if (idx === -1) {
+    return `${block.trimStart()}\n${emailBody}`
+  }
+  const after = idx + anchor.length
+  return emailBody.slice(0, after) + block + emailBody.slice(after)
+}
+
+/**
  * Safely decrypt a password, returning fallback on error
  */
 function safeDecrypt(encrypted: string): string {
@@ -1990,6 +2374,112 @@ function safeDecrypt(encrypted: string): string {
 /**
  * Build the structured email body based on client data
  */
+type EmployerLike = {
+  fullName: string
+  identificationType: string
+  identificationNumber: string
+  phone: string
+  email: string
+  legalRepresentative?: {
+    fullName: string
+    identificationType: string
+    identificationNumber: string
+  } | null
+  credentials: {
+    administratorName: string
+    administratorType: string
+    username: string
+    encryptedPassword: string
+    notes: string | null
+  }[]
+}
+
+type EmployeeLike = {
+  fullName: string
+  identificationType: string
+  identificationNumber: string
+  phone: string
+  email: string
+  arlRiskLevel?: number | null
+  eps?: { name: string } | null
+  afp?: { name: string } | null
+  arl?: { name: string } | null
+  ccf?: { name: string } | null
+  address?: {
+    direccion: string
+    departamento: string
+    municipio: string
+  } | null
+  additionalInfo?: {
+    salario: unknown
+    fechaIngreso: Date | null
+    actividadComercial: string | null
+  } | null
+}
+
+function appendEmployerSection(lines: string[], employer: EmployerLike) {
+  lines.push(`EMPLEADOR: ${employer.fullName}`)
+  lines.push(`${employer.identificationType}: ${employer.identificationNumber}`)
+  if (employer.legalRepresentative) {
+    const lr = employer.legalRepresentative
+    lines.push(`Representante legal: ${lr.fullName}`)
+    lines.push(`${lr.identificationType} ${lr.identificationNumber}`)
+  }
+  lines.push(`CEL: ${employer.phone}`)
+
+  // Split ARL credentials into CÓDIGO/CLAVE explicit lines
+  for (const cred of employer.credentials) {
+    const password = safeDecrypt(cred.encryptedPassword)
+    if (cred.administratorType === 'ARL') {
+      if (cred.username) lines.push(`CÓDIGO ARL: ${cred.username}`)
+      lines.push(`CLAVE ARL: ${password}`)
+    } else if (cred.administratorType === 'PILA_OPERATOR') {
+      lines.push(`CLAVE ${cred.administratorName}: ${password}`)
+    } else if (['EPS', 'AFP', 'CCF'].includes(cred.administratorType)) {
+      lines.push(`${cred.administratorName}: ${cred.username} ${password}`)
+    } else {
+      lines.push(`${cred.administratorName}: ${cred.username} CLAVE: ${password}`)
+    }
+  }
+  lines.push('')
+}
+
+function appendEmployeeSection(lines: string[], emp: EmployeeLike) {
+  lines.push(`EMPLEADO: ${emp.fullName}`)
+  lines.push(`${emp.identificationType} ${emp.identificationNumber}`)
+  if (emp.address) {
+    const parts: string[] = [emp.address.direccion]
+    if (emp.address.municipio) parts.push(emp.address.municipio.toUpperCase())
+    lines.push(parts.filter(Boolean).join(' '))
+  }
+  lines.push(`CEL: ${emp.phone}`)
+  if (emp.additionalInfo?.fechaIngreso) {
+    lines.push(`FECHA INGRESO: ${new Date(emp.additionalInfo.fechaIngreso).toLocaleDateString('es-CO')}`)
+  }
+  if (emp.additionalInfo?.actividadComercial) {
+    lines.push(`CARGO: ${emp.additionalInfo.actividadComercial}`)
+  }
+  if (emp.additionalInfo?.salario) {
+    lines.push(`IBC: ${Number(emp.additionalInfo.salario).toLocaleString('es-CO')}`)
+  }
+  lines.push(`CORREO: ${emp.email}`)
+  lines.push('')
+
+  // Per-employee entities
+  const entityLines: string[] = []
+  if (emp.eps) entityLines.push(`EPS: ${emp.eps.name}`)
+  if (emp.afp) entityLines.push(`PENSIÓN: ${emp.afp.name}`)
+  if (emp.arl) {
+    const risk = emp.arlRiskLevel ? ` R${emp.arlRiskLevel}` : ''
+    entityLines.push(`ARL: ${emp.arl.name}${risk}`)
+  }
+  if (emp.ccf) entityLines.push(`CCF: ${emp.ccf.name}`)
+  if (entityLines.length > 0) {
+    lines.push(...entityLines)
+    lines.push('')
+  }
+}
+
 function buildAffiliationEmailBody(
   affiliation: {
     processType: string | null
@@ -2000,20 +2490,12 @@ function buildAffiliationEmailBody(
       phone: string
       email: string
       clientType: string
-      company?: {
+      legalRepresentative?: {
         fullName: string
         identificationType: string
         identificationNumber: string
-        phone: string
-        email: string
-        credentials: {
-          administratorName: string
-          administratorType: string
-          username: string
-          encryptedPassword: string
-          notes: string | null
-        }[]
       } | null
+      company?: EmployerLike | null
       address?: {
         direccion: string
         departamento: string
@@ -2034,26 +2516,19 @@ function buildAffiliationEmailBody(
     } | null
     subProcesses: {
       type: string
-      employee?: {
-        fullName: string
-        identificationType: string
-        identificationNumber: string
-        phone: string
-        email: string
-        address?: {
-          direccion: string
-          departamento: string
-          municipio: string
-        } | null
-        additionalInfo?: {
-          salario: unknown
-          fechaIngreso: Date | null
-          actividadComercial: string | null
-        } | null
-      } | null
+      employee?: EmployeeLike | null
+      beneficiaries?: {
+        beneficiary: {
+          nombreCompleto: string
+          tipoRelacion: string
+          identificationType: string
+          identificationNumber: string
+        }
+      }[]
     }[]
   },
-  processTypeLabel: string
+  processTypeLabel: string,
+  emailNotes?: string | null
 ): string {
   const client = affiliation.client
   if (!client) return 'Cordial saludo,\n\nAdjunto enviamos certificados de afiliación solicitados.\n\nCordialmente;'
@@ -2065,63 +2540,64 @@ function buildAffiliationEmailBody(
   lines.push('')
 
   const isEmpresa = client.clientType === ClientType.EMPRESA
+  const clientIsCompany = isEmpresa && !client.company // client itself IS the empresa
 
-  if (isEmpresa && client.company) {
-    // Employer section
-    const employer = client.company
-    lines.push(`EMPLEADOR: ${employer.fullName}`)
-    lines.push(`${employer.identificationType} ${employer.identificationNumber}`)
-    lines.push(`CEL ${employer.phone}`)
+  // --- EMPLOYER SECTION ---
+  if (clientIsCompany) {
+    // The affiliation client IS the empresa
+    appendEmployerSection(lines, {
+      fullName: client.fullName,
+      identificationType: client.identificationType,
+      identificationNumber: client.identificationNumber,
+      phone: client.phone,
+      email: client.email,
+      legalRepresentative: client.legalRepresentative ?? null,
+      credentials: client.credentials,
+    })
+  } else if (isEmpresa && client.company) {
+    // The affiliation client is an empleado with a company (legacy path)
+    appendEmployerSection(lines, client.company)
+  }
 
-    // Employer credentials
-    for (const cred of employer.credentials) {
-      const password = safeDecrypt(cred.encryptedPassword)
-      if (cred.administratorType === 'PILA_OPERATOR') {
-        lines.push(`CLAVE ${cred.administratorName}: ${password}`)
-      } else {
-        lines.push(`${cred.administratorName}: ${cred.username} CLAVE: ${password}`)
-      }
+  // --- EMPLOYEES / MAIN SUBJECT ---
+  const employees = affiliation.subProcesses
+    .map((sp) => sp.employee)
+    .filter((e): e is NonNullable<typeof e> => Boolean(e))
+  const uniqueEmployees = new Map<string, EmployeeLike>()
+  for (const emp of employees) {
+    if (!uniqueEmployees.has(emp.identificationNumber)) {
+      uniqueEmployees.set(emp.identificationNumber, emp)
     }
-    lines.push('')
+  }
 
-    // Employee sections
-    const employees = affiliation.subProcesses
-      .map((sp) => sp.employee)
-      .filter(Boolean)
-    const uniqueEmployees = new Map<string, typeof employees[0]>()
-    for (const emp of employees) {
-      if (emp && !uniqueEmployees.has(emp.identificationNumber)) {
-        uniqueEmployees.set(emp.identificationNumber, emp)
+  if (isEmpresa) {
+    // If any employees linked to subprocesses, render each
+    if (uniqueEmployees.size > 0) {
+      // Optional free-text notes appear between employer and employee blocks
+      if (emailNotes && emailNotes.trim()) {
+        lines.push(`* ${emailNotes.trim()}`)
+        lines.push('')
       }
-    }
-
-    for (const emp of uniqueEmployees.values()) {
-      if (!emp) continue
-      lines.push(`EMPLEADO: ${emp.fullName}`)
-      lines.push(`${emp.identificationType} ${emp.identificationNumber}`)
-      if (emp.address) {
-        lines.push(`Dirección: ${emp.address.direccion}`)
-        if (emp.address.departamento || emp.address.municipio) {
-          lines.push(`${emp.address.municipio}${emp.address.departamento ? `, ${emp.address.departamento}` : ''}`)
-        }
+      for (const emp of uniqueEmployees.values()) {
+        appendEmployeeSection(lines, emp)
       }
-      lines.push(`Celular: ${emp.phone}`)
-      if (emp.additionalInfo?.salario) {
-        lines.push(`SALARIO: $${Number(emp.additionalInfo.salario).toLocaleString('es-CO')}`)
+    } else if (clientIsCompany) {
+      // Empresa without employee subprocesses — just note absence
+      if (emailNotes && emailNotes.trim()) {
+        lines.push(`* ${emailNotes.trim()}`)
+        lines.push('')
       }
-      if (emp.additionalInfo?.fechaIngreso) {
-        lines.push(`Fecha de ingreso: ${new Date(emp.additionalInfo.fechaIngreso).toLocaleDateString('es-CO')}`)
-      }
-      if (emp.additionalInfo?.actividadComercial) {
-        lines.push(`Ocupación: ${emp.additionalInfo.actividadComercial}`)
-      }
-      lines.push(`Correo: ${emp.email}`)
-      lines.push('')
-    }
-
-    // If no employee sub-processes, show the main client as employee
-    if (uniqueEmployees.size === 0) {
-      appendClientDetails(lines, client)
+    } else {
+      // Legacy path: the client is itself an empleado, render its own details
+      appendEmployeeSection(lines, {
+        fullName: client.fullName,
+        identificationType: client.identificationType,
+        identificationNumber: client.identificationNumber,
+        phone: client.phone,
+        email: client.email,
+        address: client.address,
+        additionalInfo: client.additionalInfo,
+      })
     }
   } else {
     // Independent / single client
@@ -2129,7 +2605,6 @@ function buildAffiliationEmailBody(
     lines.push(`${client.identificationType} ${client.identificationNumber}`)
     lines.push(`CEL ${client.phone}`)
 
-    // Client credentials (portal passwords)
     for (const cred of client.credentials) {
       const password = safeDecrypt(cred.encryptedPassword)
       if (cred.administratorType === 'PILA_OPERATOR') {
@@ -2156,26 +2631,59 @@ function buildAffiliationEmailBody(
       lines.push(`OCUPACIÓN: ${client.additionalInfo.actividadComercial}`)
     }
     lines.push('')
+
+    // Independent notes come after client block
+    if (emailNotes && emailNotes.trim()) {
+      lines.push(`* ${emailNotes.trim()}`)
+      lines.push('')
+    }
+
+    // Entity affiliations (from credentials) — only for independent
+    const entityLines: string[] = []
+    for (const cred of client.credentials) {
+      if (!['EPS', 'AFP', 'ARL', 'CCF'].includes(cred.administratorType)) continue
+      const typeLabel =
+        cred.administratorType === 'AFP' ? 'PENSIÓN' :
+        cred.administratorType === 'CCF' ? 'CCF' :
+        cred.administratorType
+      entityLines.push(`${typeLabel}: ${cred.administratorName}`)
+    }
+    if (entityLines.length > 0) {
+      lines.push(...entityLines)
+      lines.push('')
+    }
   }
 
-  // Entity affiliations (from credentials)
-  const allCreds = isEmpresa && client.company
-    ? [...client.company.credentials, ...client.credentials]
-    : client.credentials
-  const entityLines: string[] = []
-  const entityCreds = allCreds.filter((c) =>
-    ['EPS', 'AFP', 'ARL', 'CCF'].includes(c.administratorType)
-  )
-  for (const cred of entityCreds) {
-    const typeLabel =
-      cred.administratorType === 'AFP' ? 'PENSIÓN' :
-      cred.administratorType === 'CCF' ? 'CCF' :
-      cred.administratorType
-    entityLines.push(`${typeLabel}: ${cred.administratorName}`)
-  }
-  if (entityLines.length > 0) {
-    lines.push(...entityLines)
-    lines.push('')
+  // Beneficiary inclusion/exclusion block
+  if (
+    affiliation.processType === 'INCLUSION_BENEFICIARIOS' ||
+    affiliation.processType === 'EXCLUSION_BENEFICIARIOS'
+  ) {
+    const isExclusion = affiliation.processType === 'EXCLUSION_BENEFICIARIOS'
+    // Deduplicate beneficiaries across all subprocesses (identificationNumber unique per client)
+    const seen = new Set<string>()
+    const beneficiaryLines: string[] = []
+    for (const sp of affiliation.subProcesses) {
+      for (const link of sp.beneficiaries ?? []) {
+        const b = link.beneficiary
+        const key = `${b.identificationType}-${b.identificationNumber}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        beneficiaryLines.push(
+          `- ${b.nombreCompleto} (${b.tipoRelacion}) — ${b.identificationType} ${b.identificationNumber}`
+        )
+      }
+    }
+    if (beneficiaryLines.length > 0) {
+      lines.push('')
+      lines.push(
+        isExclusion
+          ? 'BENEFICIARIOS EXCLUIDOS:'
+          : 'BENEFICIARIOS INCLUIDOS:'
+      )
+      lines.push(...beneficiaryLines)
+      lines.push('')
+    }
   }
 
   // Payment instructions (standard text)
@@ -2248,7 +2756,7 @@ export async function sendAffiliationWithEmail(
       return { success: false, error: 'Datos inválidos' }
     }
 
-    const { affiliationId, to, cc, subject, emailBody, selectedDocumentIds } =
+    const { affiliationId, to, cc, subject, emailBody, emailNotes, selectedDocumentIds } =
       validatedFields.data
 
     // Fetch affiliation with all data
@@ -2322,12 +2830,15 @@ export async function sendAffiliationWithEmail(
       }
     }
 
+    // Inject notes before sending and store the final body
+    const finalBody = injectEmailNotes(emailBody, emailNotes)
+
     // Send email
     const { html } = await sendAffiliationCompletedEmail({
       to,
       cc: cc?.length ? cc : undefined,
       subject,
-      emailBody,
+      emailBody: finalBody,
       hasAttachments: selectedDocuments.length > 0,
       attachmentFiles: selectedDocuments.map((doc) => ({
         fileName: doc.fileName,
@@ -2355,6 +2866,7 @@ export async function sendAffiliationWithEmail(
           attachments: attachmentsMetadata.length
             ? JSON.stringify(attachmentsMetadata)
             : null,
+          emailNotes: emailNotes?.trim() || null,
           sentById: authCheck.userId!,
         },
       })
@@ -2398,6 +2910,7 @@ export async function sendAffiliationWithEmail(
  */
 export async function previewAffiliationEmail(data: {
   emailBody: string
+  emailNotes?: string | null
   hasAttachments?: boolean
 }): Promise<ActionResponse<string>> {
   try {
@@ -2408,7 +2921,7 @@ export async function previewAffiliationEmail(data: {
 
     const html = await render(
       AffiliationCompletedEmail({
-        emailBody: data.emailBody,
+        emailBody: injectEmailNotes(data.emailBody, data.emailNotes),
         hasAttachments: data.hasAttachments,
       })
     )
@@ -2425,6 +2938,7 @@ export async function previewAffiliationEmail(data: {
  */
 export async function sendTestAffiliationEmail(data: {
   emailBody: string
+  emailNotes?: string | null
   subject: string
   to: string
 }): Promise<ActionResponse<string>> {
@@ -2446,7 +2960,7 @@ export async function sendTestAffiliationEmail(data: {
     await sendAffiliationCompletedEmail({
       to: data.to,
       subject: `[PRUEBA] ${data.subject}`,
-      emailBody: data.emailBody,
+      emailBody: injectEmailNotes(data.emailBody, data.emailNotes),
       hasAttachments: false,
     })
 

@@ -116,6 +116,7 @@ export function SendAffiliationEmailClient({
       cc: [],
       subject: emailData.subject,
       emailBody: emailData.emailBody,
+      emailNotes: '',
       selectedDocumentIds: emailData.documents.map((d) => d.id),
     },
   })
@@ -201,6 +202,7 @@ export function SendAffiliationEmailClient({
 
     const result = await previewAffiliationEmail({
       emailBody: form.getValues('emailBody'),
+      emailNotes: form.getValues('emailNotes'),
       hasAttachments: selectedDocIds.size > 0,
     })
 
@@ -244,6 +246,7 @@ export function SendAffiliationEmailClient({
   const handleSendTest = async () => {
     const subject = form.getValues('subject')
     const emailBody = form.getValues('emailBody')
+    const emailNotes = form.getValues('emailNotes')
 
     if (!testEmailTo || !subject || !emailBody) {
       toast.error('Completa el asunto y cuerpo antes de enviar una prueba')
@@ -252,7 +255,7 @@ export function SendAffiliationEmailClient({
 
     setIsSendingTest(true)
     try {
-      const result = await sendTestAffiliationEmail({ to: testEmailTo, subject, emailBody })
+      const result = await sendTestAffiliationEmail({ to: testEmailTo, subject, emailBody, emailNotes })
       if (result.success) {
         toast.success(result.message || `Correo de prueba enviado a ${testEmailTo}`)
         setTestEmailOpen(false)
@@ -471,6 +474,29 @@ export function SendAffiliationEmailClient({
                           <FormControl>
                             <Input placeholder="Asunto del correo" {...field} />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Notes (novedades) */}
+                    <FormField
+                      control={form.control}
+                      name="emailNotes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Novedades (opcional)</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Ej: NOVEDAD DE RETIRO DE RAFAEL CANO 02/03"
+                              className="min-h-[70px] text-sm"
+                              {...field}
+                              value={field.value ?? ''}
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            Se insertan al inicio del correo y quedan registradas en auditoría.
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}

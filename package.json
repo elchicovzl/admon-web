@@ -58,6 +58,7 @@
     "@react-email/render": "^2.0.4",
     "@szhsin/react-menu": "^4.5.1",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-table": "^8.21.3",
     "@tiptap/extension-image": "^3.21.0",
     "@tiptap/extension-link": "^3.21.0",
     "@tiptap/extension-placeholder": "^3.21.0",

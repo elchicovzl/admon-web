@@ -12,7 +12,8 @@ export const sendAffiliationEmailSchema = z.object({
     .string()
     .min(1, 'El asunto es requerido')
     .max(200, 'El asunto no puede exceder 200 caracteres'),
-  emailBody: z.string().min(1, 'El cuerpo del correo es requerido').max(5000, 'El cuerpo no puede exceder 5000 caracteres'),
+  emailBody: z.string().min(1, 'El cuerpo del correo es requerido').max(8000, 'El cuerpo no puede exceder 8000 caracteres'),
+  emailNotes: z.string().max(2000, 'Las novedades no pueden exceder 2000 caracteres').optional().nullable(),
   selectedDocumentIds: z.array(z.string().cuid('ID de documento inválido')).optional().default([]),
 })
 

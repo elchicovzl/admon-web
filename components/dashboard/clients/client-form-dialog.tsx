@@ -339,6 +339,7 @@ export function ClientFormDialog({
                       <SelectContent>
                         <SelectItem value={EmployeeType.TIEMPO_COMPLETO}>Trabajador tiempo completo</SelectItem>
                         <SelectItem value={EmployeeType.TIEMPO_PARCIAL}>Trabajador tiempo parcial</SelectItem>
+                        <SelectItem value={EmployeeType.INDEPENDIENTE_CONTRATISTA}>Independiente Contratista</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
