@@ -31,6 +31,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { CalendarIcon, Loader2, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -61,6 +62,7 @@ interface AffiliationEditDialogProps {
   currentProcessType: AffiliationProcessType | null
   currentProcessTypeOther: string | null
   currentStartDate: Date | null
+  currentNote?: string | null
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
@@ -70,6 +72,7 @@ export function AffiliationEditDialog({
   currentProcessType,
   currentProcessTypeOther,
   currentStartDate,
+  currentNote,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
 }: AffiliationEditDialogProps) {
@@ -86,6 +89,7 @@ export function AffiliationEditDialog({
   const [startDate, setStartDate] = useState<Date | undefined>(
     currentStartDate ? new Date(currentStartDate) : undefined
   )
+  const [note, setNote] = useState(currentNote ?? '')
 
   // Reset state when dialog opens or affiliation changes
   useEffect(() => {
@@ -93,6 +97,7 @@ export function AffiliationEditDialog({
       setProcessType(currentProcessType ?? '')
       setProcessTypeOther(currentProcessTypeOther ?? '')
       setStartDate(currentStartDate ? new Date(currentStartDate) : undefined)
+      setNote(currentNote ?? '')
     }
   }, [open, affiliationId])
 
@@ -113,6 +118,7 @@ export function AffiliationEditDialog({
         processType,
         processTypeOther: processType === AffiliationProcessType.OTRO ? processTypeOther : null,
         startDate: startDate ?? null,
+        note: note.trim() ? note.trim() : null,
       })
 
       if (result.success) {
@@ -207,6 +213,20 @@ export function AffiliationEditDialog({
             </Popover>
             <p className="text-xs text-muted-foreground">
               Fecha en la que inicia el proceso
+            </p>
+          </div>
+
+          {/* Note */}
+          <div className="space-y-2">
+            <Label>Nota</Label>
+            <Textarea
+              placeholder="Agregá cualquier nota relevante sobre este proceso..."
+              rows={4}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Visible en la vista del proceso
             </p>
           </div>
         </div>

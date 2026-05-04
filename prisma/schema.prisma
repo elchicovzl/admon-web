@@ -592,6 +592,9 @@ model Affiliation {
   // Soft delete (kept for compatibility)
   isActive         Boolean                 @default(true)
 
+  // Free-form note for the process
+  note             String?                 @db.Text
+
   // Timestamps
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt

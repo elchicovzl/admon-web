@@ -33,6 +33,12 @@ interface SubProcessClientTabProps {
   active: boolean
 }
 
+function formatUtcDate(date: Date | string): string {
+  const d = new Date(date)
+  const localized = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  return format(localized, 'dd MMM yyyy', { locale: es })
+}
+
 export function SubProcessClientTab({ clientId, employeeId, active }: SubProcessClientTabProps) {
   const [client, setClient] = useState<ClientWithRelations | null>(null)
   const [employee, setEmployee] = useState<ClientWithRelations | null>(null)
@@ -316,17 +322,17 @@ export function SubProcessClientTab({ clientId, employeeId, active }: SubProcess
                 )}
                 {person.additionalInfo.fechaIngreso && (
                   <>
-                    <div className="text-muted-foreground">Fecha Ingreso</div>
+                    <div className="text-muted-foreground">Novedad de Ingreso</div>
                     <div className="font-medium">
-                      {format(new Date(person.additionalInfo.fechaIngreso), 'dd MMM yyyy', { locale: es })}
+                      {formatUtcDate(person.additionalInfo.fechaIngreso)}
                     </div>
                   </>
                 )}
                 {person.additionalInfo.fechaRetiro && (
                   <>
-                    <div className="text-muted-foreground">Fecha Retiro</div>
+                    <div className="text-muted-foreground">Novedad de Retiro</div>
                     <div className="font-medium">
-                      {format(new Date(person.additionalInfo.fechaRetiro), 'dd MMM yyyy', { locale: es })}
+                      {formatUtcDate(person.additionalInfo.fechaRetiro)}
                     </div>
                   </>
                 )}

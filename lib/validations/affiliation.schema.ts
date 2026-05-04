@@ -17,6 +17,7 @@ export const createAffiliationSchema = z.object({
   }),
   processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
   startDate: z.union([z.coerce.date(), z.null()]).optional(),
+  note: z.string().optional().nullable(),
   subProcesses: z
     .array(
       z.object({
@@ -44,6 +45,7 @@ export const updateAffiliationSchema = z.object({
   processType: z.nativeEnum(AffiliationProcessType).optional(),
   processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
   startDate: z.union([z.coerce.date(), z.null()]).optional(),
+  note: z.string().optional().nullable(),
 })
 
 export const getAffiliationSchema = z.object({

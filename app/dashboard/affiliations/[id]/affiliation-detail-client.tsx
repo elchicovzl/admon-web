@@ -197,6 +197,20 @@ export function AffiliationDetailClient({
         </Card>
       </Collapsible>
 
+      {/* Process Note */}
+      {affiliation.note && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Notas del proceso</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+              {affiliation.note}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sub-Processes - Compact Cards */}
       <div className="space-y-4 relative">
         {isNavigating && (
