@@ -43,6 +43,7 @@ import {
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Check, ChevronRight, ChevronLeft, Key, Users, AlertCircle, CalendarIcon } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -84,6 +85,7 @@ const createAffiliationFormSchema = z.object({
   }),
   processTypeOther: z.string().min(2, 'Mínimo 2 caracteres').max(200).optional().nullable(),
   startDate: z.date().optional().nullable(),
+  note: z.string().optional().nullable(),
   subProcesses: z.array(
     z.object({
       type: z.nativeEnum(AffiliationSubProcessType),
@@ -159,6 +161,7 @@ export function AffiliationCreateWizard({
       clientId: '',
       processType: undefined,
       processTypeOther: null,
+      note: null,
       subProcesses: [],
     },
   })
@@ -375,6 +378,7 @@ export function AffiliationCreateWizard({
         processType: data.processType,
         processTypeOther: data.processTypeOther ?? null,
         startDate: data.startDate ?? null,
+        note: data.note?.trim() ? data.note.trim() : null,
         subProcesses: transformedSubProcesses,
       })
 
@@ -679,6 +683,29 @@ export function AffiliationCreateWizard({
                         </Popover>
                         <FormDescription>
                           Fecha en la que inicia el proceso (puede ser futura)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* NOTE */}
+                  <FormField
+                    control={form.control}
+                    name="note"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nota (opcional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Agregá cualquier nota relevante sobre este proceso..."
+                            rows={4}
+                            {...field}
+                            value={field.value ?? ''}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Esta nota será visible en la vista del proceso
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

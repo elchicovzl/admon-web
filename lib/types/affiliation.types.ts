@@ -98,6 +98,7 @@ export interface SafeAffiliation {
   sentById: string | null
   archivedAt: Date | null
   startDate: Date | null
+  note: string | null
   isActive: boolean
   createdAt: Date
   updatedAt: Date

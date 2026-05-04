@@ -368,6 +368,7 @@ export function AffiliationsTable({
           currentProcessType={editingAffiliation.processType}
           currentProcessTypeOther={editingAffiliation.processTypeOther}
           currentStartDate={editingAffiliation.startDate}
+          currentNote={editingAffiliation.note}
           open={!!editingAffiliation}
           onOpenChange={(open) => { if (!open) setEditingAffiliation(null) }}
         />

@@ -130,6 +130,7 @@ export default async function AffiliationDetailPage({
               currentProcessType={affiliation.processType}
               currentProcessTypeOther={affiliation.processTypeOther}
               currentStartDate={affiliation.startDate}
+              currentNote={affiliation.note}
             />
           )}
 

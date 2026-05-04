@@ -22,6 +22,12 @@ interface EmployeeDetailSheetProps {
   employeeId: string
 }
 
+function formatUtcDate(date: Date | string): string {
+  const d = new Date(date)
+  const localized = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  return format(localized, 'dd MMM yyyy', { locale: es })
+}
+
 export function EmployeeDetailSheet({ open, onOpenChange, employeeId }: EmployeeDetailSheetProps) {
   const [employee, setEmployee] = useState<ClientWithRelations | null>(null)
   const [loading, setLoading] = useState(false)
@@ -121,19 +127,19 @@ export function EmployeeDetailSheet({ open, onOpenChange, employeeId }: Employee
                       <>
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
-                          <span>Ingreso</span>
+                          <span>Novedad de Ingreso</span>
                         </div>
                         <div className="font-medium">
-                          {format(new Date(employee.additionalInfo.fechaIngreso), 'dd MMM yyyy', { locale: es })}
+                          {formatUtcDate(employee.additionalInfo.fechaIngreso)}
                         </div>
                       </>
                     )}
 
                     {employee.additionalInfo.fechaRetiro && (
                       <>
-                        <div className="text-muted-foreground">Retiro</div>
+                        <div className="text-muted-foreground">Novedad de Retiro</div>
                         <div className="font-medium">
-                          {format(new Date(employee.additionalInfo.fechaRetiro), 'dd MMM yyyy', { locale: es })}
+                          {formatUtcDate(employee.additionalInfo.fechaRetiro)}
                         </div>
                       </>
                     )}
