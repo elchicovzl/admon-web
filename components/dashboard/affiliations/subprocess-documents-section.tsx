@@ -262,7 +262,7 @@ export function SubProcessDocumentsSection({
                       className="h-8 w-8"
                     >
                       <a
-                        href={document.fileUrl}
+                        href={`/api/affiliations/documents/${document.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Ver documento"
@@ -277,7 +277,7 @@ export function SubProcessDocumentsSection({
                       className="h-8 w-8"
                     >
                       <a
-                        href={document.fileUrl}
+                        href={`/api/affiliations/documents/${document.id}`}
                         download={document.fileName}
                         title="Descargar"
                       >
