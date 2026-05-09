@@ -41,6 +41,8 @@ interface SubProcessClientTabProps {
   clientId: string
   employeeId?: string
   active: boolean
+  affiliationId: string
+  subProcessId: string
 }
 
 function formatUtcDate(date: Date | string): string {
@@ -69,7 +71,14 @@ const ID_TYPE_SHORT_LABELS: Record<IdentificationType, string> = {
   NIT: 'NIT',
 }
 
-export function SubProcessClientTab({ clientId, employeeId, active }: SubProcessClientTabProps) {
+export function SubProcessClientTab({
+  clientId,
+  employeeId,
+  active,
+  affiliationId,
+  subProcessId,
+}: SubProcessClientTabProps) {
+  const returnQuery = `?returnTo=subprocess&affiliationId=${encodeURIComponent(affiliationId)}&subProcessId=${encodeURIComponent(subProcessId)}`
   const [client, setClient] = useState<ClientWithRelations | null>(null)
   const [employee, setEmployee] = useState<ClientWithRelations | null>(null)
   const [loading, setLoading] = useState(false)
@@ -171,7 +180,7 @@ export function SubProcessClientTab({ clientId, employeeId, active }: SubProcess
                     className="h-7 w-7 shrink-0"
                   >
                     <Link
-                      href={`/dashboard/clients/${person.id}`}
+                      href={`/dashboard/clients/${person.id}${returnQuery}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Abrir ${person.fullName} en nueva pestaña`}

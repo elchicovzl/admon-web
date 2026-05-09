@@ -224,6 +224,8 @@ export function SubProcessPageClient({
             clientId={clientId}
             employeeId={subProcess.employeeId ?? undefined}
             active={true}
+            affiliationId={affiliationId}
+            subProcessId={subProcess.id}
           />
         </div>
 

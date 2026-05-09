@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { getClientById } from '@/lib/actions/client.actions'
 import type { ClientWithRelations } from '@/lib/types/client.types'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import { ClientCredentialsSection } from '@/components/dashboard/clients/client-
 import { CompanyEmployeesSection } from '@/components/dashboard/clients/company-employees-section'
 import { ClientBeneficiariesSection } from '@/components/dashboard/clients/client-beneficiaries-section'
 import { ClientInfoPanel } from '@/components/dashboard/clients/client-info-panel'
+import { ReturnToSubprocessBubble } from '@/components/dashboard/clients/return-to-subprocess-bubble'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ClientType } from '@prisma/client'
@@ -32,7 +33,14 @@ const ClientDocumentsGallery = dynamic(
 export default function ClientDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const clientId = params.id as string
+
+  const returnTo = searchParams.get('returnTo')
+  const returnSubProcessId = searchParams.get('subProcessId')
+  const returnAffiliationId = searchParams.get('affiliationId')
+  const showReturnBubble =
+    returnTo === 'subprocess' && !!returnSubProcessId && !!returnAffiliationId
 
   const [client, setClient] = useState<ClientWithRelations | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -160,6 +168,13 @@ export default function ClientDetailPage() {
         clientId={client.id}
         initialDocuments={client.documents || []}
       />
+
+      {showReturnBubble && (
+        <ReturnToSubprocessBubble
+          affiliationId={returnAffiliationId!}
+          subProcessId={returnSubProcessId!}
+        />
+      )}
     </div>
   )
 }
