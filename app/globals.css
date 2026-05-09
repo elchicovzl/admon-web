@@ -223,6 +223,22 @@
   animation: float 6s ease-in-out infinite;
 }
 
+/* Thruster particle animation — small dots dropping below as if jet propulsion */
+@keyframes thrust-particle {
+  0% {
+    transform: translate(var(--tx, 0), 0) scale(1);
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate(var(--tx, 0), 50px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+.animate-thrust-particle {
+  animation: thrust-particle 1.4s ease-out infinite;
+}
+
 /* Fade in up animation keyframes */
 @keyframes fade-in-up {
   0% {
