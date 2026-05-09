@@ -1,12 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Loader2,
   Mail,
@@ -23,6 +30,7 @@ import {
   EyeOff,
   User,
   Users,
+  SquareArrowOutUpRight,
 } from 'lucide-react'
 import { IdentificationType } from '@prisma/client'
 import { getClientById } from '@/lib/actions/client.actions'
@@ -148,10 +156,34 @@ export function SubProcessClientTab({ clientId, employeeId, active }: SubProcess
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <User className="h-4 w-4" />
-            {title}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <User className="h-4 w-4" />
+              {title}
+            </CardTitle>
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0"
+                  >
+                    <Link
+                      href={`/dashboard/clients/${person.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Abrir ${person.fullName} en nueva pestaña`}
+                    >
+                      <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Abrir cliente</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </CardHeader>
         <CardContent className="space-y-0">
           {/* Personal Info */}
