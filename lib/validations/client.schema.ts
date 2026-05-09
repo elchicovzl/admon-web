@@ -197,6 +197,75 @@ export const updateClientSchema = z.object({
 
 export type UpdateClientInput = z.infer<typeof updateClientSchema>
 
+// Update client schema with optional contact info (address + additional info)
+// Used in the unified "Editar Cliente" dialog where contact-related fields are grouped together.
+export const updateClientWithContactSchema = updateClientSchema
+  .extend({
+    address: z
+      .object({
+        departamento: z.string().optional().or(z.literal('')),
+        municipio: z.string().optional().or(z.literal('')),
+        ciudad: z.string().optional().or(z.literal('')),
+        direccion: z
+          .string()
+          .max(500, 'La dirección no puede exceder 500 caracteres')
+          .optional()
+          .or(z.literal('')),
+      })
+      .optional(),
+    additionalInfo: z
+      .object({
+        actividadComercial: z
+          .string()
+          .max(200, 'La actividad comercial no puede exceder 200 caracteres')
+          .optional()
+          .or(z.literal('')),
+        salario: z
+          .union([z.number().positive('El salario debe ser positivo'), z.null()])
+          .optional(),
+        fechaIngreso: z.string().optional().or(z.literal('')),
+        fechaRetiro: z.string().optional().or(z.literal('')),
+      })
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    const a = data.address
+    if (a) {
+      const anyFilled = !!(a.departamento || a.municipio || a.ciudad || a.direccion)
+      if (anyFilled) {
+        if (!a.departamento) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['address', 'departamento'],
+            message: 'El departamento es requerido',
+          })
+        }
+        if (!a.municipio) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['address', 'municipio'],
+            message: 'El municipio es requerido',
+          })
+        }
+        if (!a.direccion) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['address', 'direccion'],
+            message: 'La dirección es requerida',
+          })
+        } else if (a.direccion.length < 5) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['address', 'direccion'],
+            message: 'La dirección debe tener al menos 5 caracteres',
+          })
+        }
+      }
+    }
+  })
+
+export type UpdateClientWithContactInput = z.infer<typeof updateClientWithContactSchema>
+
 // Toggle client status schema
 export const toggleClientStatusSchema = z.object({
   clientId: z.string().cuid('ID de cliente inválido'),

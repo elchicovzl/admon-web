@@ -47,6 +47,9 @@ export interface AffiliationSubProcess {
   bankRegistry: boolean
   transcription: boolean
   collection: boolean
+  paidToUser: boolean
+  disabilityAdministradoraId: string | null
+  disabilityAdministradoraType: 'EPS' | 'AFP' | 'ARL' | 'CCF' | null
   createdAt: Date
   updatedAt: Date
 }
@@ -117,6 +120,9 @@ export interface SafeAffiliationSubProcess {
   bankRegistry: boolean
   transcription: boolean
   collection: boolean
+  paidToUser: boolean
+  disabilityAdministradoraId: string | null
+  disabilityAdministradoraType: 'EPS' | 'AFP' | 'ARL' | 'CCF' | null
   createdAt: Date
   updatedAt: Date
 }
@@ -185,6 +191,7 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
     processType?: AffiliationProcessType | null
     processTypeOther?: string | null
     startDate?: Date | null
+    note?: string | null
     client?: {
       id: string
       fullName: string
@@ -209,6 +216,12 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
   observations?: AffiliationObservationWithRelations[]
   statusLogs?: AffiliationStatusLogWithRelations[]
   beneficiaries?: SubProcessBeneficiary[]
+  disabilityAdministradora?: {
+    id: string
+    name: string
+    code: string
+    type: 'EPS' | 'AFP' | 'ARL' | 'CCF'
+  } | null
 }
 
 export interface AffiliationObservationWithRelations extends SafeAffiliationObservation {
@@ -242,6 +255,7 @@ export interface CreateAffiliationInput {
     bankRegistry?: boolean
     transcription?: boolean
     collection?: boolean
+    paidToUser?: boolean
     beneficiaryIds?: string[]
   }[]
 }

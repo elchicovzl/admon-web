@@ -31,6 +31,7 @@ export const createAffiliationSchema = z.object({
         bankRegistry: z.boolean().optional(),
         transcription: z.boolean().optional(),
         collection: z.boolean().optional(),
+        paidToUser: z.boolean().optional(),
         beneficiaryIds: z.array(z.string().cuid('ID de beneficiario inválido')).optional(),
       })
     )
@@ -93,6 +94,9 @@ export const updateSubProcessDisabilityFieldsSchema = z.object({
   bankRegistry: z.boolean().optional(),
   transcription: z.boolean().optional(),
   collection: z.boolean().optional(),
+  paidToUser: z.boolean().optional(),
+  disabilityAdministradoraId: z.string().cuid('ID de administradora inválido').nullable().optional(),
+  disabilityAdministradoraType: z.enum(['EPS', 'AFP', 'ARL']).nullable().optional(),
 })
 
 export type UpdateSubProcessDisabilityFieldsInput = z.infer<typeof updateSubProcessDisabilityFieldsSchema>

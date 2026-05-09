@@ -1,12 +1,19 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Loader2,
   Mail,
@@ -22,7 +29,10 @@ import {
   Eye,
   EyeOff,
   User,
+  Users,
+  SquareArrowOutUpRight,
 } from 'lucide-react'
+import { IdentificationType } from '@prisma/client'
 import { getClientById } from '@/lib/actions/client.actions'
 import { revealCredentialPassword } from '@/lib/actions/credential.actions'
 import type { ClientWithRelations } from '@/lib/types/client.types'
@@ -31,6 +41,8 @@ interface SubProcessClientTabProps {
   clientId: string
   employeeId?: string
   active: boolean
+  affiliationId: string
+  subProcessId: string
 }
 
 function formatUtcDate(date: Date | string): string {
@@ -39,7 +51,34 @@ function formatUtcDate(date: Date | string): string {
   return format(localized, 'dd MMM yyyy', { locale: es })
 }
 
-export function SubProcessClientTab({ clientId, employeeId, active }: SubProcessClientTabProps) {
+const TIPO_RELACION_LABELS: Record<string, { label: string; color: string }> = {
+  hijo: { label: 'Hijo/a', color: 'bg-blue-500' },
+  padre: { label: 'Padre/Madre', color: 'bg-green-500' },
+  conyuge: { label: 'Cónyuge', color: 'bg-pink-500' },
+  otro: { label: 'Otro', color: 'bg-gray-500' },
+}
+
+const ID_TYPE_SHORT_LABELS: Record<IdentificationType, string> = {
+  CEDULA: 'CC',
+  TARJETA_IDENTIDAD: 'TI',
+  REGISTRO_CIVIL: 'RC',
+  CEDULA_EXTRANJERIA: 'CE',
+  PASAPORTE: 'PA',
+  PPT: 'PPT',
+  PEP: 'PEP',
+  NUIP: 'NUIP',
+  SALVOCONDUCTO: 'SC',
+  NIT: 'NIT',
+}
+
+export function SubProcessClientTab({
+  clientId,
+  employeeId,
+  active,
+  affiliationId,
+  subProcessId,
+}: SubProcessClientTabProps) {
+  const returnQuery = `?returnTo=subprocess&affiliationId=${encodeURIComponent(affiliationId)}&subProcessId=${encodeURIComponent(subProcessId)}`
   const [client, setClient] = useState<ClientWithRelations | null>(null)
   const [employee, setEmployee] = useState<ClientWithRelations | null>(null)
   const [loading, setLoading] = useState(false)
@@ -126,10 +165,34 @@ export function SubProcessClientTab({ clientId, employeeId, active }: SubProcess
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <User className="h-4 w-4" />
-            {title}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <User className="h-4 w-4" />
+              {title}
+            </CardTitle>
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 shrink-0"
+                  >
+                    <Link
+                      href={`/dashboard/clients/${person.id}${returnQuery}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Abrir ${person.fullName} en nueva pestaña`}
+                    >
+                      <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Abrir cliente</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </CardHeader>
         <CardContent className="space-y-0">
           {/* Personal Info */}
@@ -336,6 +399,42 @@ export function SubProcessClientTab({ clientId, employeeId, active }: SubProcess
                     </div>
                   </>
                 )}
+              </div>
+            </>
+          )}
+
+          {/* Beneficiaries */}
+          {person.beneficiaries && person.beneficiaries.length > 0 && (
+            <>
+              <Separator className="my-3" />
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                Beneficiarios ({person.beneficiaries.length})
+              </p>
+              <div className="grid gap-2">
+                {person.beneficiaries.map((b) => {
+                  const relacion = TIPO_RELACION_LABELS[b.tipoRelacion] ?? {
+                    label: b.tipoRelacion,
+                    color: 'bg-gray-500',
+                  }
+                  return (
+                    <div
+                      key={b.id}
+                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge className={`${relacion.color} text-[10px] shrink-0`}>
+                          {relacion.label}
+                        </Badge>
+                        <span className="font-medium truncate">{b.nombreCompleto}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+                        <span>{ID_TYPE_SHORT_LABELS[b.identificationType] ?? b.identificationType}</span>
+                        <span className="font-mono">{b.identificationNumber}</span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </>
           )}

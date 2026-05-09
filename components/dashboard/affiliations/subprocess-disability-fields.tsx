@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { CalendarIcon, Loader2, Save } from 'lucide-react'
@@ -10,8 +10,27 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { updateSubProcessDisabilityFields } from '@/lib/actions/affiliation.actions'
+import {
+  updateSubProcessDisabilityFields,
+  getDisabilityAdministradoraOptions,
+} from '@/lib/actions/affiliation.actions'
+
+type AdministradoraType = 'EPS' | 'AFP' | 'ARL'
+
+interface AdministradoraOption {
+  id: string
+  name: string
+  code: string
+  type: 'EPS' | 'AFP' | 'ARL' | 'CCF'
+}
 
 interface DisabilityFields {
   disabilityStartDate: Date | null
@@ -19,24 +38,50 @@ interface DisabilityFields {
   bankRegistry: boolean
   transcription: boolean
   collection: boolean
+  paidToUser: boolean
+  disabilityAdministradoraId: string | null
+  disabilityAdministradoraType: AdministradoraType | null
 }
 
 interface Props {
   subProcessId: string
+  ownerClientId: string
   initial: DisabilityFields
   onUpdated?: (fields: DisabilityFields) => void
 }
 
-export function SubProcessDisabilityFields({ subProcessId, initial, onUpdated }: Props) {
+export function SubProcessDisabilityFields({ subProcessId, ownerClientId, initial, onUpdated }: Props) {
   const [fields, setFields] = useState<DisabilityFields>(initial)
   const [isPending, startTransition] = useTransition()
+  const [adminOptions, setAdminOptions] = useState<{
+    eps: AdministradoraOption | null
+    afp: AdministradoraOption | null
+    arl: AdministradoraOption | null
+  }>({ eps: null, afp: null, arl: null })
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadOptions() {
+      const result = await getDisabilityAdministradoraOptions(ownerClientId)
+      if (!cancelled && result.success && result.data) {
+        setAdminOptions(result.data)
+      }
+    }
+    loadOptions()
+    return () => {
+      cancelled = true
+    }
+  }, [ownerClientId])
 
   const dirty =
     fields.disabilityStartDate?.getTime() !== initial.disabilityStartDate?.getTime() ||
     fields.disabilityEndDate?.getTime() !== initial.disabilityEndDate?.getTime() ||
     fields.bankRegistry !== initial.bankRegistry ||
     fields.transcription !== initial.transcription ||
-    fields.collection !== initial.collection
+    fields.collection !== initial.collection ||
+    fields.paidToUser !== initial.paidToUser ||
+    fields.disabilityAdministradoraId !== initial.disabilityAdministradoraId ||
+    fields.disabilityAdministradoraType !== initial.disabilityAdministradoraType
 
   const days =
     fields.disabilityStartDate && fields.disabilityEndDate
@@ -58,6 +103,9 @@ export function SubProcessDisabilityFields({ subProcessId, initial, onUpdated }:
         bankRegistry: fields.bankRegistry,
         transcription: fields.transcription,
         collection: fields.collection,
+        paidToUser: fields.paidToUser,
+        disabilityAdministradoraId: fields.disabilityAdministradoraId,
+        disabilityAdministradoraType: fields.disabilityAdministradoraType,
       })
       if (result.success) {
         toast.success('Campos de incapacidad guardados')
@@ -141,6 +189,54 @@ export function SubProcessDisabilityFields({ subProcessId, initial, onUpdated }:
           </p>
         )}
 
+        <div>
+          <label className="text-xs font-medium">Administradora a cobrar</label>
+          <Select
+            value={fields.disabilityAdministradoraType ?? 'NONE'}
+            onValueChange={(value) => {
+              if (value === 'NONE') {
+                setFields((p) => ({
+                  ...p,
+                  disabilityAdministradoraType: null,
+                  disabilityAdministradoraId: null,
+                }))
+                return
+              }
+              const type = value as AdministradoraType
+              const opt =
+                type === 'EPS' ? adminOptions.eps :
+                type === 'AFP' ? adminOptions.afp :
+                adminOptions.arl
+              setFields((p) => ({
+                ...p,
+                disabilityAdministradoraType: type,
+                disabilityAdministradoraId: opt?.id ?? null,
+              }))
+            }}
+          >
+            <SelectTrigger className="mt-1">
+              <SelectValue placeholder="Seleccionar..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">Sin administradora</SelectItem>
+              {adminOptions.eps && (
+                <SelectItem value="EPS">EPS — {adminOptions.eps.name}</SelectItem>
+              )}
+              {adminOptions.afp && (
+                <SelectItem value="AFP">AFP — {adminOptions.afp.name}</SelectItem>
+              )}
+              {adminOptions.arl && (
+                <SelectItem value="ARL">ARL — {adminOptions.arl.name}</SelectItem>
+              )}
+              {!adminOptions.eps && !adminOptions.afp && !adminOptions.arl && (
+                <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                  El cliente no tiene EPS / AFP / ARL configuradas
+                </div>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="flex flex-wrap gap-4 pt-1">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <Checkbox
@@ -162,6 +258,13 @@ export function SubProcessDisabilityFields({ subProcessId, initial, onUpdated }:
               onCheckedChange={(v) => setFields((p) => ({ ...p, collection: !!v }))}
             />
             Cobro
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={fields.paidToUser}
+              onCheckedChange={(v) => setFields((p) => ({ ...p, paidToUser: !!v }))}
+            />
+            Pagada al usuario
           </label>
         </div>
 

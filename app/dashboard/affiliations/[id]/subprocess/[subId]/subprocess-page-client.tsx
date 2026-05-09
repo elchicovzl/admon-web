@@ -17,7 +17,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { ArrowLeft, User, Calendar, Clock, Loader2 } from 'lucide-react'
+import { ArrowLeft, User, Calendar, Clock, Loader2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
 import { SubProcessObservationsSection } from '@/components/dashboard/affiliations/subprocess-observations-section'
@@ -224,6 +224,8 @@ export function SubProcessPageClient({
             clientId={clientId}
             employeeId={subProcess.employeeId ?? undefined}
             active={true}
+            affiliationId={affiliationId}
+            subProcessId={subProcess.id}
           />
         </div>
 
@@ -313,58 +315,71 @@ export function SubProcessPageClient({
                   </div>
                 </div>
               </div>
+
+              <Separator />
+              <div className="space-y-2">
+                <Label>Estado</Label>
+                <Select
+                  value={selectedStatus || subProcess.status}
+                  onValueChange={(value) => {
+                    const newStatus = value as AffiliationSubProcessStatus
+                    setSelectedStatus(newStatus)
+                    if (newStatus !== AffiliationSubProcessStatus.RETURNED) {
+                      setStatusReason('')
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {SubProcessStatusLabels[status]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {(selectedStatus || subProcess.status) === AffiliationSubProcessStatus.RETURNED &&
+                  selectedStatus && (
+                  <div className="space-y-2 pt-2">
+                    <Label>Razón de Devolución *</Label>
+                    <Textarea
+                      placeholder="Describe la razón..."
+                      value={statusReason}
+                      onChange={(e) => setStatusReason(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                )}
+
+                {selectedStatus && selectedStatus !== subProcess.status && (
+                  <Button onClick={handleStatusChange} disabled={loading} className="w-full">
+                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Guardar
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
-          {/* Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Estado</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Select
-                value={selectedStatus || subProcess.status}
-                onValueChange={(value) => {
-                  const newStatus = value as AffiliationSubProcessStatus
-                  setSelectedStatus(newStatus)
-                  if (newStatus !== AffiliationSubProcessStatus.RETURNED) {
-                    setStatusReason('')
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {SubProcessStatusLabels[status]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {(selectedStatus || subProcess.status) === AffiliationSubProcessStatus.RETURNED &&
-                selectedStatus && (
-                <div className="space-y-2">
-                  <Label>Razón de Devolución *</Label>
-                  <Textarea
-                    placeholder="Describe la razón..."
-                    value={statusReason}
-                    onChange={(e) => setStatusReason(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-              )}
-
-              {selectedStatus && selectedStatus !== subProcess.status && (
-                <Button onClick={handleStatusChange} disabled={loading} className="w-full">
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Guardar
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          {/* Process Note (warning style — only when present) */}
+          {subProcess.affiliation?.note && (
+            <Card className="border-amber-300 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  Notas del Proceso
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-amber-900 dark:text-amber-100 whitespace-pre-wrap">
+                  {subProcess.affiliation.note}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Beneficiaries section (only INCLUSION/EXCLUSION_BENEFICIARIOS process types) */}
           {(subProcess.affiliation?.processType === 'INCLUSION_BENEFICIARIOS' ||
@@ -384,6 +399,7 @@ export function SubProcessPageClient({
           {subProcess.type === AffiliationSubProcessType.INCAPACIDADES && (
             <SubProcessDisabilityFields
               subProcessId={subProcess.id}
+              ownerClientId={subProcess.employeeId ?? clientId}
               initial={{
                 disabilityStartDate: subProcess.disabilityStartDate
                   ? new Date(subProcess.disabilityStartDate)
@@ -394,6 +410,14 @@ export function SubProcessPageClient({
                 bankRegistry: subProcess.bankRegistry ?? false,
                 transcription: subProcess.transcription ?? false,
                 collection: subProcess.collection ?? false,
+                paidToUser: subProcess.paidToUser ?? false,
+                disabilityAdministradoraId: subProcess.disabilityAdministradoraId ?? null,
+                disabilityAdministradoraType:
+                  subProcess.disabilityAdministradoraType === 'EPS' ||
+                  subProcess.disabilityAdministradoraType === 'AFP' ||
+                  subProcess.disabilityAdministradoraType === 'ARL'
+                    ? subProcess.disabilityAdministradoraType
+                    : null,
               }}
               onUpdated={(fields) =>
                 setSubProcess((prev) => ({
