@@ -4,6 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface ReturnToSubprocessBubbleProps {
   affiliationId: string
@@ -20,27 +26,37 @@ export function ReturnToSubprocessBubble({
   const href = `/dashboard/affiliations/${affiliationId}/subprocess/${subProcessId}`
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div className="flex items-center gap-1 rounded-full border border-primary/20 bg-background/95 backdrop-blur-sm shadow-lg pl-1 pr-1 py-1">
-        <Button
-          asChild
-          size="sm"
-          className="rounded-full h-9 px-4 gap-2"
-        >
-          <Link href={href}>
-            <ArrowLeft className="h-4 w-4" />
-            <span className="font-medium">Volver al sub-proceso</span>
-          </Link>
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+    <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50 animate-in fade-in zoom-in-50 duration-500">
+      <div className="relative animate-float">
+        {/* Main circular FAB */}
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                asChild
+                size="icon"
+                className="relative h-14 w-14 rounded-full shadow-xl hover:scale-110 active:scale-95 transition-transform"
+              >
+                <Link href={href} aria-label="Volver al sub-proceso">
+                  <ArrowLeft className="h-6 w-6" />
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="font-medium">
+              Volver al sub-proceso
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Dismiss X badge */}
+        <button
+          type="button"
           onClick={() => setDismissed(true)}
           aria-label="Cerrar"
+          className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-background border shadow-sm flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
-          <X className="h-4 w-4" />
-        </Button>
+          <X className="h-3 w-3" />
+        </button>
       </div>
     </div>
   )
