@@ -493,6 +493,7 @@ model Administradora {
   clientsAsAfp Client[] @relation("ClientAfp")
   clientsAsArl Client[] @relation("ClientArl")
   clientsAsCcf Client[] @relation("ClientCcf")
+  disabilitySubProcesses AffiliationSubProcess[] @relation("DisabilityAdministradora")
 
   @@unique([code, type])
   @@map("administradoras")
@@ -636,6 +637,12 @@ model AffiliationSubProcess {
   bankRegistry        Boolean                     @default(false)
   transcription       Boolean                     @default(false)
   collection          Boolean                     @default(false)
+  paidToUser          Boolean                     @default(false)
+
+  // Administradora that pays/handles this disability (only one of EPS/AFP/ARL applies)
+  disabilityAdministradoraId   String?
+  disabilityAdministradora     Administradora?     @relation("DisabilityAdministradora", fields: [disabilityAdministradoraId], references: [id])
+  disabilityAdministradoraType AdministradoraType?
 
   // Timestamps
   createdAt         DateTime                      @default(now())

@@ -1,7 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import type { ClientWithRelations, LegalRepresentative } from '@/lib/types/client.types'
+import type {
+  ClientWithRelations,
+  LegalRepresentative,
+  ClientAddress,
+  ClientAdditionalInfo,
+} from '@/lib/types/client.types'
 import { ClientType, IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,21 +14,20 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import {
   User,
-  CreditCard,
   FileText,
-  Mail,
   Phone,
   Building2,
   Edit,
   ShieldCheck,
+  MapPin,
+  Briefcase,
 } from 'lucide-react'
 import Link from 'next/link'
 import { ClientFormDialog } from '@/components/dashboard/clients/client-form-dialog'
-import { ClientAddressSection } from '@/components/dashboard/clients/client-address-section'
-import { ClientAdditionalInfoSection } from '@/components/dashboard/clients/client-additional-info-section'
 import { LegalRepresentativeFormDialog } from '@/components/dashboard/clients/legal-representative-form-dialog'
 import { AdministradorasFormDialog } from '@/components/dashboard/clients/administradoras-form-dialog'
 import { getClientById } from '@/lib/actions/client.actions'
+import { getDepartamentoLabel } from '@/lib/data/colombia-geo'
 import type { SafeClient } from '@/lib/types/client.types'
 
 interface ClientInfoPanelProps {
@@ -63,18 +67,60 @@ const WORK_DAYS_LABELS: Record<WorkDaysRange, string> = {
   DIAS_22_30: '22 a 30 días al mes',
 }
 
+function formatDate(date?: Date | null): string {
+  if (!date) return '—'
+  const d = new Date(date)
+  return d.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+function formatCurrency(value?: number | null): string {
+  if (!value) return 'No especificado'
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+  }).format(value)
+}
+
 export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProps) {
-  const [editPersonalOpen, setEditPersonalOpen] = useState(false)
+  const [editClientOpen, setEditClientOpen] = useState(false)
   const [editLegalRepOpen, setEditLegalRepOpen] = useState(false)
   const [editAdministradorasOpen, setEditAdministradorasOpen] = useState(false)
   const [legalRep, setLegalRep] = useState<LegalRepresentative | null>(
     client.legalRepresentative ?? null
+  )
+  const [address, setAddress] = useState<ClientAddress | null>(client.address ?? null)
+  const [additionalInfo, setAdditionalInfo] = useState<ClientAdditionalInfo | null>(
+    client.additionalInfo ?? null
   )
 
   const isEmpresa = client.clientType === ClientType.EMPRESA
 
   function handleClientUpdated(clientId: string, updates: Partial<SafeClient>) {
     onClientUpdated({ ...client, ...updates } as ClientWithRelations)
+  }
+
+  function handleContactInfoUpdated(updates: {
+    address?: ClientAddress | null
+    additionalInfo?: ClientAdditionalInfo | null
+  }) {
+    const next: Partial<ClientWithRelations> = {}
+    if (updates.address !== undefined) {
+      setAddress(updates.address)
+      next.address = updates.address
+    }
+    if (updates.additionalInfo !== undefined) {
+      setAdditionalInfo(updates.additionalInfo)
+      next.additionalInfo = updates.additionalInfo
+    }
+    if (Object.keys(next).length > 0) {
+      onClientUpdated({ ...client, ...next } as ClientWithRelations)
+    }
   }
 
   function handleLegalRepUpdated(data: LegalRepresentative) {
@@ -97,7 +143,7 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                 <User className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-medium">Información Personal</p>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => setEditPersonalOpen(true)}>
+              <Button size="sm" variant="ghost" onClick={() => setEditClientOpen(true)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
               </Button>
@@ -152,18 +198,19 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
 
           <Separator />
 
-          {/* Información de Contacto */}
+          {/* Información de Contacto (incluye Dirección + Información Adicional) */}
           <div className="py-3">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm font-medium">Información de Contacto</p>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => setEditPersonalOpen(true)}>
+              <Button size="sm" variant="ghost" onClick={() => setEditClientOpen(true)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
               </Button>
             </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 pl-6">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Email</p>
@@ -192,28 +239,70 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                 </div>
               )}
             </div>
-          </div>
 
-          <Separator />
+            {/* Dirección (subsección) */}
+            <div className="mt-4 pl-6">
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Dirección
+                </p>
+              </div>
+              {address ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Departamento</p>
+                    <p className="text-sm">{getDepartamentoLabel(address.departamento)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Municipio</p>
+                    <p className="text-sm">{address.municipio}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Barrio</p>
+                    <p className="text-sm">{address.ciudad || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Dirección</p>
+                    <p className="text-sm">{address.direccion}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No hay dirección registrada</p>
+              )}
+            </div>
 
-          {/* Dirección */}
-          <div className="py-3">
-            <ClientAddressSection
-              clientId={client.id}
-              initialAddress={client.address}
-              asSection
-            />
-          </div>
-
-          <Separator />
-
-          {/* Información Adicional */}
-          <div className="py-3">
-            <ClientAdditionalInfoSection
-              clientId={client.id}
-              initialInfo={client.additionalInfo}
-              asSection
-            />
+            {/* Información Adicional (subsección) */}
+            <div className="mt-4 pl-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Información Adicional
+                </p>
+              </div>
+              {additionalInfo ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1">
+                  <div className="col-span-2">
+                    <p className="text-xs font-medium text-muted-foreground">Actividad Comercial</p>
+                    <p className="text-sm">{additionalInfo.actividadComercial || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Salario</p>
+                    <p className="text-sm font-semibold">{formatCurrency(additionalInfo.salario)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Novedad de Ingreso</p>
+                    <p className="text-sm">{formatDate(additionalInfo.fechaIngreso)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Novedad de Retiro</p>
+                    <p className="text-sm">{formatDate(additionalInfo.fechaRetiro)}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No hay información adicional registrada</p>
+              )}
+            </div>
           </div>
 
           {/* Representante Legal (solo para empresas) */}
@@ -328,10 +417,13 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
 
       {/* Dialogs */}
       <ClientFormDialog
-        open={editPersonalOpen}
-        onOpenChange={setEditPersonalOpen}
+        open={editClientOpen}
+        onOpenChange={setEditClientOpen}
         editClient={client}
+        editAddress={address}
+        editAdditionalInfo={additionalInfo}
         onClientUpdated={handleClientUpdated}
+        onContactInfoUpdated={handleContactInfoUpdated}
         redirectOnCreate={false}
       />
 

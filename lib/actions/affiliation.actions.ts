@@ -423,6 +423,7 @@ export async function createAffiliation(
             bankRegistry: sp.bankRegistry ?? false,
             transcription: sp.transcription ?? false,
             collection: sp.collection ?? false,
+            paidToUser: sp.paidToUser ?? false,
             beneficiaries: sp.beneficiaryIds && sp.beneficiaryIds.length > 0
               ? {
                   create: sp.beneficiaryIds.map((bId) => ({ beneficiaryId: bId })),
@@ -739,6 +740,9 @@ export const getSubProcessById = cache(async (
         bankRegistry: true,
         transcription: true,
         collection: true,
+        paidToUser: true,
+        disabilityAdministradoraId: true,
+        disabilityAdministradoraType: true,
         createdAt: true,
         updatedAt: true,
         affiliation: {
@@ -746,6 +750,7 @@ export const getSubProcessById = cache(async (
             id: true,
             clientId: true,
             processType: true,
+            note: true,
           },
         },
         assignedTo: {
@@ -906,6 +911,9 @@ export async function updateSubProcessStatus(
           bankRegistry: true,
           transcription: true,
           collection: true,
+          paidToUser: true,
+          disabilityAdministradoraId: true,
+          disabilityAdministradoraType: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1025,6 +1033,9 @@ export async function assignSubProcess(
         bankRegistry: true,
         transcription: true,
         collection: true,
+        paidToUser: true,
+        disabilityAdministradoraId: true,
+        disabilityAdministradoraType: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1166,6 +1177,50 @@ export async function updateSubProcessBeneficiaries(
 }
 
 /**
+ * Returns the owner client's EPS/AFP/ARL administradoras (used for the
+ * disability-administradora picker).
+ */
+export async function getDisabilityAdministradoraOptions(
+  ownerClientId: string
+): Promise<ActionResponse<{
+  eps: { id: string; name: string; code: string; type: 'EPS' | 'AFP' | 'ARL' | 'CCF' } | null
+  afp: { id: string; name: string; code: string; type: 'EPS' | 'AFP' | 'ARL' | 'CCF' } | null
+  arl: { id: string; name: string; code: string; type: 'EPS' | 'AFP' | 'ARL' | 'CCF' } | null
+}>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const client = await prisma.client.findUnique({
+      where: { id: ownerClientId },
+      select: {
+        eps: { select: { id: true, name: true, code: true, type: true } },
+        afp: { select: { id: true, name: true, code: true, type: true } },
+        arl: { select: { id: true, name: true, code: true, type: true } },
+      },
+    })
+
+    if (!client) {
+      return { success: false, error: 'Cliente no encontrado' }
+    }
+
+    return {
+      success: true,
+      data: {
+        eps: client.eps ?? null,
+        afp: client.afp ?? null,
+        arl: client.arl ?? null,
+      },
+    }
+  } catch (error) {
+    console.error('Error loading disability administradora options:', error)
+    return { success: false, error: 'Error al cargar administradoras' }
+  }
+}
+
+/**
  * Update disability-specific fields for a sub-process (only valid for INCAPACIDADES)
  */
 export async function updateSubProcessDisabilityFields(
@@ -1202,6 +1257,9 @@ export async function updateSubProcessDisabilityFields(
     if (data.bankRegistry !== undefined) updateData.bankRegistry = data.bankRegistry
     if (data.transcription !== undefined) updateData.transcription = data.transcription
     if (data.collection !== undefined) updateData.collection = data.collection
+    if (data.paidToUser !== undefined) updateData.paidToUser = data.paidToUser
+    if (data.disabilityAdministradoraId !== undefined) updateData.disabilityAdministradoraId = data.disabilityAdministradoraId
+    if (data.disabilityAdministradoraType !== undefined) updateData.disabilityAdministradoraType = data.disabilityAdministradoraType
 
     const updated = await prisma.affiliationSubProcess.update({
       where: { id: data.subProcessId },
@@ -1219,6 +1277,9 @@ export async function updateSubProcessDisabilityFields(
         bankRegistry: true,
         transcription: true,
         collection: true,
+        paidToUser: true,
+        disabilityAdministradoraId: true,
+        disabilityAdministradoraType: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -1445,6 +1506,9 @@ export async function getMyAssignments(
           bankRegistry: true,
           transcription: true,
           collection: true,
+          paidToUser: true,
+          disabilityAdministradoraId: true,
+          disabilityAdministradoraType: true,
           createdAt: true,
           updatedAt: true,
           affiliation: {

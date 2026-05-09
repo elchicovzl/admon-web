@@ -5,9 +5,27 @@ import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { IMaskInput } from 'react-imask'
-import { createClient, updateClient } from '@/lib/actions'
-import { createClientSchema, updateClientSchema, type CreateClientInput } from '@/lib/validations/client.schema'
-import type { SafeClient } from '@/lib/types/client.types'
+import {
+  createClient,
+  updateClient,
+  createOrUpdateClientAddress,
+  createOrUpdateClientAdditionalInfo,
+} from '@/lib/actions'
+import {
+  createClientSchema,
+  updateClientWithContactSchema,
+  type CreateClientInput,
+  type UpdateClientWithContactInput,
+} from '@/lib/validations/client.schema'
+import type {
+  SafeClient,
+  ClientAddress,
+  ClientAdditionalInfo,
+} from '@/lib/types/client.types'
+import {
+  DEPARTAMENTOS_COLOMBIA,
+  getMunicipiosPorDepartamento,
+} from '@/lib/data/colombia-geo'
 import { ClientType, IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,9 +51,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, MapPin, Briefcase } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
+
+interface ContactInfoUpdate {
+  address?: ClientAddress | null
+  additionalInfo?: ClientAdditionalInfo | null
+}
 
 interface ClientFormDialogProps {
   open: boolean
@@ -43,7 +67,24 @@ interface ClientFormDialogProps {
   onClientCreated?: (client: SafeClient) => void
   onClientUpdated?: (clientId: string, updates: Partial<SafeClient>) => void
   editClient?: SafeClient | null
+  editAddress?: ClientAddress | null
+  editAdditionalInfo?: ClientAdditionalInfo | null
+  onContactInfoUpdated?: (data: ContactInfoUpdate) => void
   redirectOnCreate?: boolean
+}
+
+function toDateInputValue(date?: Date | null): string {
+  if (!date) return ''
+  const d = new Date(date)
+  const year = d.getUTCFullYear()
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+type ClientFormValues = CreateClientInput & {
+  address?: UpdateClientWithContactInput['address']
+  additionalInfo?: UpdateClientWithContactInput['additionalInfo']
 }
 
 // ID types allowed for natural persons
@@ -101,14 +142,20 @@ export function ClientFormDialog({
   onClientCreated,
   onClientUpdated,
   editClient,
+  editAddress,
+  editAdditionalInfo,
+  onContactInfoUpdated,
   redirectOnCreate = true,
 }: ClientFormDialogProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const isEditMode = !!editClient
 
-  const form = useForm<CreateClientInput>({
-    resolver: zodResolver(isEditMode ? updateClientSchema : createClientSchema),
+  const form = useForm<ClientFormValues>({
+    resolver: zodResolver(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (isEditMode ? updateClientWithContactSchema : createClientSchema) as any
+    ),
     mode: 'onBlur',
     defaultValues: {
       fullName: '',
@@ -120,8 +167,25 @@ export function ClientFormDialog({
       employeeType: undefined,
       workDaysRange: undefined,
       legalRepresentative: undefined,
+      address: {
+        departamento: '',
+        municipio: '',
+        ciudad: '',
+        direccion: '',
+      },
+      additionalInfo: {
+        actividadComercial: '',
+        salario: undefined,
+        fechaIngreso: '',
+        fechaRetiro: '',
+      },
     },
   })
+
+  const addressDepartamento = form.watch('address.departamento') || ''
+  const municipios = addressDepartamento
+    ? getMunicipiosPorDepartamento(addressDepartamento)
+    : []
 
   // Watch clientType to show/hide legal representative fields and filter ID types
   const clientType = form.watch('clientType')
@@ -188,6 +252,18 @@ export function ClientFormDialog({
         employeeType: editClient.employeeType ?? undefined,
         workDaysRange: editClient.workDaysRange ?? undefined,
         legalRepresentative: undefined,
+        address: {
+          departamento: editAddress?.departamento ?? '',
+          municipio: editAddress?.municipio ?? '',
+          ciudad: editAddress?.ciudad ?? '',
+          direccion: editAddress?.direccion ?? '',
+        },
+        additionalInfo: {
+          actividadComercial: editAdditionalInfo?.actividadComercial ?? '',
+          salario: editAdditionalInfo?.salario ?? undefined,
+          fechaIngreso: toDateInputValue(editAdditionalInfo?.fechaIngreso),
+          fechaRetiro: toDateInputValue(editAdditionalInfo?.fechaRetiro),
+        },
       })
     } else {
       form.reset({
@@ -200,27 +276,91 @@ export function ClientFormDialog({
         employeeType: undefined,
         workDaysRange: undefined,
         legalRepresentative: undefined,
+        address: {
+          departamento: '',
+          municipio: '',
+          ciudad: '',
+          direccion: '',
+        },
+        additionalInfo: {
+          actividadComercial: '',
+          salario: undefined,
+          fechaIngreso: '',
+          fechaRetiro: '',
+        },
       })
     }
-  }, [editClient, form])
+  }, [editClient, editAddress, editAdditionalInfo, form])
 
-  async function onSubmit(data: CreateClientInput) {
+  async function onSubmit(data: ClientFormValues) {
     setIsLoading(true)
 
     try {
       let result
 
       if (isEditMode && editClient) {
-        result = await updateClient(editClient.id, data)
+        const { address, additionalInfo, ...clientData } = data
+        result = await updateClient(editClient.id, clientData)
 
-        if (result.success) {
-          toast.success(result.message || 'Cliente actualizado exitosamente')
-          if (result.data) {
-            onClientUpdated?.(editClient.id, result.data)
-          }
-        } else {
+        if (!result.success) {
           toast.error(result.error || 'Error al actualizar cliente')
+          return
         }
+
+        const contactUpdates: ContactInfoUpdate = {}
+
+        // Save address only if any field is filled (after validation, all required ones are present)
+        const addressFilled = !!(
+          address?.departamento ||
+          address?.municipio ||
+          address?.ciudad ||
+          address?.direccion
+        )
+        if (addressFilled && address?.departamento && address?.municipio && address?.direccion) {
+          const addressResult = await createOrUpdateClientAddress(editClient.id, {
+            departamento: address.departamento,
+            municipio: address.municipio,
+            ciudad: address.ciudad || undefined,
+            direccion: address.direccion,
+          })
+          if (addressResult.success && addressResult.data) {
+            contactUpdates.address = addressResult.data
+          } else if (!addressResult.success) {
+            toast.error(addressResult.error || 'Error al guardar dirección')
+          }
+        }
+
+        // Save additional info only if any field is filled
+        const infoFilled = !!(
+          additionalInfo?.actividadComercial ||
+          additionalInfo?.salario ||
+          additionalInfo?.fechaIngreso ||
+          additionalInfo?.fechaRetiro
+        )
+        if (infoFilled) {
+          const infoResult = await createOrUpdateClientAdditionalInfo(editClient.id, {
+            actividadComercial: additionalInfo?.actividadComercial || undefined,
+            salario: additionalInfo?.salario ?? null,
+            fechaIngreso: additionalInfo?.fechaIngreso || null,
+            fechaRetiro: additionalInfo?.fechaRetiro || null,
+          })
+          if (infoResult.success && infoResult.data) {
+            contactUpdates.additionalInfo = infoResult.data
+          } else if (!infoResult.success) {
+            toast.error(infoResult.error || 'Error al guardar información adicional')
+          }
+        }
+
+        toast.success('Cliente actualizado exitosamente')
+        if (result.data) {
+          onClientUpdated?.(editClient.id, result.data)
+        }
+        if (Object.keys(contactUpdates).length > 0) {
+          onContactInfoUpdated?.(contactUpdates)
+        }
+
+        form.reset()
+        onOpenChange(false)
       } else {
         result = await createClient(data)
 
@@ -239,11 +379,11 @@ export function ClientFormDialog({
         } else {
           toast.error(result.error || 'Error al crear cliente')
         }
-      }
 
-      if (result.success) {
-        form.reset()
-        onOpenChange(false)
+        if (result.success) {
+          form.reset()
+          onOpenChange(false)
+        }
       }
     } catch (error) {
       console.error('Submit client error:', error)
@@ -258,14 +398,14 @@ export function ClientFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className={`${isEditMode ? 'sm:max-w-[760px]' : 'sm:max-w-[600px]'} max-h-[90vh] overflow-y-auto`}>
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? 'Editar Cliente' : 'Crear Nuevo Cliente'}
           </DialogTitle>
           <DialogDescription>
             {isEditMode
-              ? 'Actualiza la información del cliente.'
+              ? 'Actualiza la información del cliente, dirección e información adicional.'
               : 'Completa todos los campos requeridos para crear un nuevo cliente.'}
           </DialogDescription>
         </DialogHeader>
@@ -493,6 +633,217 @@ export function ClientFormDialog({
                 </FormItem>
               )}
             />
+
+            {/* Address + Additional Info — only in edit mode (all optional) */}
+            {isEditMode && (
+              <>
+                <Separator className="my-6" />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Dirección (Opcional)</h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="address.departamento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Departamento</FormLabel>
+                          <Select
+                            onValueChange={(value) => {
+                              field.onChange(value)
+                              form.setValue('address.municipio', '')
+                            }}
+                            value={field.value || ''}
+                            disabled={isLoading}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {DEPARTAMENTOS_COLOMBIA.map((dept) => (
+                                <SelectItem key={dept.value} value={dept.value}>
+                                  {dept.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="address.municipio"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Municipio</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || ''}
+                            disabled={isLoading || !addressDepartamento}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {municipios.length > 0 ? (
+                                municipios.map((mun) => (
+                                  <SelectItem key={mun} value={mun}>
+                                    {mun}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <div className="py-6 text-center text-sm text-muted-foreground">
+                                  Selecciona un departamento primero
+                                </div>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="address.ciudad"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Barrio</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Ej: El Poblado"
+                            disabled={isLoading}
+                            {...field}
+                            value={field.value || ''}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="address.direccion"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Dirección Completa</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Ej: Calle 50 # 45-23, Apto 301"
+                            className="resize-none"
+                            disabled={isLoading}
+                            {...field}
+                            value={field.value || ''}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <Separator className="my-6" />
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    <h3 className="text-sm font-semibold">Información Adicional (Opcional)</h3>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="additionalInfo.actividadComercial"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Actividad Comercial</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Ej: Comercio al por menor, Servicios profesionales"
+                            disabled={isLoading}
+                            {...field}
+                            value={field.value || ''}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="additionalInfo.salario"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Salario (COP)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="2500000"
+                            disabled={isLoading}
+                            value={field.value ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              field.onChange(value ? parseFloat(value) : undefined)
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="additionalInfo.fechaIngreso"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Novedad de Ingreso</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              disabled={isLoading}
+                              {...field}
+                              value={field.value || ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="additionalInfo.fechaRetiro"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Novedad de Retiro</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="date"
+                              disabled={isLoading}
+                              {...field}
+                              value={field.value || ''}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Legal Representative Section - Only for Companies on Create */}
             {isCompany && !isEditMode && (

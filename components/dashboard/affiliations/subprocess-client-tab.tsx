@@ -22,7 +22,9 @@ import {
   Eye,
   EyeOff,
   User,
+  Users,
 } from 'lucide-react'
+import { IdentificationType } from '@prisma/client'
 import { getClientById } from '@/lib/actions/client.actions'
 import { revealCredentialPassword } from '@/lib/actions/credential.actions'
 import type { ClientWithRelations } from '@/lib/types/client.types'
@@ -37,6 +39,26 @@ function formatUtcDate(date: Date | string): string {
   const d = new Date(date)
   const localized = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
   return format(localized, 'dd MMM yyyy', { locale: es })
+}
+
+const TIPO_RELACION_LABELS: Record<string, { label: string; color: string }> = {
+  hijo: { label: 'Hijo/a', color: 'bg-blue-500' },
+  padre: { label: 'Padre/Madre', color: 'bg-green-500' },
+  conyuge: { label: 'Cónyuge', color: 'bg-pink-500' },
+  otro: { label: 'Otro', color: 'bg-gray-500' },
+}
+
+const ID_TYPE_SHORT_LABELS: Record<IdentificationType, string> = {
+  CEDULA: 'CC',
+  TARJETA_IDENTIDAD: 'TI',
+  REGISTRO_CIVIL: 'RC',
+  CEDULA_EXTRANJERIA: 'CE',
+  PASAPORTE: 'PA',
+  PPT: 'PPT',
+  PEP: 'PEP',
+  NUIP: 'NUIP',
+  SALVOCONDUCTO: 'SC',
+  NIT: 'NIT',
 }
 
 export function SubProcessClientTab({ clientId, employeeId, active }: SubProcessClientTabProps) {
@@ -336,6 +358,42 @@ export function SubProcessClientTab({ clientId, employeeId, active }: SubProcess
                     </div>
                   </>
                 )}
+              </div>
+            </>
+          )}
+
+          {/* Beneficiaries */}
+          {person.beneficiaries && person.beneficiaries.length > 0 && (
+            <>
+              <Separator className="my-3" />
+              <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                Beneficiarios ({person.beneficiaries.length})
+              </p>
+              <div className="grid gap-2">
+                {person.beneficiaries.map((b) => {
+                  const relacion = TIPO_RELACION_LABELS[b.tipoRelacion] ?? {
+                    label: b.tipoRelacion,
+                    color: 'bg-gray-500',
+                  }
+                  return (
+                    <div
+                      key={b.id}
+                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge className={`${relacion.color} text-[10px] shrink-0`}>
+                          {relacion.label}
+                        </Badge>
+                        <span className="font-medium truncate">{b.nombreCompleto}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 text-xs text-muted-foreground">
+                        <span>{ID_TYPE_SHORT_LABELS[b.identificationType] ?? b.identificationType}</span>
+                        <span className="font-mono">{b.identificationNumber}</span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </>
           )}
