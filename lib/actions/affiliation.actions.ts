@@ -155,6 +155,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
               select: {
                 id: true,
                 fullName: true,
+                identificationNumber: true,
               },
             },
           },
@@ -1651,7 +1652,10 @@ export const getSubProcessesForKanban = cache(async (): Promise<ActionResponse<S
           status: AffiliationStatus.ACTIVE, // Only show sub-processes from ACTIVE affiliations
         },
         status: {
-          not: AffiliationSubProcessStatus.PENDING_SUPPORT, // Exclude PENDING_SUPPORT from kanban
+          notIn: [
+            AffiliationSubProcessStatus.PENDING_SUPPORT,
+            AffiliationSubProcessStatus.PENDING_DOCUMENT,
+          ],
         },
       },
       select: {

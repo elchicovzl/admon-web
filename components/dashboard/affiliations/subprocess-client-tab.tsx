@@ -32,7 +32,7 @@ import {
   Users,
   SquareArrowOutUpRight,
 } from 'lucide-react'
-import { IdentificationType } from '@prisma/client'
+import { IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { getClientById } from '@/lib/actions/client.actions'
 import { revealCredentialPassword } from '@/lib/actions/credential.actions'
 import type { ClientWithRelations } from '@/lib/types/client.types'
@@ -56,6 +56,13 @@ const TIPO_RELACION_LABELS: Record<string, { label: string; color: string }> = {
   padre: { label: 'Padre/Madre', color: 'bg-green-500' },
   conyuge: { label: 'Cónyuge', color: 'bg-pink-500' },
   otro: { label: 'Otro', color: 'bg-gray-500' },
+}
+
+const WORK_DAYS_LABELS: Record<WorkDaysRange, string> = {
+  DIAS_1_7: '1 a 7 días al mes',
+  DIAS_8_14: '8 a 14 días al mes',
+  DIAS_15_21: '15 a 21 días al mes',
+  DIAS_22_30: '22 a 30 días al mes',
 }
 
 const ID_TYPE_SHORT_LABELS: Record<IdentificationType, string> = {
@@ -158,12 +165,18 @@ export function SubProcessClientTab({
   }
 
   // Unified card: personal info + administradoras + credentials + legal rep (if empresa)
-  function renderPersonCard(person: ClientWithRelations, title: string) {
+  function renderPersonCard(person: ClientWithRelations, title: string, highlight: boolean = false) {
     const showLegalRep = person.clientType === 'EMPRESA' && person.legalRepresentative
     const hasCredentials = person.credentials && person.credentials.length > 0
 
     return (
-      <Card>
+      <Card
+        className={
+          highlight
+            ? 'border-blue-200 bg-blue-50/60 dark:border-blue-900/50 dark:bg-blue-950/30'
+            : undefined
+        }
+      >
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-sm flex items-center gap-2">
@@ -362,13 +375,30 @@ export function SubProcessClientTab({
             </>
           )}
 
+          {/* Part-time work days (only for TIEMPO_PARCIAL employees) */}
+          {person.clientType === 'EMPLEADO' &&
+            person.employeeType === EmployeeType.TIEMPO_PARCIAL &&
+            person.workDaysRange && (
+              <>
+                <Separator className="my-3" />
+                <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Tiempo Parcial
+                </p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div className="text-muted-foreground">Días Laborados</div>
+                  <div className="font-medium">{WORK_DAYS_LABELS[person.workDaysRange]}</div>
+                </div>
+              </>
+            )}
+
           {/* Additional Info */}
           {person.additionalInfo && (
             <>
               <Separator className="my-3" />
               <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Briefcase className="h-3.5 w-3.5" />
-                Información Adicional
+                Información del Contrato
               </p>
               <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 {person.additionalInfo.actividadComercial && (
@@ -476,16 +506,20 @@ export function SubProcessClientTab({
 
   return (
     <div className="space-y-4">
-      {/* Employee Info (when subprocess has an employee) */}
-      {employee && (
-        <>
-          {renderPersonCard(employee, 'Información del Empleado')}
-          <Separator className="my-2" />
-        </>
+      {/* Company first (highlighted in blue when subprocess belongs to an employee of a company) */}
+      {renderPersonCard(
+        client,
+        employee ? 'Información de la Empresa' : 'Información del Cliente',
+        !!employee
       )}
 
-      {renderPersonCard(client, employee ? 'Información de la Empresa' : 'Información del Cliente')}
-
+      {/* Employee below the company */}
+      {employee && (
+        <>
+          <Separator className="my-2" />
+          {renderPersonCard(employee, 'Información del Empleado')}
+        </>
+      )}
     </div>
   )
 }

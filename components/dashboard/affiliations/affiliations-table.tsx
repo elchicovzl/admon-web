@@ -38,22 +38,109 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Trash2, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Trash2, Loader2, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { toggleAffiliationStatus, deleteAffiliation } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
 import { AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
 import { TypeBadge } from './status-badge'
 import { AffiliationEditDialog } from './affiliation-edit-dialog'
-import { AffiliationSubProcessStatus, AffiliationProcessType } from '@prisma/client'
+import { AffiliationSubProcessStatus, AffiliationProcessType, ClientType } from '@prisma/client'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface AffiliationsTableProps {
   affiliations: AffiliationWithRelations[]
+  searchQuery?: string
   onAffiliationUpdated?: (affiliationId: string, updates: Partial<AffiliationWithRelations>) => void
+}
+
+type EmployeeMini = { id: string; fullName: string; identificationNumber?: string | null }
+
+function getUniqueEmployees(affiliation: AffiliationWithRelations): EmployeeMini[] {
+  const map = new Map<string, EmployeeMini>()
+  for (const sp of affiliation.subProcesses || []) {
+    if (sp.employee && !map.has(sp.employee.id)) {
+      map.set(sp.employee.id, sp.employee)
+    }
+  }
+  return Array.from(map.values())
+}
+
+function matchesEmployee(emp: EmployeeMini, query: string): boolean {
+  const q = query.toLowerCase()
+  return (
+    emp.fullName.toLowerCase().includes(q) ||
+    (emp.identificationNumber || '').toLowerCase().includes(q)
+  )
+}
+
+function EmployeeListPopover({
+  employees,
+  highlightQuery,
+  triggerLabel,
+}: {
+  employees: EmployeeMini[]
+  highlightQuery: string
+  triggerLabel: string
+}) {
+  const q = highlightQuery.trim().toLowerCase()
+  const sorted = q
+    ? [...employees].sort((a, b) => {
+        const aM = matchesEmployee(a, q) ? 0 : 1
+        const bM = matchesEmployee(b, q) ? 0 : 1
+        return aM - bM
+      })
+    : employees
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted border rounded px-1.5 py-0.5"
+        >
+          <Users className="h-3 w-3" />
+          {triggerLabel}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-72 p-2"
+        align="start"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-xs font-medium text-muted-foreground px-1 pb-1.5">
+          Empleados ({employees.length})
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-0.5">
+          {sorted.map((emp) => {
+            const isMatch = q ? matchesEmployee(emp, q) : false
+            return (
+              <div
+                key={emp.id}
+                className={`text-xs rounded px-1.5 py-1 truncate ${
+                  isMatch
+                    ? 'bg-amber-50 text-amber-900 border border-amber-200'
+                    : 'hover:bg-muted'
+                }`}
+                title={`${emp.fullName}${emp.identificationNumber ? ` · CC ${emp.identificationNumber}` : ''}`}
+              >
+                <span className="truncate">{emp.fullName}</span>
+                {emp.identificationNumber && (
+                  <span className="ml-1 text-muted-foreground">· {emp.identificationNumber}</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 export function AffiliationsTable({
   affiliations,
+  searchQuery = '',
   onAffiliationUpdated,
 }: AffiliationsTableProps) {
   const PAGE_SIZE = 10
@@ -194,20 +281,63 @@ export function AffiliationsTable({
             const progress = calculateProgress(affiliation)
             const globalStatus = getGlobalStatus(affiliation)
             const statusConfig = globalStatusConfig[globalStatus as keyof typeof globalStatusConfig]
+            const isCompany = affiliation.client?.clientType === ClientType.EMPRESA
+            const uniqueEmployees = isCompany ? getUniqueEmployees(affiliation) : []
+            const trimmedQuery = searchQuery.trim()
+            const matchedEmployees = trimmedQuery
+              ? uniqueEmployees.filter((e) => matchesEmployee(e, trimmedQuery))
+              : []
+            const showMatchedList = trimmedQuery.length > 0 && matchedEmployees.length > 0
+            const showCountBadge = !showMatchedList && uniqueEmployees.length > 0
 
             return (
               <TableRow key={affiliation.id}>
-                <TableCell
-                  className="max-w-[200px] cursor-pointer"
-                  onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${affiliation.id}`))}
-                >
-                  <span className="font-mono text-sm font-bold hover:underline hover:text-primary">{affiliation.affiliationNumber}</span>
+                <TableCell className="max-w-[240px]">
                   <div
-                    className="text-sm text-muted-foreground truncate"
-                    title={affiliation.client?.fullName}
+                    className="cursor-pointer"
+                    onClick={() => startTransition(() => router.push(`/dashboard/affiliations/${affiliation.id}`))}
                   >
-                    {affiliation.client?.fullName}
+                    <span className="font-mono text-sm font-bold hover:underline hover:text-primary">{affiliation.affiliationNumber}</span>
+                    <div
+                      className="text-sm text-muted-foreground truncate"
+                      title={affiliation.client?.fullName}
+                    >
+                      {affiliation.client?.fullName}
+                    </div>
                   </div>
+                  {showMatchedList && (
+                    <div className="mt-1.5 space-y-0.5">
+                      {matchedEmployees.slice(0, 3).map((emp) => (
+                        <div
+                          key={emp.id}
+                          className="flex items-center gap-1 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 truncate"
+                          title={`${emp.fullName}${emp.identificationNumber ? ` · CC ${emp.identificationNumber}` : ''}`}
+                        >
+                          <Users className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{emp.fullName}</span>
+                          {emp.identificationNumber && (
+                            <span className="text-amber-700 shrink-0">· {emp.identificationNumber}</span>
+                          )}
+                        </div>
+                      ))}
+                      {matchedEmployees.length > 3 && (
+                        <EmployeeListPopover
+                          employees={uniqueEmployees}
+                          highlightQuery={trimmedQuery}
+                          triggerLabel={`+${matchedEmployees.length - 3} más`}
+                        />
+                      )}
+                    </div>
+                  )}
+                  {showCountBadge && (
+                    <div className="mt-1.5">
+                      <EmployeeListPopover
+                        employees={uniqueEmployees}
+                        highlightQuery={trimmedQuery}
+                        triggerLabel={`Empleados: ${uniqueEmployees.length}`}
+                      />
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="text-sm max-w-[180px]">

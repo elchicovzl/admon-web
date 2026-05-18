@@ -347,7 +347,7 @@ export function ClientFormDialog({
           if (infoResult.success && infoResult.data) {
             contactUpdates.additionalInfo = infoResult.data
           } else if (!infoResult.success) {
-            toast.error(infoResult.error || 'Error al guardar información adicional')
+            toast.error(infoResult.error || 'Error al guardar información del contrato')
           }
         }
 
@@ -405,7 +405,7 @@ export function ClientFormDialog({
           </DialogTitle>
           <DialogDescription>
             {isEditMode
-              ? 'Actualiza la información del cliente, dirección e información adicional.'
+              ? 'Actualiza la información del cliente, dirección e información del contrato.'
               : 'Completa todos los campos requeridos para crear un nuevo cliente.'}
           </DialogDescription>
         </DialogHeader>
@@ -757,7 +757,7 @@ export function ClientFormDialog({
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <h3 className="text-sm font-semibold">Información Adicional (Opcional)</h3>
+                    <h3 className="text-sm font-semibold">Información del Contrato (Opcional)</h3>
                   </div>
 
                   <FormField

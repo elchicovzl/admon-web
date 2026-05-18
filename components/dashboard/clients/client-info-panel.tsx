@@ -277,7 +277,7 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
               <div className="flex items-center gap-2 mb-2">
                 <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Información Adicional
+                  Información del Contrato
                 </p>
               </div>
               {additionalInfo ? (
@@ -300,7 +300,7 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No hay información adicional registrada</p>
+                <p className="text-sm text-muted-foreground">No hay información del contrato registrada</p>
               )}
             </div>
           </div>

@@ -77,7 +77,7 @@ export function AffiliationTableFiltersBar({
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por proceso, empresa o identificación..."
+            placeholder="Buscar por proceso, empresa, empleado o identificación..."
             value={filters.searchQuery}
             onChange={(e) =>
               onFiltersChange({ ...filters, searchQuery: e.target.value })

@@ -94,7 +94,11 @@ export function AffiliationsClient({
         const matchesNumber = aff.affiliationNumber?.toLowerCase().includes(query)
         const matchesName = aff.client?.fullName?.toLowerCase().includes(query)
         const matchesId = aff.client?.identificationNumber?.toLowerCase().includes(query)
-        if (!matchesNumber && !matchesName && !matchesId) return false
+        const matchesEmployee = (aff.subProcesses || []).some((sp) =>
+          sp.employee?.fullName?.toLowerCase().includes(query) ||
+          sp.employee?.identificationNumber?.toLowerCase().includes(query)
+        )
+        if (!matchesNumber && !matchesName && !matchesId && !matchesEmployee) return false
       }
 
       if (filters.selectedProcessType && aff.processType !== filters.selectedProcessType) {
@@ -188,6 +192,7 @@ export function AffiliationsClient({
 
       <AffiliationsTable
         affiliations={filteredAffiliations}
+        searchQuery={filters.searchQuery}
         onAffiliationUpdated={handleAffiliationUpdated}
       />
 

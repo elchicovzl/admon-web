@@ -211,6 +211,7 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
   employee?: {
     id: string
     fullName: string
+    identificationNumber?: string | null
   } | null
   documents?: SafeAffiliationDocument[]
   observations?: AffiliationObservationWithRelations[]
@@ -436,6 +437,7 @@ export const SubProcessStatusLabels: Record<AffiliationSubProcessStatus, string>
   NOT_STARTED: 'Sin Iniciar',
   IN_PROGRESS: 'En Proceso',
   PENDING_SUPPORT: 'Pendiente Soporte',
+  PENDING_DOCUMENT: 'Pendiente de Documento',
   IN_REVIEW: 'En Revisión',
   COMPLETED: 'Terminado',
   RETURNED: 'Devuelto',
@@ -559,6 +561,11 @@ export const SubProcessStatusColors: Record<
     bg: 'bg-yellow-100',
     text: 'text-yellow-700',
     border: 'border-yellow-300',
+  },
+  PENDING_DOCUMENT: {
+    bg: 'bg-amber-100',
+    text: 'text-amber-800',
+    border: 'border-amber-300',
   },
   IN_REVIEW: {
     bg: 'bg-purple-100',

@@ -169,28 +169,31 @@ export function SubProcessObservationsSection({
               {observations.map((observation) => (
                 <div
                   key={observation.id}
-                  className="border rounded-lg p-4 space-y-2 hover:bg-muted/50 transition-colors"
+                  className="rounded-lg p-4 space-y-2 border border-amber-300 bg-amber-50 hover:bg-amber-100/60 dark:border-amber-900/50 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="outline" className="text-xs">
+                        <Badge
+                          variant="outline"
+                          className="text-xs border-amber-300 bg-white/70 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+                        >
                           {observation.createdBy?.name || observation.createdBy?.email}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-amber-800/80 dark:text-amber-200/80">
                           {format(new Date(observation.createdAt), "d 'de' MMM 'de' yyyy 'a las' HH:mm", {
                             locale: es,
                           })}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm whitespace-pre-wrap">{observation.content}</p>
+                      <p className="mt-2 text-sm whitespace-pre-wrap text-amber-900 dark:text-amber-100">{observation.content}</p>
                     </div>
                     {canDeleteObservation(observation) && (
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => openDeleteDialog(observation.id)}
-                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-amber-100 dark:hover:bg-amber-950/50"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

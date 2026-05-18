@@ -546,12 +546,13 @@ enum AffiliationSubProcessType {
 
 // Sub-process status states
 enum AffiliationSubProcessStatus {
-  NOT_STARTED      // Sin iniciar
-  IN_PROGRESS      // En proceso
-  PENDING_SUPPORT  // Pendiente de soporte
-  IN_REVIEW        // En revisión
-  COMPLETED        // Terminado
-  RETURNED         // Devuelto/Rechazado
+  NOT_STARTED       // Sin iniciar
+  IN_PROGRESS       // En proceso
+  PENDING_SUPPORT   // Pendiente de soporte
+  PENDING_DOCUMENT  // Pendiente de documento
+  IN_REVIEW         // En revisión
+  COMPLETED         // Terminado
+  RETURNED          // Devuelto/Rechazado
 }
 
 // Document categories for affiliation documents

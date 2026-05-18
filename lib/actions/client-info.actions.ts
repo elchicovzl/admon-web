@@ -135,7 +135,7 @@ export async function createOrUpdateClientAdditionalInfo(
 
     return {
       success: true,
-      message: 'Información adicional guardada exitosamente',
+      message: 'Información del contrato guardada exitosamente',
       data: {
         ...additionalInfo,
         salario: additionalInfo.salario ? Number(additionalInfo.salario) : null,
@@ -143,7 +143,7 @@ export async function createOrUpdateClientAdditionalInfo(
     }
   } catch (error) {
     console.error('Create/update client additional info error:', error)
-    return { success: false, error: 'Error al guardar información adicional' }
+    return { success: false, error: 'Error al guardar información del contrato' }
   }
 }
 
