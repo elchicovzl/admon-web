@@ -50,7 +50,25 @@ import {
   User,
   Mail,
   FlaskConical,
+  GripVertical,
 } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,6 +88,7 @@ import {
   sendAffiliationWithEmail,
   previewAffiliationEmail,
   sendTestAffiliationEmail,
+  reorderAffiliationDocuments,
 } from '@/lib/actions/affiliation.actions'
 import type { EmailComposeData, EmailComposeDocument } from '@/lib/types/affiliation.types'
 
@@ -89,6 +108,60 @@ function getFileIcon(fileType: string) {
   return <FileText className="h-4 w-4 text-orange-500" />
 }
 
+function SortableDocRow({
+  doc,
+  checked,
+  onToggle,
+  disabled,
+}: {
+  doc: EmailComposeDocument
+  checked: boolean
+  onToggle: () => void
+  disabled: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: doc.id,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 p-2 rounded-md border bg-background hover:bg-muted/60 ${
+        isDragging ? 'border-primary shadow-sm' : 'border-transparent'
+      }`}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        disabled={disabled}
+        aria-label="Reordenar documento"
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 touch-none"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <Checkbox checked={checked} onCheckedChange={onToggle} />
+      {getFileIcon(doc.fileType)}
+      <span className="text-sm flex-1 truncate" title={doc.fileName}>
+        {doc.fileName}
+      </span>
+      <Badge variant="outline" className="text-[10px] shrink-0">
+        {doc.subProcessLabel}
+      </Badge>
+      <span className="text-xs text-muted-foreground shrink-0">
+        {formatFileSize(doc.fileSize)}
+      </span>
+    </div>
+  )
+}
+
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25MB
 
 export function SendAffiliationEmailClient({
@@ -100,13 +173,22 @@ export function SendAffiliationEmailClient({
   const [isSendingTest, setIsSendingTest] = useState(false)
   const [testEmailOpen, setTestEmailOpen] = useState(false)
   const [testEmailTo, setTestEmailTo] = useState('')
+  // Ordered list of all documents (drives display order)
+  const [orderedDocs, setOrderedDocs] = useState<EmailComposeDocument[]>(emailData.documents)
+  // Which docs are selected (independent from order)
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(
     new Set(emailData.documents.map((d) => d.id))
   )
+  const [isReordering, setIsReordering] = useState(false)
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [ccInput, setCcInput] = useState('')
   const [ccEmails, setCcEmails] = useState<string[]>([])
+
+  // Selected document IDs in current display order
+  const selectedIdsInOrder = orderedDocs
+    .filter((d) => selectedDocIds.has(d.id))
+    .map((d) => d.id)
 
   const form = useForm<SendAffiliationEmailInput>({
     resolver: zodResolver(sendAffiliationEmailSchema),
@@ -122,7 +204,7 @@ export function SendAffiliationEmailClient({
   })
 
   // Calculate total attachment size
-  const totalAttachmentSize = emailData.documents
+  const totalAttachmentSize = orderedDocs
     .filter((doc) => selectedDocIds.has(doc.id))
     .reduce((sum, doc) => sum + doc.fileSize, 0)
   const exceedsLimit = totalAttachmentSize > MAX_ATTACHMENT_SIZE
@@ -137,23 +219,75 @@ export function SendAffiliationEmailClient({
         } else {
           next.add(docId)
         }
-        form.setValue('selectedDocumentIds', Array.from(next))
+        const orderedSelected = orderedDocs
+          .filter((d) => next.has(d.id))
+          .map((d) => d.id)
+        form.setValue('selectedDocumentIds', orderedSelected)
         return next
       })
     },
-    [form]
+    [form, orderedDocs]
   )
 
   const toggleAllDocuments = useCallback(() => {
-    if (selectedDocIds.size === emailData.documents.length) {
+    if (selectedDocIds.size === orderedDocs.length) {
       setSelectedDocIds(new Set())
       form.setValue('selectedDocumentIds', [])
     } else {
-      const allIds = new Set(emailData.documents.map((d) => d.id))
-      setSelectedDocIds(allIds)
-      form.setValue('selectedDocumentIds', Array.from(allIds))
+      const allIds = orderedDocs.map((d) => d.id)
+      setSelectedDocIds(new Set(allIds))
+      form.setValue('selectedDocumentIds', allIds)
     }
-  }, [selectedDocIds.size, emailData.documents, form])
+  }, [selectedDocIds.size, orderedDocs, form])
+
+  // dnd-kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event
+      if (!over || active.id === over.id) return
+
+      const oldIndex = orderedDocs.findIndex((d) => d.id === active.id)
+      const newIndex = orderedDocs.findIndex((d) => d.id === over.id)
+      if (oldIndex === -1 || newIndex === -1) return
+
+      const previousOrder = orderedDocs
+      const nextOrder = arrayMove(orderedDocs, oldIndex, newIndex)
+
+      // Optimistic update
+      setOrderedDocs(nextOrder)
+      const newSelectedIds = nextOrder.filter((d) => selectedDocIds.has(d.id)).map((d) => d.id)
+      form.setValue('selectedDocumentIds', newSelectedIds)
+
+      setIsReordering(true)
+      try {
+        const result = await reorderAffiliationDocuments({
+          affiliationId,
+          orderedDocumentIds: nextOrder.map((d) => d.id),
+        })
+        if (!result.success) {
+          // Rollback
+          setOrderedDocs(previousOrder)
+          const rolledBack = previousOrder.filter((d) => selectedDocIds.has(d.id)).map((d) => d.id)
+          form.setValue('selectedDocumentIds', rolledBack)
+          toast.error(result.error || 'Error al guardar el orden de documentos')
+        }
+      } catch (error) {
+        setOrderedDocs(previousOrder)
+        const rolledBack = previousOrder.filter((d) => selectedDocIds.has(d.id)).map((d) => d.id)
+        form.setValue('selectedDocumentIds', rolledBack)
+        console.error('Reorder error:', error)
+        toast.error('Error al guardar el orden de documentos')
+      } finally {
+        setIsReordering(false)
+      }
+    },
+    [orderedDocs, selectedDocIds, affiliationId, form]
+  )
 
   // CC email management
   const addCcEmail = useCallback(() => {
@@ -225,7 +359,9 @@ export function SendAffiliationEmailClient({
     try {
       const result = await sendAffiliationWithEmail({
         ...data,
-        selectedDocumentIds: Array.from(selectedDocIds),
+        selectedDocumentIds: orderedDocs
+          .filter((d) => selectedDocIds.has(d.id))
+          .map((d) => d.id),
       })
 
       if (result.success) {
@@ -269,15 +405,6 @@ export function SendAffiliationEmailClient({
     } finally {
       setIsSendingTest(false)
     }
-  }
-
-  // Group documents by sub-process
-  const groupedDocuments: Record<string, EmailComposeDocument[]> = {}
-  for (const doc of emailData.documents) {
-    if (!groupedDocuments[doc.subProcessLabel]) {
-      groupedDocuments[doc.subProcessLabel] = []
-    }
-    groupedDocuments[doc.subProcessLabel].push(doc)
   }
 
   return (
@@ -336,7 +463,7 @@ export function SendAffiliationEmailClient({
                     className="text-xs"
                     onClick={toggleAllDocuments}
                   >
-                    {selectedDocIds.size === emailData.documents.length
+                    {selectedDocIds.size === orderedDocs.length
                       ? 'Deseleccionar'
                       : 'Seleccionar todo'}
                   </Button>
@@ -354,38 +481,38 @@ export function SendAffiliationEmailClient({
                 </div>
               </CardHeader>
               <CardContent>
-                {emailData.documents.length === 0 ? (
+                {orderedDocs.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">Sin documentos</p>
                 ) : (
-                  <ScrollArea className="max-h-[400px]">
-                    <div className="space-y-4">
-                      {Object.entries(groupedDocuments).map(([label, docs]) => (
-                        <div key={label}>
-                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                            {label}
-                          </h4>
+                  <>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Arrastrá con <GripVertical className="inline h-3 w-3 align-text-bottom" /> para reordenar. El orden se conserva al enviar.
+                    </p>
+                    <ScrollArea className="max-h-[400px]">
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={orderedDocs.map((d) => d.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
                           <div className="space-y-1">
-                            {docs.map((doc) => (
-                              <label
+                            {orderedDocs.map((doc) => (
+                              <SortableDocRow
                                 key={doc.id}
-                                className="flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer"
-                              >
-                                <Checkbox
-                                  checked={selectedDocIds.has(doc.id)}
-                                  onCheckedChange={() => toggleDocument(doc.id)}
-                                />
-                                {getFileIcon(doc.fileType)}
-                                <span className="text-sm flex-1 truncate">{doc.fileName}</span>
-                                <span className="text-xs text-muted-foreground shrink-0">
-                                  {formatFileSize(doc.fileSize)}
-                                </span>
-                              </label>
+                                doc={doc}
+                                checked={selectedDocIds.has(doc.id)}
+                                onToggle={() => toggleDocument(doc.id)}
+                                disabled={isReordering}
+                              />
                             ))}
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </ScrollArea>
+                        </SortableContext>
+                      </DndContext>
+                    </ScrollArea>
+                  </>
                 )}
               </CardContent>
             </Card>

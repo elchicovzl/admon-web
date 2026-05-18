@@ -38,7 +38,9 @@ import {
 } from '@/lib/validations/affiliation.schema'
 import {
   sendAffiliationEmailSchema,
+  reorderAffiliationDocumentsSchema,
   type SendAffiliationEmailInput,
+  type ReorderAffiliationDocumentsInput,
 } from '@/lib/validations/send-affiliation-email.schema'
 import { sendAffiliationCompletedEmail } from '@/lib/email'
 import { render } from '@react-email/render'
@@ -2339,17 +2341,25 @@ export async function getAffiliationEmailData(
       })),
     }))
 
-    const documents = affiliation.subProcesses.flatMap((sp) =>
-      sp.documents.map((doc) => ({
-        id: doc.id,
-        fileName: doc.fileName,
-        fileType: doc.fileType,
-        fileSize: doc.fileSize,
-        s3Key: doc.s3Key,
-        subProcessType: sp.type,
-        subProcessLabel: SubProcessTypeLabels[sp.type] || sp.type,
-      }))
-    )
+    const documents = affiliation.subProcesses
+      .flatMap((sp) =>
+        sp.documents.map((doc) => ({
+          id: doc.id,
+          fileName: doc.fileName,
+          fileType: doc.fileType,
+          fileSize: doc.fileSize,
+          s3Key: doc.s3Key,
+          displayOrder: doc.displayOrder,
+          createdAt: doc.createdAt,
+          subProcessType: sp.type,
+          subProcessLabel: SubProcessTypeLabels[sp.type] || sp.type,
+        }))
+      )
+      .sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder
+        return a.createdAt.getTime() - b.createdAt.getTime()
+      })
+      .map(({ createdAt, ...rest }) => rest) // strip createdAt; client doesn't need it
 
     // Build email body and subject
     const emailBody = buildAffiliationEmailBody(affiliation, processTypeLabel)
@@ -2378,6 +2388,59 @@ export async function getAffiliationEmailData(
   } catch (error) {
     console.error('Error getting affiliation email data:', error)
     return { success: false, error: 'Error al obtener datos de la afiliación' }
+  }
+}
+
+/**
+ * Update the displayOrder of documents within an affiliation.
+ * Receives the document IDs in the desired order and assigns them
+ * sequential displayOrder values starting at 1.
+ */
+export async function reorderAffiliationDocuments(
+  input: ReorderAffiliationDocumentsInput
+): Promise<ActionResponse<null>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const validation = reorderAffiliationDocumentsSchema.safeParse(input)
+    if (!validation.success) {
+      return { success: false, error: validation.error.errors[0].message }
+    }
+
+    const { affiliationId, orderedDocumentIds } = validation.data
+
+    // Verify all documents belong to the given affiliation
+    const docs = await prisma.affiliationDocument.findMany({
+      where: {
+        id: { in: orderedDocumentIds },
+        subProcess: { affiliationId },
+      },
+      select: { id: true },
+    })
+
+    if (docs.length !== orderedDocumentIds.length) {
+      return {
+        success: false,
+        error: 'Algunos documentos no pertenecen a esta afiliación',
+      }
+    }
+
+    await prisma.$transaction(
+      orderedDocumentIds.map((id, index) =>
+        prisma.affiliationDocument.update({
+          where: { id },
+          data: { displayOrder: index + 1 },
+        })
+      )
+    )
+
+    return { success: true, data: null }
+  } catch (error) {
+    console.error('Error reordering documents:', error)
+    return { success: false, error: 'Error al reordenar los documentos' }
   }
 }
 
@@ -2852,7 +2915,13 @@ export async function sendAffiliationWithEmail(
                 fileType: true,
                 fileSize: true,
                 s3Key: true,
+                displayOrder: true,
+                createdAt: true,
               },
+              orderBy: [
+                { displayOrder: 'asc' },
+                { createdAt: 'asc' },
+              ],
             },
           },
         },
@@ -2888,10 +2957,13 @@ export async function sendAffiliationWithEmail(
       label: SubProcessTypeLabels[sp.type] || sp.type,
     }))
 
-    // Get selected documents for attachments
+    // Get selected documents for attachments — respect order from selectedDocumentIds
     const allDocuments = affiliation.subProcesses.flatMap((sp) => sp.documents)
+    const docsById = new Map(allDocuments.map((d) => [d.id, d]))
     const selectedDocuments = selectedDocumentIds?.length
-      ? allDocuments.filter((doc) => selectedDocumentIds.includes(doc.id))
+      ? selectedDocumentIds
+          .map((id) => docsById.get(id))
+          .filter((d): d is NonNullable<typeof d> => d !== undefined)
       : []
 
     // Check total attachment size (25MB limit)

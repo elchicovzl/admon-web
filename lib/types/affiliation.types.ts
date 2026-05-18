@@ -535,6 +535,7 @@ export interface EmailComposeDocument {
   fileType: string
   fileSize: number
   s3Key: string
+  displayOrder: number
   subProcessType: string
   subProcessLabel: string
 }

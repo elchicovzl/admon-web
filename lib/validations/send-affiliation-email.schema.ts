@@ -18,3 +18,10 @@ export const sendAffiliationEmailSchema = z.object({
 })
 
 export type SendAffiliationEmailInput = z.infer<typeof sendAffiliationEmailSchema>
+
+export const reorderAffiliationDocumentsSchema = z.object({
+  affiliationId: z.string().cuid('ID de afiliación inválido'),
+  orderedDocumentIds: z.array(z.string().cuid('ID de documento inválido')).min(1, 'Lista vacía'),
+})
+
+export type ReorderAffiliationDocumentsInput = z.infer<typeof reorderAffiliationDocumentsSchema>

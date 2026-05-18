@@ -677,6 +677,9 @@ model AffiliationDocument {
   s3Key          String
   category       AffiliationDocumentCategory   @default(GENERAL)
 
+  // Display order (used when composing affiliation completion email; lower = appears first)
+  displayOrder   Int                           @default(0)
+
   // Audit trail
   uploadedById   String
   uploadedBy     User                          @relation("AffiliationDocumentUploadedBy", fields: [uploadedById], references: [id])
