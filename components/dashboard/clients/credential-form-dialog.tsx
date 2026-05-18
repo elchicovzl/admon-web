@@ -34,7 +34,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 
 interface CredentialFormDialogProps {
   open: boolean
@@ -54,6 +54,7 @@ export function CredentialFormDialog({
   onCredentialUpdated,
 }: CredentialFormDialogProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const isEditMode = !!editCredential
 
   const form = useForm<CreateCredentialInput>({
@@ -250,12 +251,31 @@ export function CredentialFormDialog({
                       )}
                     </FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
-                        placeholder={isEditMode ? '••••••••' : 'Contraseña'}
-                        disabled={isLoading}
-                        {...field}
-                      />
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder={isEditMode ? '••••••••' : 'Contraseña'}
+                          disabled={isLoading}
+                          className="pr-9"
+                          {...field}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          tabIndex={-1}
+                          onClick={() => setShowPassword((v) => !v)}
+                          disabled={isLoading}
+                          aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
