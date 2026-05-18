@@ -111,6 +111,7 @@ export function CreateEmployeeDialog({
     epsId: null as string | null,
     afpId: null as string | null,
     arlId: null as string | null,
+    arlRiskLevel: null as number | null,
     ccfId: null as string | null,
   })
 
@@ -144,7 +145,7 @@ export function CreateEmployeeDialog({
       })
     }
     if (isOpen) {
-      setAdmSelections({ epsId: null, afpId: null, arlId: null, ccfId: null })
+      setAdmSelections({ epsId: null, afpId: null, arlId: null, arlRiskLevel: null, ccfId: null })
     }
   }, [isOpen, catalogo])
 
@@ -458,7 +459,16 @@ export function CreateEmployeeDialog({
                     <SearchableSelect
                       options={toSelectOptions(catalogo.ARL)}
                       value={admSelections.arlId ?? NO_APLICA_VALUE}
-                      onValueChange={(val) => setAdmSelections((prev) => ({ ...prev, arlId: val === NO_APLICA_VALUE ? null : val }))}
+                      onValueChange={(val) =>
+                        setAdmSelections((prev) => {
+                          const newArlId = val === NO_APLICA_VALUE ? null : val
+                          return {
+                            ...prev,
+                            arlId: newArlId,
+                            arlRiskLevel: newArlId ? prev.arlRiskLevel : null,
+                          }
+                        })
+                      }
                       placeholder="No aplica"
                       searchPlaceholder="Buscar ARL..."
                       disabled={isLoading}
@@ -476,6 +486,33 @@ export function CreateEmployeeDialog({
                     />
                   </div>
                 </div>
+
+                {/* ARL Risk Level (only when an ARL is selected) */}
+                {admSelections.arlId && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium">Nivel de Riesgo ARL (1-5)</label>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <Button
+                          key={level}
+                          type="button"
+                          variant={admSelections.arlRiskLevel === level ? 'default' : 'outline'}
+                          size="sm"
+                          className="w-9 h-9 font-bold"
+                          disabled={isLoading}
+                          onClick={() =>
+                            setAdmSelections((prev) => ({
+                              ...prev,
+                              arlRiskLevel: prev.arlRiskLevel === level ? null : level,
+                            }))
+                          }
+                        >
+                          {level}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
