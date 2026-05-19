@@ -2349,15 +2349,18 @@ export async function getAffiliationEmailData(
           fileType: doc.fileType,
           fileSize: doc.fileSize,
           s3Key: doc.s3Key,
-          displayOrder: doc.displayOrder,
-          createdAt: doc.createdAt,
+          // Be defensive: some legacy rows may not have these populated
+          displayOrder: doc.displayOrder ?? 0,
+          createdAt: doc.createdAt instanceof Date ? doc.createdAt : null,
           subProcessType: sp.type,
           subProcessLabel: SubProcessTypeLabels[sp.type] || sp.type,
         }))
       )
       .sort((a, b) => {
         if (a.displayOrder !== b.displayOrder) return a.displayOrder - b.displayOrder
-        return a.createdAt.getTime() - b.createdAt.getTime()
+        const aTime = a.createdAt ? a.createdAt.getTime() : 0
+        const bTime = b.createdAt ? b.createdAt.getTime() : 0
+        return aTime - bTime
       })
       .map(({ createdAt, ...rest }) => rest) // strip createdAt; client doesn't need it
 
