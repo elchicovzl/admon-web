@@ -4,7 +4,7 @@
  */
 
 import { Metadata } from 'next'
-import { notFound, redirect } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/auth/auth'
 import {
@@ -12,7 +12,7 @@ import {
   getAffiliationResendData,
 } from '@/lib/actions/affiliation.actions'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, AlertTriangle } from 'lucide-react'
 import { SendAffiliationEmailClient } from './send-affiliation-email-client'
 
 export const metadata: Metadata = {
@@ -40,13 +40,48 @@ export default async function SendAffiliationPage({
     ? await getAffiliationResendData(id)
     : await getAffiliationEmailData(id)
 
-  if (!result.success || !result.data) {
-    notFound()
-  }
-
   const backHref = isResend
     ? '/dashboard/affiliations/archived'
     : `/dashboard/affiliations/${id}`
+
+  if (!result.success || !result.data) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="icon" asChild>
+            <Link href={backHref}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              No se pudo cargar la afiliación
+            </h1>
+            <p className="text-muted-foreground">
+              {isResend
+                ? 'No fue posible preparar el reenvío.'
+                : 'No fue posible preparar el envío.'}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 flex gap-3">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div className="text-sm space-y-1">
+            <p className="font-medium text-destructive">
+              {result.error || 'Error desconocido'}
+            </p>
+            <p className="text-muted-foreground">
+              ID afiliación: <span className="font-mono">{id}</span>
+            </p>
+            <p className="text-muted-foreground">
+              Si el error persiste, copiá este ID y enviálo al equipo de soporte
+              para revisar los logs.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

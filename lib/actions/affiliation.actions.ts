@@ -2386,8 +2386,18 @@ export async function getAffiliationEmailData(
       },
     }
   } catch (error) {
-    console.error('Error getting affiliation email data:', error)
-    return { success: false, error: 'Error al obtener datos de la afiliación' }
+    console.error(
+      '[getAffiliationEmailData] failed for affiliationId=%s',
+      affiliationId,
+      error instanceof Error ? { message: error.message, stack: error.stack } : error
+    )
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? `Error al obtener datos de la afiliación: ${error.message}`
+          : 'Error al obtener datos de la afiliación',
+    }
   }
 }
 
@@ -2488,8 +2498,18 @@ export async function getAffiliationResendData(
       },
     }
   } catch (error) {
-    console.error('Error getting resend data:', error)
-    return { success: false, error: 'Error al obtener los datos de reenvío' }
+    console.error(
+      '[getAffiliationResendData] failed for affiliationId=%s',
+      affiliationId,
+      error instanceof Error ? { message: error.message, stack: error.stack } : error
+    )
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? `Error al obtener los datos de reenvío: ${error.message}`
+          : 'Error al obtener los datos de reenvío',
+    }
   }
 }
 
