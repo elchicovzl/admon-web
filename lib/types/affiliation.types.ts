@@ -508,8 +508,10 @@ export interface SentEmailAttachment {
 
 export interface EmailComposeData {
   to: string
+  cc?: string[]
   subject: string
   emailBody: string
+  emailNotes?: string | null
   clientName: string
   affiliationNumber: string
   processTypeLabel: string

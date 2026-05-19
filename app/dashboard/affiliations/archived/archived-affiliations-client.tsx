@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChevronLeft, ChevronRight, Eye, Search, Archive, Mail } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Search, Archive, Send } from 'lucide-react'
 import { SentEmailViewer } from '@/components/dashboard/affiliations/sent-email-viewer'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
 
@@ -175,6 +175,12 @@ export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliation
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <SentEmailViewer affiliationId={affiliation.id} />
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/dashboard/affiliations/${affiliation.id}/send?resend=1`}>
+                          <Send className="h-4 w-4 mr-2" />
+                          Reenviar
+                        </Link>
+                      </Button>
                       <Button variant="outline" size="sm" asChild>
                         <Link href={`/dashboard/affiliations/${affiliation.id}`}>
                           <Eye className="h-4 w-4 mr-2" />

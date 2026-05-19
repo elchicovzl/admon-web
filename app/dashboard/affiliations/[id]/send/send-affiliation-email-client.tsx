@@ -95,6 +95,7 @@ import type { EmailComposeData, EmailComposeDocument } from '@/lib/types/affilia
 interface SendAffiliationEmailClientProps {
   affiliationId: string
   emailData: EmailComposeData
+  isResend?: boolean
 }
 
 function formatFileSize(bytes: number): string {
@@ -167,6 +168,7 @@ const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024 // 25MB
 export function SendAffiliationEmailClient({
   affiliationId,
   emailData,
+  isResend = false,
 }: SendAffiliationEmailClientProps) {
   const router = useRouter()
   const [isSending, setIsSending] = useState(false)
@@ -183,7 +185,7 @@ export function SendAffiliationEmailClient({
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [ccInput, setCcInput] = useState('')
-  const [ccEmails, setCcEmails] = useState<string[]>([])
+  const [ccEmails, setCcEmails] = useState<string[]>(emailData.cc ?? [])
 
   // Selected document IDs in current display order
   const selectedIdsInOrder = orderedDocs
@@ -195,10 +197,10 @@ export function SendAffiliationEmailClient({
     defaultValues: {
       affiliationId,
       to: emailData.to,
-      cc: [],
+      cc: emailData.cc ?? [],
       subject: emailData.subject,
       emailBody: emailData.emailBody,
-      emailNotes: '',
+      emailNotes: emailData.emailNotes ?? '',
       selectedDocumentIds: emailData.documents.map((d) => d.id),
     },
   })
@@ -674,7 +676,9 @@ export function SendAffiliationEmailClient({
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-4 border-t mt-4">
                     <p className="text-xs text-muted-foreground">
-                      Enviar archivará la afiliación permanentemente
+                      {isResend
+                        ? 'La afiliación ya está archivada. Solo se enviará el correo.'
+                        : 'Enviar archivará la afiliación permanentemente'}
                     </p>
                     <div className="flex gap-2">
                       <Button
@@ -705,21 +709,25 @@ export function SendAffiliationEmailClient({
                             {isSending ? (
                               <>
                                 <Loader2 className="h-4 w-4 animate-spin" />
-                                Enviando...
+                                {isResend ? 'Reenviando...' : 'Enviando...'}
                               </>
                             ) : (
                               <>
                                 <Send className="h-4 w-4" />
-                                Enviar Afiliación
+                                {isResend ? 'Reenviar Correo' : 'Enviar Afiliación'}
                               </>
                             )}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>¿Confirmar envío?</AlertDialogTitle>
+                            <AlertDialogTitle>
+                              {isResend ? '¿Confirmar reenvío?' : '¿Confirmar envío?'}
+                            </AlertDialogTitle>
                             <AlertDialogDescription>
-                              Esta acción archivará permanentemente la afiliación y enviará el correo al cliente. ¿Deseas continuar?
+                              {isResend
+                                ? 'Se enviará el correo al destinatario con los adjuntos seleccionados. La afiliación seguirá archivada y quedará registro del reenvío.'
+                                : 'Esta acción archivará permanentemente la afiliación y enviará el correo al cliente. ¿Deseas continuar?'}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -732,10 +740,10 @@ export function SendAffiliationEmailClient({
                               {isSending ? (
                                 <>
                                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                  Enviando...
+                                  {isResend ? 'Reenviando...' : 'Enviando...'}
                                 </>
                               ) : (
-                                'Confirmar envío'
+                                isResend ? 'Confirmar reenvío' : 'Confirmar envío'
                               )}
                             </AlertDialogAction>
                           </AlertDialogFooter>

@@ -2445,6 +2445,55 @@ export async function reorderAffiliationDocuments(
 }
 
 /**
+ * Get email compose data prefilled from the latest SentEmail for an archived affiliation.
+ * Documents and subprocess metadata are fetched fresh; recipient, subject and notes come
+ * from the previous email so the manager can adjust before resending.
+ */
+export async function getAffiliationResendData(
+  affiliationId: string
+): Promise<ActionResponse<EmailComposeData & { isResend: boolean }>> {
+  try {
+    const base = await getAffiliationEmailData(affiliationId)
+    if (!base.success || !base.data) {
+      return { success: false, error: base.error || 'No se pudo cargar la afiliación' }
+    }
+
+    const lastEmail = await prisma.sentEmail.findFirst({
+      where: { affiliationId },
+      orderBy: { sentAt: 'desc' },
+      select: {
+        toEmail: true,
+        ccEmails: true,
+        subject: true,
+        emailNotes: true,
+      },
+    })
+
+    if (!lastEmail) {
+      // No previous send — fall back to fresh compose data but flag as resend
+      return { success: true, data: { ...base.data, isResend: true } }
+    }
+
+    const cc = lastEmail.ccEmails ? (JSON.parse(lastEmail.ccEmails) as string[]) : []
+
+    return {
+      success: true,
+      data: {
+        ...base.data,
+        to: lastEmail.toEmail,
+        cc,
+        subject: lastEmail.subject,
+        emailNotes: lastEmail.emailNotes ?? null,
+        isResend: true,
+      },
+    }
+  } catch (error) {
+    console.error('Error getting resend data:', error)
+    return { success: false, error: 'Error al obtener los datos de reenvío' }
+  }
+}
+
+/**
  * Build the subject line based on affiliation type
  */
 function buildAffiliationSubject(
@@ -2932,17 +2981,26 @@ export async function sendAffiliationWithEmail(
       return { success: false, error: 'Afiliación no encontrada' }
     }
 
-    if (affiliation.status !== AffiliationStatus.ACTIVE) {
-      return { success: false, error: 'Solo se pueden enviar afiliaciones activas' }
-    }
+    const isInitialSend = affiliation.status === AffiliationStatus.ACTIVE
+    const isResend = affiliation.status === AffiliationStatus.ARCHIVED
 
-    const allCompleted = affiliation.subProcesses.every(
-      (sp) => sp.status === AffiliationSubProcessStatus.COMPLETED
-    )
-    if (!allCompleted) {
+    if (!isInitialSend && !isResend) {
       return {
         success: false,
-        error: 'Todos los sub-procesos deben estar completados antes de enviar la afiliación',
+        error: 'El estado actual de la afiliación no permite enviar el correo',
+      }
+    }
+
+    if (isInitialSend) {
+      const allCompleted = affiliation.subProcesses.every(
+        (sp) => sp.status === AffiliationSubProcessStatus.COMPLETED
+      )
+      if (!allCompleted) {
+        return {
+          success: false,
+          error:
+            'Todos los sub-procesos deben estar completados antes de enviar la afiliación',
+        }
       }
     }
 
@@ -3017,21 +3075,23 @@ export async function sendAffiliationWithEmail(
         },
       })
 
-      await tx.affiliation.update({
-        where: { id: affiliationId },
-        data: {
-          status: AffiliationStatus.ARCHIVED,
-          sentAt: now,
-          sentById: authCheck.userId,
-          archivedAt: now,
-        },
-      })
+      if (isInitialSend) {
+        await tx.affiliation.update({
+          where: { id: affiliationId },
+          data: {
+            status: AffiliationStatus.ARCHIVED,
+            sentAt: now,
+            sentById: authCheck.userId,
+            archivedAt: now,
+          },
+        })
+      }
 
       return email
     })
 
     console.log(
-      `✉️ Afiliación ${affiliationId} enviada a ${to}${cc?.length ? ` (CC: ${cc.join(', ')})` : ''}`
+      `✉️ Afiliación ${affiliationId} ${isResend ? 'reenviada' : 'enviada'} a ${to}${cc?.length ? ` (CC: ${cc.join(', ')})` : ''}`
     )
 
     revalidatePath('/dashboard/affiliations')
@@ -3041,7 +3101,9 @@ export async function sendAffiliationWithEmail(
 
     return {
       success: true,
-      message: `Afiliación enviada exitosamente a ${affiliation.client?.fullName || to}`,
+      message: isResend
+        ? `Correo reenviado exitosamente a ${affiliation.client?.fullName || to}`
+        : `Afiliación enviada exitosamente a ${affiliation.client?.fullName || to}`,
       data: { sentEmailId: sentEmail.id },
     }
   } catch (error) {
