@@ -15,7 +15,10 @@ import {
   AffiliationTableFiltersBar,
   type AffiliationTableFilters,
 } from '@/components/dashboard/affiliations/affiliations-table-filters'
-import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
+import {
+  getAffiliationGlobalStatus,
+  type AffiliationWithRelations,
+} from '@/lib/types/affiliation.types'
 import { AffiliationProcessType } from '@prisma/client'
 
 const AffiliationCreateWizard = dynamic(
@@ -111,7 +114,7 @@ export function AffiliationsClient({
         if (!hasMatch) return false
       }
 
-      if (filters.selectedStatus && aff.status !== filters.selectedStatus) {
+      if (filters.selectedStatus && getAffiliationGlobalStatus(aff.subProcesses) !== filters.selectedStatus) {
         return false
       }
 

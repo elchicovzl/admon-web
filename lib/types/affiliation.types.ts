@@ -461,6 +461,34 @@ export const AffiliationStatusLabels: Record<AffiliationStatus, string> = {
   ARCHIVED: 'Archivada',
 }
 
+// Estado global calculado a partir de los subprocesos (lo que se muestra en la columna "Estado" del listado)
+export type AffiliationGlobalStatus = 'not_started' | 'in_progress' | 'completed'
+
+export const AffiliationGlobalStatusLabels: Record<AffiliationGlobalStatus, string> = {
+  not_started: 'Sin Iniciar',
+  in_progress: 'En Proceso',
+  completed: 'Completada',
+}
+
+export function getAffiliationGlobalStatus(
+  subProcesses: { status: AffiliationSubProcessStatus }[] | null | undefined
+): AffiliationGlobalStatus {
+  const list = subProcesses || []
+  if (list.length === 0) return 'not_started'
+
+  const allCompleted = list.every((sp) => sp.status === AffiliationSubProcessStatus.COMPLETED)
+  if (allCompleted) return 'completed'
+
+  const someInProgress = list.some(
+    (sp) =>
+      sp.status === AffiliationSubProcessStatus.IN_PROGRESS ||
+      sp.status === AffiliationSubProcessStatus.IN_REVIEW
+  )
+  if (someInProgress) return 'in_progress'
+
+  return 'not_started'
+}
+
 export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string> = {
   DEPENDIENTE: '(01) Dependiente',
   INDEPENDIENTE: '(3) Independiente',

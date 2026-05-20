@@ -19,19 +19,19 @@ import { Search, X } from 'lucide-react'
 import {
   AffiliationProcessType,
   AffiliationSubProcessType,
-  AffiliationStatus,
 } from '@prisma/client'
 import {
   AffiliationProcessTypeLabels,
-  AffiliationStatusLabels,
+  AffiliationGlobalStatusLabels,
   SubProcessTypeLabels,
+  type AffiliationGlobalStatus,
 } from '@/lib/types/affiliation.types'
 
 export interface AffiliationTableFilters {
   searchQuery: string
   selectedProcessType: AffiliationProcessType | null
   selectedSubProcessTypes: AffiliationSubProcessType[]
-  selectedStatus: AffiliationStatus | null
+  selectedStatus: AffiliationGlobalStatus | null
 }
 
 interface AffiliationTableFiltersProps {
@@ -67,7 +67,7 @@ export function AffiliationTableFiltersBar({
 
   const processTypes = Object.values(AffiliationProcessType)
   const subProcessTypes = Object.values(AffiliationSubProcessType)
-  const statuses = Object.values(AffiliationStatus)
+  const globalStatuses: AffiliationGlobalStatus[] = ['not_started', 'in_progress', 'completed']
 
   return (
     <div className="space-y-3">
@@ -115,7 +115,7 @@ export function AffiliationTableFiltersBar({
           onValueChange={(value) =>
             onFiltersChange({
               ...filters,
-              selectedStatus: value === 'all' ? null : (value as AffiliationStatus),
+              selectedStatus: value === 'all' ? null : (value as AffiliationGlobalStatus),
             })
           }
         >
@@ -124,9 +124,9 @@ export function AffiliationTableFiltersBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
-            {statuses.map((status) => (
+            {globalStatuses.map((status) => (
               <SelectItem key={status} value={status}>
-                {AffiliationStatusLabels[status]}
+                {AffiliationGlobalStatusLabels[status]}
               </SelectItem>
             ))}
           </SelectContent>

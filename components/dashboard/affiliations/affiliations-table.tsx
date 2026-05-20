@@ -42,7 +42,11 @@ import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff
 import { toast } from 'sonner'
 import { toggleAffiliationStatus, deleteAffiliation } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
-import { AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
+import {
+  AffiliationProcessTypeLabels,
+  AffiliationGlobalStatusLabels,
+  getAffiliationGlobalStatus,
+} from '@/lib/types/affiliation.types'
 import { TypeBadge } from './status-badge'
 import { AffiliationEditDialog } from './affiliation-edit-dialog'
 import { AffiliationSubProcessStatus, AffiliationProcessType, ClientType } from '@prisma/client'
@@ -218,31 +222,11 @@ export function AffiliationsTable({
     }
   }
 
-  function getGlobalStatus(affiliation: AffiliationWithRelations) {
-    const subProcesses = affiliation.subProcesses || []
-    if (subProcesses.length === 0) return 'not_started'
-
-    const allCompleted = subProcesses.every(
-      (sp) => sp.status === AffiliationSubProcessStatus.COMPLETED
-    )
-    if (allCompleted) return 'completed'
-
-    const someInProgress = subProcesses.some(
-      (sp) =>
-        sp.status === AffiliationSubProcessStatus.IN_PROGRESS ||
-        sp.status === AffiliationSubProcessStatus.IN_REVIEW
-    )
-    if (someInProgress) return 'in_progress'
-
-    return 'not_started'
-  }
-
-  const globalStatusConfig = {
-    completed: { label: 'Completada', className: 'bg-green-100 text-green-700 border-green-300' },
-    in_progress: { label: 'En Proceso', className: 'bg-blue-100 text-blue-700 border-blue-300' },
-    not_started: { label: 'Sin Iniciar', className: 'bg-gray-100 text-gray-700 border-gray-300' },
-    pending: { label: 'Pendiente', className: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
-  }
+  const globalStatusClassName = {
+    completed: 'bg-green-100 text-green-700 border-green-300',
+    in_progress: 'bg-blue-100 text-blue-700 border-blue-300',
+    not_started: 'bg-gray-100 text-gray-700 border-gray-300',
+  } as const
 
   if (affiliations.length === 0) {
     return (
@@ -279,8 +263,11 @@ export function AffiliationsTable({
         <TableBody>
           {paginatedAffiliations.map((affiliation) => {
             const progress = calculateProgress(affiliation)
-            const globalStatus = getGlobalStatus(affiliation)
-            const statusConfig = globalStatusConfig[globalStatus as keyof typeof globalStatusConfig]
+            const globalStatus = getAffiliationGlobalStatus(affiliation.subProcesses)
+            const statusConfig = {
+              label: AffiliationGlobalStatusLabels[globalStatus],
+              className: globalStatusClassName[globalStatus],
+            }
             const isCompany = affiliation.client?.clientType === ClientType.EMPRESA
             const uniqueEmployees = isCompany ? getUniqueEmployees(affiliation) : []
             const trimmedQuery = searchQuery.trim()
