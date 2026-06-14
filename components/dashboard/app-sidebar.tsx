@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Archive,
   PenSquare,
+  History,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -116,6 +117,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
           icon: Archive,
         },
       ],
+    },
+    {
+      title: 'Histórico',
+      href: '/dashboard/client-history',
+      icon: History,
+      roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
     },
     {
       title: 'Blog',

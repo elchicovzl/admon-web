@@ -575,6 +575,49 @@ export async function deleteClient(clientId: string): Promise<ActionResponse> {
 }
 
 /**
+ * Reactivate a soft-deleted client (reverts the soft delete)
+ * Restores isActive=true AND status='ACTIVO' (deleteClient sets both to the
+ * deleted state, so we must reset both to fully bring the client back).
+ */
+export async function reactivateClient(clientId: string): Promise<ActionResponse> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    if (!client) {
+      return { success: false, error: 'Cliente no encontrado' }
+    }
+
+    if (client.status !== 'ELIMINADO') {
+      return { success: false, error: 'El cliente no está eliminado' }
+    }
+
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        isActive: true,
+        status: 'ACTIVO',
+      },
+    })
+
+    revalidatePath('/dashboard/clients')
+    revalidatePath('/dashboard/client-history')
+    revalidatePath(`/dashboard/client-history/${clientId}`)
+
+    return {
+      success: true,
+      message: 'Cliente reactivado exitosamente',
+    }
+  } catch (error) {
+    console.error('Reactivate client error:', error)
+    return { success: false, error: 'Error al reactivar el cliente' }
+  }
+}
+
+/**
  * Add a note to a client
  */
 export async function addClientNote(
