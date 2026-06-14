@@ -69,7 +69,16 @@ export interface HistorySubProcess {
   id: string
   type: AffiliationSubProcessType
   status: AffiliationSubProcessStatus
+  createdAt: Date
   assignedTo?: { name: string | null; email: string } | null
+  employee?: { id: string; fullName: string } | null
+  // Disability-specific fields (only meaningful when type = INCAPACIDADES)
+  disabilityStartDate: Date | null
+  disabilityEndDate: Date | null
+  bankRegistry: boolean
+  transcription: boolean
+  collection: boolean
+  paidToUser: boolean
   documents: HistoryAffiliationDocument[]
   observations: HistoryObservation[]
   statusLogs: HistoryStatusLog[]

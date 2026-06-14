@@ -1,23 +1,16 @@
 'use client'
 
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ArrowLeft, ClipboardList, FileText, Download, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ClipboardList, FileText, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  AffiliationProcessTypeLabels,
-  AffiliationStatusLabels,
-  AffiliationGlobalStatusLabels,
-  SubProcessTypeLabels,
-  SubProcessStatusLabels,
-  getAffiliationGlobalStatus,
-} from '@/lib/types/affiliation.types'
+import { SubProcessTypeLabels } from '@/lib/types/affiliation.types'
 import { ClientSummaryCard } from '@/components/dashboard/client-history/client-summary-card'
+import { ClientHistoryProcessesTable } from '@/components/dashboard/client-history/client-history-processes-table'
 import { ClientTimeline } from '@/components/dashboard/client-history/client-timeline'
 import { ReactivateClientDialog } from '@/components/dashboard/client-history/reactivate-client-dialog'
 import type { ClientHistoryDetail } from '@/lib/types/client-history.types'
@@ -115,63 +108,8 @@ export function ClientHistoryDetailClient({ detail }: ClientHistoryDetailClientP
         </TabsList>
 
         {/* Procesos */}
-        <TabsContent value="processes" className="space-y-4">
-          {affiliations.length === 0 ? (
-            <div className="rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
-              Este cliente no tiene procesos registrados.
-            </div>
-          ) : (
-            affiliations.map((aff) => {
-              const globalStatus = getAffiliationGlobalStatus(aff.subProcesses)
-              const processLabel = aff.processType
-                ? AffiliationProcessTypeLabels[aff.processType]
-                : aff.processTypeOther || 'Sin tipo'
-
-              return (
-                <Card key={aff.id}>
-                  <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Link
-                          href={`/dashboard/affiliations/${aff.id}`}
-                          className="text-primary hover:underline"
-                        >
-                          {aff.affiliationNumber}
-                        </Link>
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                      </CardTitle>
-                      <p className="mt-1 text-sm text-muted-foreground">{processLabel}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge variant="outline">{AffiliationGlobalStatusLabels[globalStatus]}</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {AffiliationStatusLabels[aff.status]} ·{' '}
-                        {format(new Date(aff.createdAt), 'dd/MM/yyyy', { locale: es })}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-wrap gap-2">
-                      {aff.subProcesses.map((sp) => (
-                        <div
-                          key={sp.id}
-                          className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
-                        >
-                          <span className="font-medium">{SubProcessTypeLabels[sp.type]}</span>
-                          <span className="text-muted-foreground">
-                            {SubProcessStatusLabels[sp.status]}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {aff.note && (
-                      <p className="mt-3 text-sm text-muted-foreground">{aff.note}</p>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })
-          )}
+        <TabsContent value="processes">
+          <ClientHistoryProcessesTable affiliations={affiliations} />
         </TabsContent>
 
         {/* Archivos */}

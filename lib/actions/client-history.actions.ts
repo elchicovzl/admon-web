@@ -142,7 +142,15 @@ export const getClientHistory = cache(
               id: true,
               type: true,
               status: true,
+              createdAt: true,
+              disabilityStartDate: true,
+              disabilityEndDate: true,
+              bankRegistry: true,
+              transcription: true,
+              collection: true,
+              paidToUser: true,
               assignedTo: { select: { name: true, email: true } },
+              employee: { select: { id: true, fullName: true } },
               documents: {
                 select: {
                   id: true,
