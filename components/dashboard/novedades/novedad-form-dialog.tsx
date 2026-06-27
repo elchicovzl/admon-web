@@ -8,6 +8,7 @@ import { es } from 'date-fns/locale'
 import { CalendarIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { NovedadType, NovedadUnit } from '@prisma/client'
+import type { DateRange } from 'react-day-picker'
 
 import { cn } from '@/lib/utils'
 import { createNovedad, updateNovedad } from '@/lib/actions'
@@ -267,14 +268,21 @@ export function NovedadFormDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              {/* Fecha inicio */}
-              <FormField
-                control={form.control}
-                name="startDate"
-                render={({ field }) => (
+            {/* Período (un solo selector de rango) */}
+            <FormField
+              control={form.control}
+              name="startDate"
+              render={() => {
+                const range: DateRange | undefined = watchedStart
+                  ? { from: watchedStart, to: watchedEnd ?? watchedStart }
+                  : undefined
+                const sameDay =
+                  watchedStart &&
+                  watchedEnd &&
+                  watchedStart.getTime() === watchedEnd.getTime()
+                return (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Desde</FormLabel>
+                    <FormLabel>Período</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -282,68 +290,46 @@ export function NovedadFormDialog({
                             variant="outline"
                             className={cn(
                               'pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
+                              !watchedStart && 'text-muted-foreground'
                             )}
                           >
-                            {field.value
-                              ? format(field.value, 'dd/MM/yyyy', { locale: es })
-                              : 'Seleccionar'}
+                            {watchedStart
+                              ? sameDay
+                                ? format(watchedStart, 'dd/MM/yyyy', { locale: es })
+                                : `${format(watchedStart, 'dd/MM/yyyy', {
+                                    locale: es,
+                                  })} → ${format(watchedEnd!, 'dd/MM/yyyy', {
+                                    locale: es,
+                                  })}`
+                              : 'Seleccionar período'}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
+                          mode="range"
+                          numberOfMonths={2}
+                          selected={range}
+                          onSelect={(r) => {
+                            form.setValue('startDate', (r?.from ?? undefined) as Date, {
+                              shouldValidate: true,
+                            })
+                            form.setValue(
+                              'endDate',
+                              (r?.to ?? r?.from ?? undefined) as Date,
+                              { shouldValidate: true }
+                            )
+                          }}
                           initialFocus
                         />
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
-
-              {/* Fecha fin */}
-              <FormField
-                control={form.control}
-                name="endDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Hasta</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              'pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value
-                              ? format(field.value, 'dd/MM/yyyy', { locale: es })
-                              : 'Seleccionar'}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                )
+              }}
+            />
 
             {/* Horas (solo cuando la unidad es HORAS) */}
             {isHourUnit && (

@@ -25,7 +25,9 @@ async function NovedadesContent({ year }: { year: number }) {
   const stats = statsRes.success ? statsRes.data ?? [] : []
   const novedades = novedadesRes.success ? novedadesRes.data ?? [] : []
   const employees = usersRes.success
-    ? (usersRes.data ?? []).map((u) => ({ id: u.id, name: u.name, email: u.email }))
+    ? (usersRes.data ?? [])
+        .filter((u) => u.isActive)
+        .map((u) => ({ id: u.id, name: u.name, email: u.email }))
     : []
 
   return (

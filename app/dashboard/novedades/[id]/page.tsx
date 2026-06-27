@@ -39,7 +39,9 @@ export default async function EmployeeNovedadDetailPage({
   }
 
   const employees = usersRes.success
-    ? (usersRes.data ?? []).map((u) => ({ id: u.id, name: u.name, email: u.email }))
+    ? (usersRes.data ?? [])
+        .filter((u) => u.isActive)
+        .map((u) => ({ id: u.id, name: u.name, email: u.email }))
     : []
 
   return (
