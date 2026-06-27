@@ -61,6 +61,10 @@ model User {
   // Blog relations
   blogPosts                      BlogPost[]               @relation("BlogPostAuthor")
 
+  // Novedades relations (vacaciones, permisos, calamidades)
+  novedades                      Novedad[]                @relation("UserNovedades")
+  createdNovedades               Novedad[]                @relation("NovedadCreatedBy")
+
   @@map("users")
 }
 
@@ -792,6 +796,70 @@ model BlogTag {
   posts     BlogPost[]
 
   @@map("blog_tags")
+}
+
+// ========================================
+// NOVEDADES MODULE (Vacaciones, Permisos y Calamidades)
+// ========================================
+
+// Tipo de novedad
+enum NovedadType {
+  VACACIONES // Días de vacaciones — descuenta del banco anual de días hábiles
+  PERMISO    // Permiso por horas o días — descuenta 1 día solo si supera 3 horas
+  CALAMIDAD  // Calamidad doméstica — nunca descuenta vacaciones
+}
+
+// Unidad de medida de la novedad
+enum NovedadUnit {
+  DIAS  // Rango de días completos
+  HORAS // Permiso medido en horas
+}
+
+// Modelo Novedad — un registro por solicitud (vacación / permiso / calamidad)
+model Novedad {
+  id        String      @id @default(cuid())
+  type      NovedadType
+  unit      NovedadUnit
+
+  // Empleado al que aplica la novedad (usuario del sistema)
+  userId    String
+  user      User        @relation("UserNovedades", fields: [userId], references: [id])
+
+  // Rango de fechas (ambos inclusive)
+  startDate DateTime
+  endDate   DateTime
+
+  // Horas solicitadas (solo cuando unit = HORAS)
+  hours     Float?
+
+  // Días hábiles de vacaciones efectivamente descontados del banco.
+  // Se calcula al guardar a partir de type/unit/hours/rango. Fuente de verdad
+  // para el saldo: saldo = DÍAS_ANUALES - SUM(vacationDaysDeducted) del año.
+  vacationDaysDeducted Float @default(0)
+
+  // Año calendario del banco de vacaciones (se toma de startDate). El banco se
+  // reinicia el 1 de enero — las vacaciones no se acumulan entre años.
+  year      Int
+
+  // Observación libre
+  observation String? @db.Text
+
+  // Soft delete (registros mal cargados se desactivan, no se borran)
+  isActive  Boolean  @default(true)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Auditoría
+  createdById String
+  createdBy   User   @relation("NovedadCreatedBy", fields: [createdById], references: [id])
+
+  @@map("novedades")
+  @@index([userId])
+  @@index([year])
+  @@index([type])
+  @@index([userId, year])
 }
 
 model BlogPost {

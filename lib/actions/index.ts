@@ -67,6 +67,17 @@ export {
   getDisabilitiesCount,
 } from './disability.actions'
 
+// Novedad actions (vacaciones, permisos, calamidades)
+export {
+  getNovedades,
+  getNovedadById,
+  getEmployeesVacationStats,
+  getEmployeeNovedadDetail,
+  createNovedad,
+  updateNovedad,
+  toggleNovedadStatus,
+} from './novedad.actions'
+
 // Client Info actions (address, additional info, beneficiaries)
 export {
   createOrUpdateClientAddress,

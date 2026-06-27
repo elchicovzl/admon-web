@@ -19,6 +19,7 @@ import {
   Archive,
   PenSquare,
   History,
+  CalendarDays,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -122,6 +123,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
       title: 'Histórico',
       href: '/dashboard/client-history',
       icon: History,
+      roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
+    },
+    {
+      title: 'Novedades',
+      href: '/dashboard/novedades',
+      icon: CalendarDays,
       roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
     },
     {
