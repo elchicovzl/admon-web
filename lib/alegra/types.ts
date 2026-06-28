@@ -88,18 +88,32 @@ export type InvoiceListItem = z.infer<typeof InvoiceListItemSchema>
 
 /**
  * The list endpoint returns either `{ metadata: { total }, data: [...] }`
- * (when `metadata=true` is sent) or a bare array `[...]`. Normalize to
- * `{ data, total }` always.
+ * (when `metadata=true` is sent) or a bare array `[...]`. Normalize BOTH
+ * cases to `{ data, total }`.
+ *
+ * NOTE: the `.transform()` MUST explicitly reshape the metadata-wrapped
+ * case — just returning `v` would leave the output as the original union,
+ * and `result.total` would be undefined (it's at `result.metadata.total`).
  */
-export const InvoiceListResponseSchema = z.union([
+const InvoiceListResponseBaseSchema = z.union([
   z.object({
     metadata: z.object({ total: z.number() }),
     data: z.array(InvoiceListItemSchema),
   }),
   z.array(InvoiceListItemSchema),
-]).transform((v) => (Array.isArray(v) ? { data: v, total: v.length } : v))
+])
 
-export type InvoiceListResponse = z.infer<typeof InvoiceListResponseSchema>
+export const InvoiceListResponseSchema = InvoiceListResponseBaseSchema.transform((v) => {
+  if (Array.isArray(v)) {
+    return { data: v, total: v.length }
+  }
+  return { data: v.data, total: v.metadata.total }
+})
+
+export interface InvoiceListResponse {
+  data: z.infer<typeof InvoiceListItemSchema>[]
+  total: number
+}
 
 // =============================================================================
 // Detail shape (full breakdown for the invoice detail page)
