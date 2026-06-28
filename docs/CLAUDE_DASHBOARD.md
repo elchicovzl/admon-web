@@ -446,6 +446,159 @@ export async function action(input) {
 
 ---
 
+## Módulo de Finanzas (integración con Alegra)
+
+Lee **[`docs/plans/2026-06-28-alegra-finances-design.md`](../plans/2026-06-28-alegra-finances-design.md)** para el diseño completo de V1. Acá el resumen ejecutivo de los patrones que aplican a este módulo.
+
+### Qué es
+
+Vista read-only del dashboard que consume la API REST de Alegra (sistema contable externo usado por Administración Segura). En V1 **solo expone Facturas de venta**; quotes/bills/payments se difieren a V2. **No guarda datos en nuestra DB** — cada vista llama a Alegra on-demand.
+
+### Stack y variables de entorno
+
+```bash
+# .env / .env.example
+ALEGRA_EMAIL="<service-user-email>"   # usuario dedicado en Alegra, NO el admin humano
+ALEGRA_TOKEN="<api-token>"             # generado en Alegra → Configuración → API
+```
+
+- **Auth**: HTTP Basic con `email:token` (sin OAuth, sin refresh). El token es estático y se rota manualmente.
+- **NO hay sandbox**: cualquier request contra Alegra toca producción. Usar una empresa de prueba en Alegra durante desarrollo.
+- **Rate limit**: 150 req/min POR USUARIO. Si la empresa tiene admins activos navegando Alegra web, compartirán el budget. **Solución**: crear service user dedicado y usar SUS credenciales.
+
+### Ubicación de archivos
+
+```
+lib/alegra/
+├── client.ts          # Singleton HTTP client (server-only)
+├── types.ts           # Zod schemas (Invoice, Company, etc.)
+├── errors.ts          # AlegraError / AuthError / RateLimitError / ValidationError
+├── transformers.ts    # Helpers puros: formatCurrency, parseAlegraDateTime, daysOverdue, computeAgingBucket
+└── __tests__/         # Vitest unit tests (~120 casos)
+
+app/dashboard/finances/
+├── layout.tsx                       # Sidebar entry point, header
+├── page.tsx                         # Home con 4 KPI cards
+└── invoices/
+    ├── page.tsx                     # Lista con filtros URL-driven
+    └── [id]/page.tsx                # Detalle de factura
+
+components/dashboard/finances/       # 7 componentes (kpi-cards, filters, table, detail-*)
+
+docs/runbooks/alegra-credentials.md # Cómo rotar token, qué hacer si Alegra cambia API
+```
+
+### Patrones obligatorios (difieren del resto del dashboard)
+
+#### 1. Sin DB — todo on-demand
+
+```typescript
+// ✅ CORRECTO — Server Component llama directo
+export default async function InvoicesPage({ searchParams }) {
+  const client = getAlegraClient()                        // singleton server-only
+  const { data, total } = await client.listInvoices({    // fetch a Alegra
+    status: searchParams.status,
+    metadata: true,                                       // para tener total
+  })
+  return <InvoiceTable invoices={data} total={total} />
+}
+```
+
+NO crear modelos Prisma para datos de Alegra. NO cachear. NO sincronizar. YAGNI.
+
+#### 2. Singleton + lazy construction
+
+```typescript
+// lib/alegra/client.ts
+let _client: AlegraClient | null = null
+export function getAlegraClient(): AlegraClient {
+  if (!_client) _client = new AlegraClient()  // valida env vars en este momento
+  return _client
+}
+```
+
+- Cada proceso Node tiene su propio singleton (en Vercel/Serverless cada función cold-start crea uno nuevo).
+- Validación de env vars lazy: la página no se rompe si las env vars no están en build time (solo en request time).
+- **NO usar `import 'server-only'`** — no es convención del proyecto.
+
+#### 3. Rate limit awareness
+
+```typescript
+// El cliente lee X-Rate-Limit-* en cada respuesta.
+// Si remaining <= 5, espera hasta X-Rate-Limit-Reset antes del próximo request.
+private async waitForRateLimit() {
+  if (this.rateLimit.remaining > 5) return     // safety threshold = 5
+  await sleep(this.rateLimit.resetAt - now)
+}
+```
+
+- Hacer **4 requests en paralelo** con `Promise.all` está OK (queda 146/150 worst case).
+- NO hacer 50+ requests en paralelo (explotaría el rate limit).
+- 429 → `RateLimitError` con `resetAt`. Caller puede reintentar.
+
+#### 4. Zod schemas con normalización de campos raros
+
+La API de Alegra tiene campos con shapes inconsistentes. Normalizar en el schema:
+
+```typescript
+// numberTemplate: object | array (datos legacy) → siempre object
+NumberTemplateSchema = z.union([objectSchema, z.array(objectSchema)])
+  .transform((v) => Array.isArray(v) ? v[0] ?? null : v)
+
+// amount en payments: number | string → siempre number
+InvoicePaymentSchema = z.object({
+  amount: z.union([z.number(), z.string()]).transform(Number),
+})
+
+// IDs: SIEMPRE string (post-Jan 2025 — UUIDs o legacy int-as-string)
+id: z.string()
+```
+
+**Pitfall conocido** (ver `git log 248176d`): cuando hacés `z.union([a, b]).transform(fn)`, el transform DEBE reshape-ambos lados. Si solo normalizás uno, el otro se filtra sin cambios y los consumers ven `undefined` donde esperan un valor.
+
+#### 5. Errores tipados
+
+```typescript
+import { AlegraError, AuthError, RateLimitError, ValidationError } from '@/lib/alegra/errors'
+
+try {
+  await client.listInvoices(...)
+} catch (err) {
+  if (err instanceof AuthError)         show 'Token inválido — contactar al admin'
+  else if (err instanceof RateLimitError) show 'Alegra saturado, reintentando...'
+  else if (err instanceof ValidationError) show 'Alegra cambió su API — reportar al equipo'
+  else                                  show 'Error de conexión con Alegra'
+}
+```
+
+#### 6. UI patterns
+
+- **Filtros URL-driven**: `?status=open&date_from=...&page=2`. Server Component lee `searchParams` directo (compartible, back/forward funciona).
+- **Paginación server-side**: `start=0,30,60,...` con `metadata.total`. **Max 30 por página** (hard cap de Alegra — `limit=31` devuelve 400/code 903).
+- **TanStack table** para listas (mismo patrón que `/dashboard/affiliations/my-assignments`).
+- **Currency**: `Intl.NumberFormat('es-CO', { currency: company.currency.code })` donde `currency.code` viene de `/company`. Cachear el formatter por código.
+- **DIAN events** (Colombia-only): vienen en `events[]` con formato de fecha inconsistente. Usar `parseAlegraDateTime()` del transformers (NO en el schema, perderíamos el formato original).
+
+### Sidebar y RBAC
+
+El módulo aparece en el sidebar como **"Finanzas"** → expande a "Resumen" (`/dashboard/finances`) + "Facturas" (`/dashboard/finances/invoices`). Visible para `SUPER_ADMIN` y `MANAGER` (todos los roles, decisión de V1).
+
+### Out of scope (V2+)
+
+Webhooks, cache/sync a nuestra DB, write operations (crear/editar facturas desde el dashboard), reports/charts, aging buckets visuales, PDF/XML export, audit log, multi-currency más allá de display formatting, cross-linking con nuestros `Client`.
+
+### Smoke test
+
+Antes de mergear, validar manualmente contra el integration test company de Alegra:
+
+1. Abrir `/dashboard/finances` → verificar que las 4 KPI cards muestran números coherentes
+2. Abrir `/dashboard/finances/invoices` → verificar lista con paginación
+3. Aplicar filtros (status, date range, client search) → verificar que la URL refleja los filtros y la lista se actualiza
+4. Click en una factura → verificar detalle (totales correctos, items, payments, eventos DIAN)
+5. Probar edge cases: 0 facturas, factura con pagos parciales, factura con evento DIAN rechazado
+
+---
+
 ## Troubleshooting
 
 **"useRouter not defined"**

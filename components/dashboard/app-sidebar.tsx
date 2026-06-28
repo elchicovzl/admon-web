@@ -20,6 +20,8 @@ import {
   PenSquare,
   History,
   CalendarDays,
+  Wallet,
+  Receipt,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -130,6 +132,24 @@ export function AppSidebar({ user }: AppSidebarProps) {
       href: '/dashboard/novedades',
       icon: CalendarDays,
       roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
+    },
+    {
+      title: 'Finanzas',
+      href: '/dashboard/finances',
+      icon: Wallet,
+      roles: [UserRole.SUPER_ADMIN, UserRole.MANAGER],
+      subItems: [
+        {
+          title: 'Resumen',
+          href: '/dashboard/finances',
+          icon: LayoutDashboard,
+        },
+        {
+          title: 'Facturas',
+          href: '/dashboard/finances/invoices',
+          icon: Receipt,
+        },
+      ],
     },
     {
       title: 'Blog',
