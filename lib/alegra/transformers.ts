@@ -6,7 +6,116 @@
  * Components (though it's primarily used server-side).
  */
 
-import type { InvoiceListItem, NumberTemplate } from './types'
+import type { InvoiceListItem, NumberTemplate, InvoiceStatus } from './types'
+
+// =============================================================================
+// Invoice list filters (URL-driven — pure parsing helpers)
+// =============================================================================
+
+/**
+ * Mirrors the set of query-string filters supported by the invoices list page.
+ * Defaults match the design doc ("no filters" = last 30 by date DESC, page 1).
+ */
+export interface InvoiceFilters {
+  status: InvoiceStatus[]
+  dateFrom: string | null // YYYY-MM-DD or null
+  dateTo: string | null
+  clientName: string | null // substring match against Alegra `client_name`
+  page: number
+}
+
+const DEFAULT_PAGE = 1
+
+function isValidInvoiceStatus(value: string): value is InvoiceStatus {
+  return value === 'open' || value === 'closed' || value === 'draft' || value === 'void'
+}
+
+/**
+ * Parse Next.js `searchParams` into a validated `InvoiceFilters` object.
+ *
+ * Accepts both forms of repeated params:
+ *   - `?status=open&status=closed` → string[]
+ *   - `?status=open,closed`         → string (comma-separated)
+ * Anything invalid (bad status, malformed date, non-integer page) is dropped
+ * to defaults rather than throwing — fetch failures should be visible to the
+ * user, but malformed URLs should not.
+ */
+export function parseInvoiceFilters(
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+): InvoiceFilters {
+  const sp = searchParams ?? {}
+
+  // status: handle both array and comma-joined forms
+  const statusRaw = sp.status
+  const status: InvoiceStatus[] = (
+    Array.isArray(statusRaw) ? statusRaw : statusRaw ? [statusRaw] : []
+  )
+    .flatMap((s) => s.split(','))
+    .map((s) => s.trim())
+    .filter(isValidInvoiceStatus)
+
+  // date_from / date_to: must be YYYY-MM-DD if present
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  const dateFrom = typeof sp.date_from === 'string' && dateRegex.test(sp.date_from) ? sp.date_from : null
+  const dateTo = typeof sp.date_to === 'string' && dateRegex.test(sp.date_to) ? sp.date_to : null
+
+  // client_name: any non-empty trimmed string
+  const clientNameRaw = typeof sp.client_name === 'string' ? sp.client_name.trim() : ''
+  const clientName = clientNameRaw.length > 0 ? clientNameRaw : null
+
+  // page: positive integer, default 1
+  const pageRaw = typeof sp.page === 'string' ? Number.parseInt(sp.page, 10) : DEFAULT_PAGE
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : DEFAULT_PAGE
+
+  return { status, dateFrom, dateTo, clientName, page }
+}
+
+/**
+ * Build a URL query string from a partial filters object.
+ * Useful for pagination links and the "Limpiar filtros" button.
+ *
+ * Does NOT include `?` prefix — caller can prepend.
+ */
+export function buildInvoicesSearchString(filters: Partial<InvoiceFilters>): string {
+  const params = new URLSearchParams()
+
+  // Status: emit one `status=` per value (omit `?status=` if empty)
+  if (filters.status && filters.status.length > 0) {
+    for (const s of filters.status) params.append('status', s)
+  }
+
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
+  if (filters.dateTo) params.set('date_to', filters.dateTo)
+  if (filters.clientName) params.set('client_name', filters.clientName)
+  if (filters.page && filters.page > 1) params.set('page', String(filters.page))
+
+  const s = params.toString()
+  return s.length > 0 ? `?${s}` : ''
+}
+
+/**
+ * Compute the total number of pages from a total count and the per-page limit
+ * (always 30 — Alegra's hard cap).
+ */
+export const ALEGRA_PAGE_SIZE = 30
+
+export function totalPages(total: number): number {
+  return Math.max(1, Math.ceil(total / ALEGRA_PAGE_SIZE))
+}
+
+/**
+ * Given current filters and a total count, build the search strings for
+ * Anterior / Siguiente links.
+ */
+export function buildPaginationLinks(
+  filters: InvoiceFilters,
+  total: number,
+): { prev: string | null; next: string | null } {
+  const pages = totalPages(total)
+  const prev = filters.page > 1 ? buildInvoicesSearchString({ ...filters, page: filters.page - 1 }) : null
+  const next = filters.page < pages ? buildInvoicesSearchString({ ...filters, page: filters.page + 1 }) : null
+  return { prev, next }
+}
 
 // =============================================================================
 // Currency formatting
