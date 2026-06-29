@@ -68,7 +68,11 @@ async function FinancesKpis() {
     mtdBilled: fmt(sumInvoices(mtd.data, 'total')),
     openReceivables: fmt(sumInvoices(open.data, 'balance')),
     overdue30: fmt(sumInvoices(overdueData, 'balance')),
-    openCount: open.metadata.total,
+    // After the InvoiceListResponseSchema transform, the count is at .total
+    // (top level), NOT .metadata.total — the metadata object is stripped
+    // during normalization. Originally I wrote .metadata.total which would
+    // also work on the raw Alegra response but breaks the contract.
+    openCount: open.total,
     currencyCode: company.currency.code,
   }
 
