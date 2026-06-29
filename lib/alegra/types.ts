@@ -27,11 +27,15 @@ export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>
 /**
  * `numberTemplate` is documented as an object but historical records
  * occasionally return it as a single-element array. Normalize to always-object.
+ *
+ * `number` (the invoice sequence number) may come back as either a JSON
+ * number or a string — same pattern as `decimalPrecision` and the
+ * payment `amount`. Coerce both to number.
  */
 const NumberTemplateObjectSchema = z.object({
   id: z.string(),
   prefix: z.string(),
-  number: z.number(),
+  number: z.union([z.number(), z.string()]).transform(Number),
   text: z.string().optional(),
 }).nullable()
 

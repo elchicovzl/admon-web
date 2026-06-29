@@ -80,6 +80,21 @@ describe('NumberTemplateSchema', () => {
   it('devuelve null cuando el array está vacío', () => {
     expect(NumberTemplateSchema.parse([])).toBeNull()
   })
+
+  it('coerce number string → number (caso real Alegra: "9850" → 9850)', () => {
+    // Live data: numberTemplate.number comes as STRING, not number.
+    const obj = { id: '18', prefix: 'FEAD', number: '9850' }
+    const result = NumberTemplateSchema.parse(obj)
+    expect(result).toEqual({ id: '18', prefix: 'FEAD', number: 9850 })
+    expect(typeof (result as { number: number }).number).toBe('number')
+  })
+
+  it('acepta number nativo también', () => {
+    const obj = { id: '1', prefix: 'FE-', number: 520 }
+    const result = NumberTemplateSchema.parse(obj)
+    expect((result as { number: number }).number).toBe(520)
+    expect(typeof (result as { number: number }).number).toBe('number')
+  })
 })
 
 // -----------------------------------------------------------------------------
