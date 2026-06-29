@@ -1,6 +1,27 @@
 import { z } from 'zod'
 
 // =============================================================================
+// Schemas for the Alegra REST API (https://developer.alegra.com/)
+//
+// ⚠️ IMPORTANT — "Alegra returns numbers as strings" pattern:
+// Several numeric-looking fields come back from the API as JSON STRINGS
+// rather than native numbers (the documented type is misleading). The known
+// cases so far:
+//   - Company.decimalPrecision                  → string "0" or number
+//   - Payments[].amount                        → string "500" or number
+//   - NumberTemplate.number (invoice sequence)  → string "9850" or number
+//
+// For any new numeric field discovered through testing, mirror the safe form
+// rather than the documented one:
+//
+//     safeNumber = z.union([z.number(), z.string()]).transform(Number)
+//
+// Always verify against live data before adopting the strict z.number()
+// form — it will silently fail at runtime when Alegra decides to flip
+// the type for a given account or field.
+// =============================================================================
+
+// =============================================================================
 // Status enum (Alegra canonical values, no transformation)
 // =============================================================================
 
