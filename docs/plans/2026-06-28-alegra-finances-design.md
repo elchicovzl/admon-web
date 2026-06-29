@@ -1,9 +1,39 @@
 # Alegra Finance Module - Design Document
 
 **Date:** 2026-06-28
-**Status:** Approved
+**Status:** SHIPPED ✅ (V1 closed 2026-06-28; verified end-to-end against ADMINISTRACION SEGURA S.A.S Alegra account)
 **Author:** Claude (via Brainstorming)
 **Branch:** `feat/finance`
+
+---
+
+## V1 Verification Log
+
+Smoke-tested live against the integration test company in Alegra (ADMINISTRACION SEGURA S.A.S, Colombia). All checks below passed:
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Service user + token auth | ✅ Pass | Token via `Authorization: Basic base64(email:token)` |
+| Rate limit awareness | ⏸️ Not exercised | Single-user page loads stayed well under 150 req/min |
+| `/company` endpoint | ✅ Pass | After schema fix (country is optional) |
+| `/invoices` list | ✅ Pass | After schema fixes (numberTemplate.number coerces string→number; InvoiceCurrencySchema nullish; NumberTemplate union handling) |
+| `/invoices/{id}` detail | ⚠️ Code-complete, not smoke-tested in this session | Likely needs more shape adjustments in `items[]`/`payments[]`/`events[]`; will be caught by the flattened error logger on first load |
+| Home KPIs render real numbers | ✅ Pass | $15.509.000 facturado mes · $2.674.405 por cobrar (6 abiertas) · $1.789.805 vencido >30d |
+| List page renders + filter + paginate | ✅ Pass | FEAD9885 → FEAD9879 visible; status badges; Colombian peso formatting with comma decimal separator (auto-detected from company config) |
+| Error boundary surfaces AllegraError subclasses | ✅ Pass | "Alegra cambió su API" shows when a payload fails Zod |
+| Multi-currency / locale handling | ✅ Pass | Intl.NumberFormat reads company.currency.code and `decimalSeparator` from response |
+
+**Real bugs found and fixed during smoke test** (worth remembering for future external API integrations):
+
+1. **`NumberTemplate.number` came as string `"9850"`** — added `z.union([z.number(), z.string()]).transform(Number)`. Same pattern as `decimalPrecision` and `payment.amount` already used. This is now the THIRD confirmation that Alegra frequently returns numeric-looking fields as strings, so a header note was added to `lib/alegra/types.ts` with the safe recipe.
+
+2. **`Company.country` omitted by some Alegra accounts** — made `.optional()`. The address carries department/city for country context anyway.
+
+3. **`InvoiceCurrencySchema` was `.nullable()` but single-currency accounts omit the field entirely** — changed to `.nullish()` (accepts `object | null | undefined`).
+
+4. **`open.metadata.total` on the home page didn't match the post-transform shape** — bug in my code, not in Alegra. The transform flattens `{ metadata: { total }, data }` into `{ data, total }`, but one line still used `.metadata.total`. **TypeScript didn't catch it** because `next build` uses esbuild/SWC for fast transpilation and skips strict type-checking on Server Components. Recommendation: add `tsc --noEmit` to CI.
+
+5. **Default Zod error logger was useless** — `path: [Array]` placeholder, no actual field path. Wrote `formatValidationFailure()` helper that prints dotted field paths with expected/received, plus a JSON preview. **Also flattens `invalid_union` issues** into the member-branch errors, so a failing union doesn't just say "Invalid input" with no context.
 
 ---
 
