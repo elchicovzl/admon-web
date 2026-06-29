@@ -99,6 +99,26 @@ Levantar el dashboard local y abrir `/dashboard/finances`. Si las 4 KPI cards mu
 3. **Avisar** al equipo que la integración está caída.
 4. Si se va a restaurar: seguir el flujo de Setup inicial.
 
+### Caso específico: el token se filtró en chat / commit / logs
+
+Esto pasó (de verdad, en una sesión de este mismo proyecto). Pasos si ocurre:
+
+1. **Rotar inmediatamente** — no esperar a "verificar si fue expuesto". El costo de rotar (1 click) es despreciable vs. el costo de un token vivo en un log que no controlás.
+2. **Auditar dónde se filtró**:
+   - Chat con AI / canales de soporte → imposible de borrar, asumir comprometido
+   - Commit en el repo → `git filter-repo` para reescribir historia, o si es muy reciente y no hay PRs derivados, forzar push al servidor remoto
+   - Logs /监控系统 → verificar retention policies; si no tienen, asumir que persiste
+3. **Si fue en un commit**:
+   ```bash
+   # Verificar que NO esté en el repo antes de borrar el archivo
+   git log -p --all -S "ALEGRA_TOKEN=" -- .
+   # Si aparece: hay que reescribir la historia
+   ```
+4. **Después de rotar**: reverificar que `.env.example` siga limpio (sin tokens reales), y que `.gitignore` excluya `.env*` correctamente.
+5. **Anotar en la tabla de auditoría**: Fecha, motivo, dónde se filtró, acción tomada.
+
+> ⚠️ **Regla de oro**: nunca pegues tokens reales en chats, issues, commits, screenshots, ni en ningún canal que pueda persistir o ser accedido por terceros. Si necesitás compartir algo del entorno, compartí la estructura (`ALEGRA_EMAIL=...`, `ALEGRA_TOKEN=...`) con valores de placeholder.
+
 ---
 
 ## Troubleshooting
