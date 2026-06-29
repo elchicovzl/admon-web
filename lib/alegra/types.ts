@@ -57,11 +57,18 @@ export const InvoiceClientSchema = z.object({
 
 export type InvoiceClient = z.infer<typeof InvoiceClientSchema>
 
-export const InvoiceCurrencySchema = z.object({
-  code: z.string(),
-  symbol: z.string(),
-  exchangeRate: z.number().optional(),
-}).nullable()
+/**
+ * Per-invoice currency sub-object. Most invoices in single-currency accounts
+ * omit this entirely (key not present → `undefined`), which the UI replaces
+ * with the company's currency. Accepts `object | null | undefined`.
+ */
+export const InvoiceCurrencySchema = z
+  .object({
+    code: z.string(),
+    symbol: z.string(),
+    exchangeRate: z.number().optional(),
+  })
+  .nullish()
 
 export type InvoiceCurrency = z.infer<typeof InvoiceCurrencySchema>
 
@@ -195,8 +202,9 @@ export type InvoiceDetail = z.infer<typeof InvoiceDetailSchema>
 
 export const CompanySchema = z.object({
   name: z.string(),
-  country: z.string(),
-  // "colombia" | "mexico" | "argentina" | ...
+  // Country not always present (some Alegra accounts omit it; the address
+  // has department/city instead). Optional rather than nullable.
+  country: z.string().optional(),
   applicationVersion: z.string(),
   // documented as int but sometimes returns string
   decimalPrecision: z.union([z.number(), z.string()]).transform(Number),

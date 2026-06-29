@@ -265,6 +265,7 @@ export class AlegraClient {
  * Format a Zod validation failure into a readable multi-line string with:
  *   - The request path
  *   - Each issue with its field path (e.g. "currency.code"), expected/received
+ *   - For `invalid_union` issues, the nested failures from each branch
  *   - A truncated JSON preview of the upstream response
  *
  * Truncation is at 2 KB to keep logs bounded — large arrays are clipped.
@@ -273,15 +274,28 @@ export function formatValidationFailure(
   requestPath: string,
   rawJson: unknown,
   issues: ReadonlyArray<{
+    code?: string
     path: ReadonlyArray<string | number>
     message: string
     expected?: string
     received?: unknown
+    unionErrors?: ReadonlyArray<{
+      issues: ReadonlyArray<{
+        path?: ReadonlyArray<string | number>
+        message: string
+        expected?: string
+        received?: unknown
+      }>
+    }>
   }>,
 ): string {
   const MAX_PREVIEW_CHARS = 2000
 
-  const issueLines = issues.map((issue) => {
+  // Flatten `invalid_union` errors into their member issues so we see the
+  // ACTUAL fields that failed, not just the union-level symptom.
+  const flattened = flattenUnionIssues(issues)
+
+  const issueLines = flattened.map((issue) => {
     const fieldPath = issue.path.length > 0 ? issue.path.join('.') : '(root)'
     const expected = issue.expected ? ` expected ${issue.expected}` : ''
     const received = issue.received !== undefined ? `, received ${JSON.stringify(issue.received)}` : ''
@@ -311,4 +325,52 @@ export function formatValidationFailure(
     'Raw response:',
     preview,
   ].join('\n')
+}
+
+/**
+ * Recursively flatten `invalid_union` Zod issues into the underlying
+ * member-branch issues. Nested unions are also flattened.
+ *
+ * Why: when a `z.union([schemaA, schemaB])` fails, Zod reports a single
+ * issue with code `invalid_union` and `unionErrors: [errorA, errorB]`.
+ * The default issue.issues loop only shows the union-level message
+ * ("Invalid input"), which is useless for debugging — you need to see
+ * which field inside which branch failed.
+ */
+function flattenUnionIssues(
+  issues: ReadonlyArray<{
+    code?: string
+    unionErrors?: ReadonlyArray<{ issues: ReadonlyArray<unknown> }>
+  }>,
+): Array<{
+  path: ReadonlyArray<string | number>
+  message: string
+  expected?: string
+  received?: unknown
+}> {
+  const out: Array<{
+    path: ReadonlyArray<string | number>
+    message: string
+    expected?: string
+    received?: unknown
+  }> = []
+
+  for (const issue of issues) {
+    if (
+      issue.code === 'invalid_union' &&
+      Array.isArray(issue.unionErrors) &&
+      issue.unionErrors.length > 0
+    ) {
+      // Recurse into each branch's issues
+      for (const branch of issue.unionErrors) {
+        if (Array.isArray(branch.issues)) {
+          out.push(...flattenUnionIssues(branch.issues as never))
+        }
+      }
+    } else {
+      out.push(issue as never)
+    }
+  }
+
+  return out
 }

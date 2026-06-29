@@ -478,4 +478,58 @@ describe('formatValidationFailure', () => {
     expect(formatValidationFailure('/x', undefined, [])).toContain('undefined — no JSON parsed')
     expect(formatValidationFailure('/x', null, [])).toContain('null')
   })
+
+  it('aplana invalid_union y muestra los issues de CADA branch', () => {
+    // Simula una validación contra z.union([schemaA, schemaB]) donde ambos fallan.
+    // Por default Zod solo reporta el error del union; nosotros debemos ver
+    // los issues internos para diagnosticar.
+    const issues = [
+      {
+        code: 'invalid_union',
+        path: [],
+        message: 'Invalid input',
+        unionErrors: [
+          {
+            issues: [
+              { path: ['a'], message: 'Required', expected: 'string', received: 'undefined' },
+            ],
+          },
+          {
+            issues: [
+              { path: ['b'], message: 'Expected number', expected: 'number', received: 'string' },
+            ],
+          },
+        ],
+      },
+    ]
+    const out = formatValidationFailure('/test', { whatever: 1 }, issues)
+    expect(out).toContain('a: Required expected string')
+    expect(out).toContain('b: Expected number expected number')
+    // NO debería mostrar el error genérico 'Invalid input' cuando hay branches
+    expect(out).not.toMatch(/^  • \(root\): Invalid input$/m)
+  })
+
+  it('no explota si un union anida otro union', () => {
+    const issues = [
+      {
+        code: 'invalid_union',
+        path: [],
+        message: 'Invalid',
+        unionErrors: [
+          {
+            issues: [
+              {
+                code: 'invalid_union',
+                path: ['nested'],
+                message: 'Also invalid',
+                unionErrors: [{ issues: [{ path: ['deep'], message: 'Boom', expected: 'string' }] }],
+              },
+            ],
+          },
+        ],
+      },
+    ]
+    const out = formatValidationFailure('/x', {}, issues)
+    expect(out).toContain('deep: Boom expected string')
+  })
 })

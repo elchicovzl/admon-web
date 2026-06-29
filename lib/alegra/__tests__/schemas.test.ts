@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   CompanySchema,
+  InvoiceCurrencySchema,
   InvoiceDetailSchema,
   InvoiceEventSchema,
   InvoiceItemSchema,
@@ -320,6 +321,19 @@ describe('CompanySchema', () => {
     expect(result.decimalPrecision).toBe(0)
   })
 
+  it('acepta company SIN country (Alegra a veces no lo devuelve)', () => {
+    // Some Alegra accounts omit country. Address has department/city instead.
+    const result = CompanySchema.parse({
+      name: 'Administración Segura S.A.S',
+      applicationVersion: 'colombia',
+      decimalPrecision: '0',
+      currency: { code: 'COP', symbol: '$' },
+      address: { city: 'Medellín', department: 'Antioquia' },
+    })
+    expect(result.country).toBeUndefined()
+    expect(result.currency.code).toBe('COP')
+  })
+
   it('coerce decimalPrecision string a number', () => {
     const result = CompanySchema.parse({
       name: 'Test',
@@ -343,5 +357,20 @@ describe('CompanySchema', () => {
       logoUrl: 'https://example.com/logo.png',
     })
     expect((result as Record<string, unknown>).id).toBe(123)
+  })
+})
+
+describe('InvoiceCurrencySchema (nullish)', () => {
+  it('acepta el objeto con code + symbol', () => {
+    const r = { code: 'COP', symbol: '$' }
+    expect(InvoiceCurrencySchema.parse(r)).toEqual(r)
+  })
+
+  it('acepta null (cuenta multicurrency sin esta factura)', () => {
+    expect(InvoiceCurrencySchema.parse(null)).toBeNull()
+  })
+
+  it('acepta undefined (caso típico: cuenta single-currency, Alegra omite el campo)', () => {
+    expect(InvoiceCurrencySchema.parse(undefined)).toBeUndefined()
   })
 })
