@@ -1,16 +1,18 @@
 /**
  * Invoice detail header.
  *
- * Renders the invoice number, dates, status badge, and a back link.
- * The "open in Alegra" external link is omitted in V1 (placeholder text only).
+ * Renders the invoice number, dates, and status badge.
+ *
+ * NOTE: the "Volver al listado" back link is rendered by the parent page
+ * (app/dashboard/finances/invoices/[id]/page.tsx) OUTSIDE the Suspense
+ * boundary, so it appears immediately even before the invoice data loads.
+ * Do not add a duplicate back link here — that would render two of them.
  */
 
-import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ArrowLeft, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import type { InvoiceListItem, NumberTemplate } from '@/lib/alegra/types'
 import {
   formatInvoiceNumber,
@@ -33,33 +35,15 @@ function formatDate(s: string | null): string {
   }
 }
 
-function formatDateTime(s: string): string {
-  // Alegra sometimes returns 'YYYY-MM-DD HH:MM:SS', sometimes with 'T'.
-  // parseISO handles both. Falls back to the raw string if unparseable.
-  try {
-    return format(parseISO(s.replace(' ', 'T')), "dd MMM yyyy 'a las' HH:mm", { locale: es })
-  } catch {
-    return s
-  }
-}
-
 export function DetailHeader({ invoice }: DetailHeaderProps) {
   const number = formatInvoiceNumber(invoice.numberTemplate as NumberTemplate | null)
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Button asChild variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-          <Link href="/dashboard/finances/invoices">
-            <ArrowLeft className="h-4 w-4" />
-            Volver al listado
-          </Link>
-        </Button>
-        <div className="ml-auto">
-          <Badge variant="outline" className={getInvoiceStatusBadgeClass(invoice.status)}>
-            {getInvoiceStatusLabel(invoice.status)}
-          </Badge>
-        </div>
+      <div className="flex items-center justify-end">
+        <Badge variant="outline" className={getInvoiceStatusBadgeClass(invoice.status)}>
+          {getInvoiceStatusLabel(invoice.status)}
+        </Badge>
       </div>
 
       <div className="flex flex-col gap-1">
