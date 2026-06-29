@@ -122,8 +122,10 @@ const RATE_LIMIT: AlegraUiError = {
 function notFound(resourceLabel: string): AlegraUiError {
   return {
     category: 'not_found',
-    title: 'Recurso no encontrado',
-    description: `Alegra no devolvió datos para este ${resourceLabel}. Verificá el ID o que el recurso aún exista.`,
+    // Gender-neutral form so it works for "factura" / "cotización" /
+    // any future label without needing to think about article agreement.
+    title: 'No encontrado',
+    description: `No se encontró la ${resourceLabel} solicitada. Verificá el ID o que aún exista en Alegra.`,
   }
 }
 
