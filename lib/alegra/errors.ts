@@ -7,16 +7,27 @@
  *
  * The `code` field is a stable machine-readable string (UPPER_SNAKE_CASE)
  * suitable for analytics/logging, never localized.
+ *
+ * **IMPORTANT — `digest` propagation for Next.js error boundaries:**
+ * In production, Next.js MASKS `error.message` and `error.stack` before
+ * passing them to `error.tsx` boundaries — only `error.digest` survives.
+ * Substring-matching the message for classification (e.g. "look for '401'")
+ * therefore DOES NOT WORK in production. Each error class sets
+ * `this.digest = this.code` so callers can classify reliably via digest.
  */
 
 export class AlegraError extends Error {
   public readonly code: string;
+  // `digest` is the field Next.js preserves through the error boundary.
+  // We mirror `code` here so production error UIs can classify by it.
+  public readonly digest: string;
   public readonly details?: unknown;
 
   constructor(code: string, message: string, details?: unknown) {
     super(message);
     this.name = 'AlegraError';
     this.code = code;
+    this.digest = code;
     this.details = details;
   }
 }
