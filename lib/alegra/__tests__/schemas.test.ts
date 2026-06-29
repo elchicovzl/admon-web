@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   CompanySchema,
+  EstimateDetailSchema,
+  EstimateListItemSchema,
+  EstimateListResponseSchema,
+  EstimateSellerSchema,
+  EstimateWarehouseSchema,
   InvoiceCurrencySchema,
   InvoiceDetailSchema,
   InvoiceEventSchema,
@@ -424,5 +429,236 @@ describe('InvoiceCurrencySchema (nullish)', () => {
 
   it('acepta undefined (caso típico: cuenta single-currency, Alegra omite el campo)', () => {
     expect(InvoiceCurrencySchema.parse(undefined)).toBeUndefined()
+  })
+
+  // V2 — /estimates sometimes returns currency WITHOUT symbol (only code + exchangeRate).
+  // We made `symbol` .optional() so the same InvoiceCurrencySchema works for both
+  // invoices and estimates.
+  it('acepta currency SIN symbol (caso V2 /estimates)', () => {
+    const r = { code: 'USD', exchangeRate: 3100 }
+    const result = InvoiceCurrencySchema.parse(r)
+    expect(result).toEqual({ code: 'USD', exchangeRate: 3100, symbol: undefined })
+  })
+})
+
+// =============================================================================
+// V2 — Estimates (cotizaciones)
+// =============================================================================
+
+function buildEstimate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '21',
+    number: '22',
+    date: '2015-12-15',
+    dueDate: '2015-12-25',
+    observations: 'Observaciones de la cotización.',
+    anotation: 'Notas de mi cotización',
+    seller: { id: '6', name: 'Alejandro Mesa', identification: '123456', observations: 'Ventas sur' },
+    priceList: null,
+    client: {
+      id: '2',
+      name: 'Acrecer',
+      identification: '963.654.988',
+      email: 'prueba2@alegra.com',
+      phonePrimary: '111 11 11',
+      phoneSecondary: '',
+      fax: '',
+      mobile: '(333) 555-55-55',
+      observations: '',
+      address: { address: 'Avenida Madison', city: 'New York, USA' },
+    },
+    total: 707,
+    currency: { code: 'USD', exchangeRate: 3100 },
+    ...overrides,
+  }
+}
+
+// -----------------------------------------------------------------------------
+// EstimateSellerSchema
+// -----------------------------------------------------------------------------
+
+describe('EstimateSellerSchema', () => {
+  it('parsea un seller completo', () => {
+    const result = EstimateSellerSchema.parse({
+      id: '6',
+      name: 'Alejandro Mesa',
+      identification: '123456',
+      observations: 'Ventas sur',
+    })
+    expect(result?.name).toBe('Alejandro Mesa')
+  })
+
+  it('acepta null (estimate sin vendedor asignado)', () => {
+    expect(EstimateSellerSchema.parse(null)).toBeNull()
+  })
+
+  it('acepta undefined (campo omitido)', () => {
+    expect(EstimateSellerSchema.parse(undefined)).toBeUndefined()
+  })
+
+  it('identification es opcional', () => {
+    const result = EstimateSellerSchema.parse({ id: '1', name: 'Vendedor X' })
+    expect(result?.identification).toBeUndefined()
+  })
+})
+
+// -----------------------------------------------------------------------------
+// EstimateWarehouseSchema
+// -----------------------------------------------------------------------------
+
+describe('EstimateWarehouseSchema', () => {
+  it('parsea un warehouse completo', () => {
+    const result = EstimateWarehouseSchema.parse({ id: '1', name: 'Principal' })
+    expect(result?.name).toBe('Principal')
+  })
+
+  it('acepta null', () => {
+    expect(EstimateWarehouseSchema.parse(null)).toBeNull()
+  })
+
+  it('acepta undefined', () => {
+    expect(EstimateWarehouseSchema.parse(undefined)).toBeUndefined()
+  })
+})
+
+// -----------------------------------------------------------------------------
+// EstimateListItemSchema
+// -----------------------------------------------------------------------------
+
+describe('EstimateListItemSchema', () => {
+  it('parsea una cotización válida (number como string)', () => {
+    const result = EstimateListItemSchema.parse(buildEstimate())
+    expect(result.id).toBe('21')
+    expect(result.number).toBe(22) // coerced from "22"
+    expect(result.total).toBe(707)
+    expect(result.seller?.name).toBe('Alejandro Mesa')
+    expect(result.anotation).toBe('Notas de mi cotización')
+  })
+
+  it('coerce number "22" → 22 (Alegra sends numbers as JSON strings)', () => {
+    const result = EstimateListItemSchema.parse(buildEstimate({ number: '22' }))
+    expect(result.number).toBe(22)
+    expect(typeof result.number).toBe('number')
+  })
+
+  it('coerce total numérico como string ("1500000" → 1500000)', () => {
+    const result = EstimateListItemSchema.parse(buildEstimate({ total: '1500000' }))
+    expect(result.total).toBe(1500000)
+  })
+
+  it('NO tiene campo `status` en el shape (cotizaciones son docs informativos)', () => {
+    // Defensive: if a stray status sneaks in, it should pass through but the
+    // schema doesn't declare it. The consumer code can't rely on it.
+    const result = EstimateListItemSchema.parse(buildEstimate({ status: 'sent' }))
+    expect((result as Record<string, unknown>).status).toBe('sent') // passthrough
+  })
+
+  it('seller null es válido', () => {
+    const result = EstimateListItemSchema.parse(buildEstimate({ seller: null }))
+    expect(result.seller).toBeNull()
+  })
+
+  it('acepta dueDate null (sin vencimiento)', () => {
+    const result = EstimateListItemSchema.parse(buildEstimate({ dueDate: null }))
+    expect(result.dueDate).toBeNull()
+  })
+
+  it('acepta currency SIN symbol (caso real V2)', () => {
+    const result = EstimateListItemSchema.parse(
+      buildEstimate({ currency: { code: 'USD', exchangeRate: 3100 } }),
+    )
+    expect(result.currency?.code).toBe('USD')
+    expect(result.currency?.symbol).toBeUndefined()
+  })
+
+  it('tolerante a campos extra (passthrough — ej. fax, mobile del client)', () => {
+    const result = EstimateListItemSchema.parse(buildEstimate({ unexpectedField: 'foo' }))
+    expect((result as Record<string, unknown>).unexpectedField).toBe('foo')
+  })
+
+  it('client con campos extra de /estimates pasa por el InvoiceClientSchema passthrough', () => {
+    // /estimates returns extra client fields (fax, mobile, phoneSecondary, observations)
+    // that aren't in InvoiceClientSchema but pass through.
+    const result = EstimateListItemSchema.parse(buildEstimate())
+    expect(result.client.identification).toBe('963.654.988')
+    // Verify extras are accessible via the type (the field is preserved)
+    expect((result.client as Record<string, unknown>).mobile).toBe('(333) 555-55-55')
+  })
+})
+
+// -----------------------------------------------------------------------------
+// EstimateListResponseSchema (metadata wrapper | bare array → always { data, total })
+// -----------------------------------------------------------------------------
+
+describe('EstimateListResponseSchema', () => {
+  it('normaliza la respuesta con metadata', () => {
+    const input = {
+      metadata: { total: 15 },
+      data: [buildEstimate(), buildEstimate({ id: '22' })],
+    }
+    const result = EstimateListResponseSchema.parse(input)
+    expect(result.total).toBe(15)
+    expect(result.data).toHaveLength(2)
+    expect(result.data[0]!.id).toBe('21')
+  })
+
+  it('normaliza la respuesta como array puro (sin metadata)', () => {
+    const input = [buildEstimate(), buildEstimate({ id: '22' })]
+    const result = EstimateListResponseSchema.parse(input)
+    expect(result.total).toBe(2)
+    expect(result.data).toHaveLength(2)
+  })
+
+  it('array vacío → total=0', () => {
+    const result = EstimateListResponseSchema.parse([])
+    expect(result).toEqual({ data: [], total: 0 })
+  })
+})
+
+// -----------------------------------------------------------------------------
+// EstimateDetailSchema (extends list + items + warehouse)
+// -----------------------------------------------------------------------------
+
+describe('EstimateDetailSchema', () => {
+  it('extiende EstimateListItemSchema con items y warehouse', () => {
+    const detail = {
+      ...buildEstimate(),
+      items: [
+        { id: '1', name: 'Billetera', price: 120, discount: '0.00', quantity: '5.00', total: 630 },
+      ],
+      warehouse: { id: '1', name: 'Principal' },
+    }
+    const result = EstimateDetailSchema.parse(detail)
+    expect(result.items).toHaveLength(1)
+    expect(result.items![0]!.quantity).toBe(5) // coerced from "5.00"
+    expect(result.warehouse?.name).toBe('Principal')
+  })
+
+  it('items y warehouse son opcionales', () => {
+    const result = EstimateDetailSchema.parse(buildEstimate())
+    expect(result.items).toBeUndefined()
+    expect(result.warehouse).toBeUndefined()
+  })
+
+  it('items acepta el shape de InvoiceItemSchema (mismos campos, misma safeNumber)', () => {
+    // The estimate detail item shape is identical to the invoice item shape.
+    // Quantity, discount come as strings in real /estimates responses.
+    const result = EstimateDetailSchema.parse(
+      buildEstimate({
+        items: [
+          {
+            id: '1',
+            name: 'Servicio',
+            price: 500000,
+            quantity: '3.00', // string
+            discount: '0.00', // string
+            tax: [{ id: '3', name: 'IVA', percentage: '16.00' }],
+          },
+        ],
+      }),
+    )
+    expect(result.items![0]!.quantity).toBe(3)
+    expect(result.items![0]!.discount).toBe(0)
+    expect(result.items![0]!.tax![0]!.percentage).toBe(16)
   })
 })

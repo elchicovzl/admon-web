@@ -1,17 +1,18 @@
 'use client'
 
 /**
- * Filters for the invoices list page.
+ * Filters for the estimates list page.
  *
  * URL-driven: changes are pushed to the URL via `router.push()`, which triggers
- * a re-render of the Server Component that re-fetches invoices from Alegra.
+ * a re-render of the Server Component that re-fetches estimates from Alegra.
+ *
+ * IMPORTANT — NO status checkboxes here. Estimates don't have a status field
+ * on the Alegra API (see `EstimateListItemSchema`). Only date range + client
+ * name filters, which is what `/estimates` supports natively (date range is
+ * applied client-side after fetch — see `filterEstimatesByDateRange`).
  *
  * State is held in form fields (uncontrolled inputs). The submit handler
  * builds a URLSearchParams from FormData and navigates.
- *
- * Auto-submit is enabled for checkboxes (status) and date inputs (instant
- * feedback), but the search input requires an explicit submit (so users can
- * type "ACME S.A.S" before submitting, without 4 navigations per word).
  */
 
 import { useTransition } from 'react'
@@ -21,28 +22,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Search, X, Loader2 } from 'lucide-react'
-import type { InvoiceFilters } from '@/lib/alegra/transformers'
-import { INVOICE_STATUS_LABELS } from '@/lib/alegra/transformers'
-import type { InvoiceStatus } from '@/lib/alegra/types'
+import type { EstimateFilters } from '@/lib/alegra/transformers'
 
-interface InvoiceFiltersBarProps {
-  initial: InvoiceFilters
+interface EstimateFiltersBarProps {
+  initial: EstimateFilters
 }
 
-const STATUS_OPTIONS: InvoiceStatus[] = ['open', 'closed', 'draft', 'void']
-
-export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
+export function EstimateFiltersBar({ initial }: EstimateFiltersBarProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
   function buildSearchString(form: HTMLFormElement): string {
     const fd = new FormData(form)
     const params = new URLSearchParams()
-
-    // status: emit one ?status= per checked box
-    for (const s of fd.getAll('status')) {
-      params.append('status', s.toString())
-    }
 
     const dateFrom = fd.get('date_from')?.toString().trim()
     if (dateFrom) params.set('date_from', dateFrom)
@@ -60,7 +52,7 @@ export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
 
   function navigate(search: string) {
     startTransition(() => {
-      router.push(`/dashboard/finances/invoices${search}`)
+      router.push(`/dashboard/finances/estimates${search}`)
     })
   }
 
@@ -70,14 +62,10 @@ export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
   }
 
   function onAutoSubmitChange(e: React.FormEvent<HTMLFormElement>) {
-    // Submit only when the change comes from a checkbox or date input
+    // Auto-submit when the change comes from a date input (instant feedback).
+    // Search input keeps explicit submit so users can type the full name first.
     const target = e.target as HTMLElement
-    if (
-      target instanceof HTMLInputElement &&
-      (target.type === 'checkbox' || target.type === 'date')
-    ) {
-      // do NOT preventDefault — let the form submit naturally? No: we need to
-      // prevent the default form submission to handle the URL push ourselves.
+    if (target instanceof HTMLInputElement && target.type === 'date') {
       e.preventDefault()
       navigate(buildSearchString(e.currentTarget))
     }
@@ -88,7 +76,6 @@ export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
   }
 
   const activeCount =
-    initial.status.length +
     (initial.dateFrom ? 1 : 0) +
     (initial.dateTo ? 1 : 0) +
     (initial.clientName ? 1 : 0)
@@ -99,50 +86,8 @@ export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
       onChange={onAutoSubmitChange}
       className="space-y-4 rounded-lg border bg-card p-4"
     >
-      {/* Row 1: status checkboxes + search */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Estado
-          </Label>
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_OPTIONS.map((status) => {
-              const checked = initial.status.includes(status)
-              return (
-                <label
-                  key={status}
-                  className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                    checked
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-input bg-background hover:bg-accent'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    name="status"
-                    value={status}
-                    defaultChecked={checked}
-                    className="h-3 w-3 accent-primary"
-                  />
-                  {INVOICE_STATUS_LABELS[status]}
-                </label>
-              )
-            })}
-            {activeCount > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="ml-auto h-7 gap-1 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-                Limpiar
-              </Button>
-            )}
-          </div>
-        </div>
-
+      {/* Row 1: client search (no status checkboxes — estimates have no status) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2 sm:w-72">
           <Label htmlFor="client_name" className="text-xs uppercase tracking-wide text-muted-foreground">
             Cliente
@@ -159,9 +104,22 @@ export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
             />
           </div>
         </div>
+
+        {activeCount > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="h-7 gap-1 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+            Limpiar
+          </Button>
+        )}
       </div>
 
-      {/* Row 2: date range + actions */}
+      {/* Row 2: date range + apply */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="grid grid-cols-2 gap-2 sm:max-w-xs">
           <div className="space-y-1.5">
@@ -188,6 +146,11 @@ export function InvoiceFiltersBar({ initial }: InvoiceFiltersBarProps) {
               min={initial.dateFrom ?? undefined}
             />
           </div>
+        </div>
+
+        <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:max-w-xs sm:flex-1">
+          ⚠️ El filtro de fechas se aplica en el navegador sobre los resultados
+          de Alegra (la API de cotizaciones no soporta rangos de fecha).
         </div>
 
         <Button type="submit" disabled={pending} className="sm:ml-auto">

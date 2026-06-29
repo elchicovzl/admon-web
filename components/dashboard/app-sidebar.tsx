@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Wallet,
   Receipt,
+  ScrollText,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -148,6 +149,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           title: 'Facturas',
           href: '/dashboard/finances/invoices',
           icon: Receipt,
+        },
+        {
+          title: 'Cotizaciones',
+          href: '/dashboard/finances/estimates',
+          icon: ScrollText,
         },
       ],
     },

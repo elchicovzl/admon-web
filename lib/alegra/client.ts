@@ -1,5 +1,5 @@
 /**
- * Alegra API client (V1 — read-only, invoices).
+ * Alegra API client (V1+ — read-only invoices + estimates + company).
  *
  * Singleton server-only HTTP client that wraps `fetch` with:
  *   - HTTP Basic auth from env (ALEGRA_EMAIL + ALEGRA_TOKEN)
@@ -23,11 +23,16 @@ import {
 } from './errors'
 import {
   CompanySchema,
+  EstimateDetailSchema,
+  EstimateListResponseSchema,
   InvoiceDetailSchema,
   InvoiceListResponseSchema,
   type Company,
+  type EstimateDetail,
+  type EstimateListResponse,
   type InvoiceDetail,
   type InvoiceListResponse,
+  type ListEstimatesParams,
   type ListInvoicesParams,
 } from './types'
 
@@ -82,7 +87,7 @@ export class AlegraClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Public API (V1: invoices + company)
+  // Public API (V1: invoices + company + V2: estimates)
   // ---------------------------------------------------------------------------
 
   /** List invoices with optional filters. */
@@ -109,13 +114,48 @@ export class AlegraClient {
   }
 
   // ---------------------------------------------------------------------------
+  // V2 — Estimates (cotizaciones)
+  //
+  // Differences vs /invoices (see mem: finances/v2-estimates-api-shape):
+  //   - No `status` parameter — estimates don't have a status field
+  //   - No date_after/date_before — only exact `date` filter; range filtering
+  //     is done client-side in `parseEstimateFilters`
+  //   - Default order_direction on the API is ASC; we force DESC for UI parity
+  //     with the invoices list (newest first)
+  // ---------------------------------------------------------------------------
+
+  /** List estimates with optional filters. */
+  async listEstimates(params: ListEstimatesParams = {}): Promise<EstimateListResponse> {
+    const normalized: ListEstimatesParams = {
+      metadata: true,
+      order_direction: 'DESC', // override API default (ASC) for UI parity with invoices
+      ...params,
+    }
+    return this.request('/estimates', normalized, EstimateListResponseSchema)
+  }
+
+  /** Get full estimate detail by id. */
+  async getEstimate(id: string): Promise<EstimateDetail> {
+    if (!id || typeof id !== 'string') {
+      throw new ValidationError('estimate id is required', { id })
+    }
+    return this.request(`/estimates/${encodeURIComponent(id)}`, undefined, EstimateDetailSchema)
+  }
+
+  // ---------------------------------------------------------------------------
   // Core request method
   // ---------------------------------------------------------------------------
 
   private async request<T>(
     path: string,
     params: Record<string, unknown> | undefined,
-    schema: z.ZodSchema<T>,
+    // `z.ZodTypeAny` is the base of all Zod schemas (ZodObject, ZodEffects,
+    // ZodUnion, etc.). Using `z.ZodType<T>` directly fails with Zod 4 because
+    // it requires matching the OUTPUT type, but schemas with `.transform()`
+    // have different input/output types and TS rejects them. We use the
+    // broadest type and let TS infer T from the call site via the cast
+    // below.
+    schema: z.ZodTypeAny,
   ): Promise<T> {
     await this.waitForRateLimit()
 
@@ -159,11 +199,11 @@ export class AlegraClient {
       // failed and what the upstream actually sent. Default Zod output uses
       // `[object Object]` for the issues array, which is useless in a server
       // log. Format it explicitly.
-      console.error(formatValidationFailure(path, json, parsed.error.issues))
+      console.error(formatValidationFailure(path, json, parsed.error.issues as never))
       throw new ValidationError(
         'Alegra devolvió un shape inesperado',
         {
-          formatted: formatValidationFailure(path, json, parsed.error.issues),
+          formatted: formatValidationFailure(path, json, parsed.error.issues as never),
           zod: parsed.error.format(),
         },
       )

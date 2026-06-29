@@ -97,19 +97,31 @@ export const InvoiceClientSchema = z.object({
 export type InvoiceClient = z.infer<typeof InvoiceClientSchema>
 
 /**
- * Per-invoice currency sub-object. Most invoices in single-currency accounts
- * omit this entirely (key not present → `undefined`), which the UI replaces
- * with the company's currency. Accepts `object | null | undefined`.
+ * Per-document currency sub-object. Most invoices/estimates in single-currency
+ * accounts omit this entirely (key not present → `undefined`), which the UI
+ * replaces with the company's currency. Accepts `object | null | undefined`.
+ *
+ * `symbol` is `.optional()` because /estimates sometimes returns `{ code, exchangeRate }`
+ * without the symbol (verified in the POST example for /estimates). Invoice
+ * responses always include `symbol`, but accepting the omission is harmless.
  */
 export const InvoiceCurrencySchema = z
   .object({
     code: z.string(),
-    symbol: z.string(),
+    symbol: z.string().optional(),
     exchangeRate: safeNumber.optional(),
   })
   .nullish()
 
 export type InvoiceCurrency = z.infer<typeof InvoiceCurrencySchema>
+
+/**
+ * Alias used by the estimate schemas — same shape as `InvoiceCurrencySchema`,
+ * renamed for clarity in the estimate context. Both /invoices and /estimates
+ * use the same currency sub-object on the document.
+ */
+export const EstimateCurrencySchema = InvoiceCurrencySchema
+export type EstimateCurrency = InvoiceCurrency
 
 // =============================================================================
 // List shape (minimal fields shown in the table)
@@ -271,4 +283,148 @@ export interface ListInvoicesParams {
   metadata?: boolean
   order_field?: 'date' | 'dueDate' | 'id' | 'name'
   order_direction?: 'ASC' | 'DESC'
+  // Index signature required because `AlegraClient.request()` accepts
+  // `Record<string, unknown>`. Without this, TS complains that
+  // ListInvoicesParams lacks a string index (caught by `tsc --noEmit`,
+  // invisible to `next build` which uses esbuild/SWC).
+  [key: string]: unknown
+}
+
+// =============================================================================
+// Estimates (cotizaciones) — V2
+//
+// Key differences vs /invoices (see mem: finances/v2-estimates-api-shape):
+//   - NO `status` field on estimates — cotizaciones are informational docs
+//   - NO `balance` / `totalPaid` — estimates don't get paid
+//   - NO `numberTemplate` — flat `number` (string) field instead
+//   - NO `payments` / `retentions` / `events` (DIAN) — not relevant
+//   - HAS `anotation` (singular, no "annotation") + `seller` + `priceList`
+//   - HAS `warehouse` (not on invoices) — only present on detail, ignored for V2
+//   - Items use the same shape as invoice items, all numerics are strings
+// =============================================================================
+
+/**
+ * Seller assigned to an estimate. Nullable (estimates don't require a seller).
+ * Examples show extra `observations` field on the seller object — passthrough
+ * captures anything not in the schema.
+ */
+export const EstimateSellerSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    identification: z.string().nullable().optional(),
+  })
+  .nullable()
+  .optional()
+
+export type EstimateSeller = z.infer<typeof EstimateSellerSchema>
+
+/**
+ * Price list referenced by the estimate. Nullable — most estimates don't use one.
+ * The full Alegra price-list object has many fields (currency, products, etc.)
+ * but estimates only echo back a minimal subset.
+ */
+export const EstimatePriceListSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+  })
+  .nullable()
+  .optional()
+
+export type EstimatePriceList = z.infer<typeof EstimatePriceListSchema>
+
+/**
+ * Warehouse the estimate is fulfilled from. Only present on detail.
+ * Ignored for V2 list view.
+ */
+export const EstimateWarehouseSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+  })
+  .nullable()
+  .optional()
+
+export type EstimateWarehouse = z.infer<typeof EstimateWarehouseSchema>
+
+/**
+ * List shape — what the table on /dashboard/finances/estimates renders.
+ *
+ * No `status`, no `balance`, no `totalPaid`. `number` is a flat string
+ * (NOT wrapped in numberTemplate). `anotation` is singular (Alegra typo).
+ */
+export const EstimateListItemSchema = z.object({
+  id: z.string(),
+  number: safeNumber, // flat field, e.g. "8" → 8
+  date: z.string(),
+  dueDate: z.string().nullable(),
+  observations: z.string().nullable().optional(),
+  anotation: z.string().nullable().optional(),
+  seller: EstimateSellerSchema,
+  priceList: EstimatePriceListSchema,
+  client: InvoiceClientSchema, // same client shape — passthrough handles estimate extras
+  total: safeNumber, // number or string depending on account/field
+  currency: InvoiceCurrencySchema,
+}).passthrough()
+
+export type EstimateListItem = z.infer<typeof EstimateListItemSchema>
+
+/**
+ * The list endpoint returns either `{ metadata: { total }, data: [...] }`
+ * (when `metadata=true`) or a bare array `[...]`. Same normalization as
+ * InvoiceListResponseSchema.
+ */
+const EstimateListResponseBaseSchema = z.union([
+  z.object({
+    metadata: z.object({ total: z.number() }),
+    data: z.array(EstimateListItemSchema),
+  }),
+  z.array(EstimateListItemSchema),
+])
+
+export const EstimateListResponseSchema = EstimateListResponseBaseSchema.transform((v) => {
+  if (Array.isArray(v)) {
+    return { data: v, total: v.length }
+  }
+  return { data: v.data, total: v.metadata.total }
+})
+
+export interface EstimateListResponse {
+  data: z.infer<typeof EstimateListItemSchema>[]
+  total: number
+}
+
+/**
+ * Detail shape — extends list with the items array and warehouse.
+ * Items reuse InvoiceItemSchema verbatim (same shape, same safeNumber usage).
+ */
+export const EstimateDetailSchema = EstimateListItemSchema.extend({
+  items: z.array(InvoiceItemSchema).optional(),
+  warehouse: EstimateWarehouseSchema,
+})
+
+export type EstimateDetail = z.infer<typeof EstimateDetailSchema>
+
+/**
+ * Client method parameter types (not Zod schemas — just TS interfaces).
+ *
+ * NOTE: /estimates does NOT support `date_after` / `date_before` /
+ * `dueDate_after` / `dueDate_before` — only exact `date` and `dueDate`.
+ * Date-range filtering is handled client-side in `parseEstimateFilters`.
+ */
+export interface ListEstimatesParams {
+  start?: number
+  limit?: number
+  order_field?: 'id' | 'name' | 'date' | 'dueDate'
+  order_direction?: 'ASC' | 'DESC'
+  metadata?: boolean
+  item_id?: string
+  client_id?: string
+  number?: string
+  client_name?: string
+  date?: string
+  // Index signature required because `AlegraClient.request()` accepts
+  // `Record<string, unknown>`. See ListInvoicesParams for the same rationale.
+  [key: string]: unknown
 }
