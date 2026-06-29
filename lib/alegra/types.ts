@@ -15,14 +15,24 @@ import { z } from 'zod'
 //   - InvoiceItem.discount                     → number or string
 //   - InvoiceItem.tax[].percentage             → string "19" or number
 //
-// For any new numeric field discovered through testing, mirror the safe form
-// rather than the documented one:
+// For any new numeric field discovered through testing, USE the
+// `safeNumber` helper below rather than `z.number()`:
 //
-//     safeNumber = z.union([z.number(), z.string()]).transform(Number)
+//     quantity: safeNumber,           // accepts "19" or 19, always outputs number
 //
 // Always verify against live data before adopting the strict z.number()
 // form — it will silently fail at runtime when Alegra decides to flip
 // the type for a given account or field.
+
+/**
+ * Zod schema for a numeric field that Alegra may return as either a native
+ * number or a JSON string. Always normalizes to a JS number.
+ *
+ * Beware: `Number("")` is `0` and `Number("garbage")` is `NaN`. None of the
+ * known cases produce empty strings (yet), but if a new field does, harden
+ * the schema with `.pipe(z.number().finite())` or similar.
+ */
+export const safeNumber = z.union([z.number(), z.string()]).transform(Number)
 // =============================================================================
 
 // =============================================================================
@@ -60,7 +70,7 @@ export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>
 const NumberTemplateObjectSchema = z.object({
   id: z.string(),
   prefix: z.string(),
-  number: z.union([z.number(), z.string()]).transform(Number),
+  number: safeNumber,
   text: z.string().optional(),
 }).nullable()
 
@@ -95,7 +105,7 @@ export const InvoiceCurrencySchema = z
   .object({
     code: z.string(),
     symbol: z.string(),
-    exchangeRate: z.number().optional(),
+    exchangeRate: safeNumber.optional(),
   })
   .nullish()
 
@@ -160,15 +170,14 @@ export const InvoiceItemSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   reference: z.string().nullable().optional(),
-  // All numeric-looking fields below use the safe-number pattern documented
-  // at the top of this file. See header for why.
-  price: z.union([z.number(), z.string()]).transform(Number),
-  quantity: z.union([z.number(), z.string()]).transform(Number),
-  discount: z.union([z.number(), z.string()]).transform(Number).optional(),
+  // All numeric-looking fields use `safeNumber` — see file header.
+  price: safeNumber,
+  quantity: safeNumber,
+  discount: safeNumber.optional(),
   tax: z.array(z.object({
     id: z.string(),
     name: z.string(),
-    percentage: z.union([z.number(), z.string()]).transform(Number),
+    percentage: safeNumber,
   })).optional(),
 }).passthrough()
 
@@ -177,8 +186,7 @@ export type InvoiceItem = z.infer<typeof InvoiceItemSchema>
 export const InvoicePaymentSchema = z.object({
   id: z.string(),
   date: z.string(),
-  // `amount` documented as number but appears as string in some endpoints
-  amount: z.union([z.number(), z.string()]).transform(Number),
+  amount: safeNumber, // see file header comment
   paymentMethod: z.string().nullable(),
   status: z.string(),
 }).passthrough()
@@ -237,8 +245,7 @@ export const CompanySchema = z.object({
   // has department/city instead). Optional rather than nullable.
   country: z.string().optional(),
   applicationVersion: z.string(),
-  // documented as int but sometimes returns string
-  decimalPrecision: z.union([z.number(), z.string()]).transform(Number),
+  decimalPrecision: safeNumber,
   currency: z.object({
     code: z.string(),
     symbol: z.string(),
