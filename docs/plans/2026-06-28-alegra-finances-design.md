@@ -1,7 +1,7 @@
 # Alegra Finance Module - Design Document
 
 **Date:** 2026-06-28
-**Status:** SHIPPED ✅ (V1 closed 2026-06-28; verified end-to-end against ADMINISTRACION SEGURA S.A.S Alegra account)
+**Status:** SHIPPED ✅ (V1 closed 2026-06-28; verified end-to-end against ADMINISTRACION SEGURA S.A.S Alegra account; **detail page smoke-tested + patched post-SHIPPED** in the same session)
 **Author:** Claude (via Brainstorming)
 **Branch:** `feat/finance`
 
@@ -17,7 +17,7 @@ Smoke-tested live against the integration test company in Alegra (ADMINISTRACION
 | Rate limit awareness | ⏸️ Not exercised | Single-user page loads stayed well under 150 req/min |
 | `/company` endpoint | ✅ Pass | After schema fix (country is optional) |
 | `/invoices` list | ✅ Pass | After schema fixes (numberTemplate.number coerces string→number; InvoiceCurrencySchema nullish; NumberTemplate union handling) |
-| `/invoices/{id}` detail | ⚠️ Code-complete, not smoke-tested in this session | Likely needs more shape adjustments in `items[]`/`payments[]`/`events[]`; will be caught by the flattened error logger on first load |
+| `/invoices/{id}` detail | ✅ Pass after post-SHIPPED patch | Detail page failed on first smoke test with `items.0.tax.0.percentage: Expected number, received string`. Fixed via `z.union([z.number(), z.string()]).transform(Number)` applied preemptively to all numeric fields in `InvoiceItemSchema` (price, quantity, discount, tax[].percentage). See commit message for full context. |
 | Home KPIs render real numbers | ✅ Pass | $15.509.000 facturado mes · $2.674.405 por cobrar (6 abiertas) · $1.789.805 vencido >30d |
 | List page renders + filter + paginate | ✅ Pass | FEAD9885 → FEAD9879 visible; status badges; Colombian peso formatting with comma decimal separator (auto-detected from company config) |
 | Error boundary surfaces AllegraError subclasses | ✅ Pass | "Alegra cambió su API" shows when a payload fails Zod |
