@@ -69,10 +69,13 @@ function chooseIcon(event: InvoiceEvent): IconChoice {
 export function DianEventsTimeline({ events }: DianEventsTimelineProps) {
   if (events.length === 0) return null
 
-  // Sort by date ascending (earliest first)
+  // Sort by date ascending (earliest first). Events with unparseable dates
+  // fall to the BOTTOM (Number.MAX_SAFE_INTEGER) so they don't show as
+  // "from 1970" at the top — better to have them stay at the end with
+  // their raw date string visible than to be visually wrong.
   const sorted = [...events].sort((a, b) => {
-    const da = parseAlegraDateTime(a.date)?.getTime() ?? 0
-    const db = parseAlegraDateTime(b.date)?.getTime() ?? 0
+    const da = parseAlegraDateTime(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const db = parseAlegraDateTime(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER
     return da - db
   })
 

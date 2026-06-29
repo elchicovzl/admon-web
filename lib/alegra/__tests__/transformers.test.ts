@@ -68,6 +68,18 @@ describe('formatCurrency / getCurrencyFormatter', () => {
   it('maneja amount 0', () => {
     expect(formatCurrency(0, 'COP')).toBeTruthy()
   })
+
+  it('NO crashea con currency code vacío — fallback a decimal format', () => {
+    // Empty string would throw RangeError without the try/catch in
+    // getCurrencyFormatter. Make sure it falls back gracefully.
+    expect(() => formatCurrency(1000, '')).not.toThrow()
+    expect(formatCurrency(1000, '')).toMatch(/1\.000/)
+  })
+
+  it('NO crashea con currency code inválido — fallback a decimal format', () => {
+    expect(() => formatCurrency(1000, 'NOPE')).not.toThrow()
+    expect(formatCurrency(1000, 'NOPE')).toMatch(/1\.000/)
+  })
 })
 
 // -----------------------------------------------------------------------------

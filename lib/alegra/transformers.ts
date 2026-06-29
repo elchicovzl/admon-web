@@ -129,6 +129,14 @@ const LOCALE = 'es-CO'
  * We cache by currency code because constructing an Intl.NumberFormat is
  * surprisingly expensive (~1ms each) and we format many values per page.
  *
+ * Robustness: `new Intl.NumberFormat('es-CO', { currency: '...' })` throws
+ * `RangeError: Invalid currency code` for empty strings or non-ISO codes.
+ * Since we render dozens of values per page with the formatter, a single
+ * bad response would otherwise crash the ENTIRE page → generic error
+ * boundary → user sees "Error de conexión" (misleading). Catching the
+ * RangeError and falling back to decimal-format-with-symbol-fallback
+ * keeps the page alive.
+ *
  * @example
  *   const fmt = getCurrencyFormatter('COP')
  *   fmt.format(1234567) // "$ 1.234.567"
@@ -139,12 +147,22 @@ export function getCurrencyFormatter(currencyCode: string): Intl.NumberFormat {
   const cached = formatterCache.get(currencyCode)
   if (cached) return cached
 
-  const formatter = new Intl.NumberFormat(LOCALE, {
-    style: 'currency',
-    currency: currencyCode,
-    // COP usually has 0 decimals in Colombia but other currencies may differ.
-    // Let Intl decide based on the currency code itself.
-  })
+  let formatter: Intl.NumberFormat
+  try {
+    formatter = new Intl.NumberFormat(LOCALE, {
+      style: 'currency',
+      currency: currencyCode,
+    })
+  } catch {
+    // Fallback: empty / invalid / unknown currency code → render as plain
+    // decimal number with the original currency symbol if we have one.
+    // Better than crashing the whole page over one bad field.
+    formatter = new Intl.NumberFormat(LOCALE, {
+      style: 'decimal',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    })
+  }
   formatterCache.set(currencyCode, formatter)
   return formatter
 }
