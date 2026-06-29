@@ -1,8 +1,16 @@
 /**
- * Client card on the invoice detail page.
+ * Client card for any finances document detail page (invoice or estimate).
  *
- * Renders the embedded client object from the invoice — NOT a lookup of
+ * Renders the embedded client object from the document — NOT a lookup of
  * our own `Client` model. The two are kept decoupled in V1.
+ *
+ * The client shape is identical between /invoices and /estimates (verified
+ * against the Alegra API — /estimates returns extra fields like `fax`,
+ * `mobile`, `phoneSecondary`, `observations`, all of which pass through
+ * thanks to the `InvoiceClientSchema.passthrough()`).
+ *
+ * If the schemas ever diverge, this component will need to accept a union
+ * type or be specialized per document type.
  */
 
 import { Mail, Phone, MapPin, Building2 } from 'lucide-react'
