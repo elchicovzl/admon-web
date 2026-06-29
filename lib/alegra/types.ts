@@ -10,6 +10,10 @@ import { z } from 'zod'
 //   - Company.decimalPrecision                  → string "0" or number
 //   - Payments[].amount                        → string "500" or number
 //   - NumberTemplate.number (invoice sequence)  → string "9850" or number
+//   - InvoiceItem.price                        → number or string
+//   - InvoiceItem.quantity                     → number or string
+//   - InvoiceItem.discount                     → number or string
+//   - InvoiceItem.tax[].percentage             → string "19" or number
 //
 // For any new numeric field discovered through testing, mirror the safe form
 // rather than the documented one:
@@ -156,13 +160,15 @@ export const InvoiceItemSchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   reference: z.string().nullable().optional(),
-  price: z.number(),
-  quantity: z.number(),
-  discount: z.number().optional(),
+  // All numeric-looking fields below use the safe-number pattern documented
+  // at the top of this file. See header for why.
+  price: z.union([z.number(), z.string()]).transform(Number),
+  quantity: z.union([z.number(), z.string()]).transform(Number),
+  discount: z.union([z.number(), z.string()]).transform(Number).optional(),
   tax: z.array(z.object({
     id: z.string(),
     name: z.string(),
-    percentage: z.number(),
+    percentage: z.union([z.number(), z.string()]).transform(Number),
   })).optional(),
 }).passthrough()
 

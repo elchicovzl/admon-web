@@ -183,7 +183,7 @@ describe('InvoiceListResponseSchema', () => {
 // -----------------------------------------------------------------------------
 
 describe('InvoiceItemSchema', () => {
-  it('parsea un item con tax', () => {
+  it('parsea un item con tax (numbers nativos)', () => {
     const item = {
       id: '1',
       name: 'Servicio de consultoría',
@@ -204,6 +204,43 @@ describe('InvoiceItemSchema', () => {
     const item = { id: '1', name: 'Item exento', price: 100, quantity: 1 }
     const result = InvoiceItemSchema.parse(item)
     expect(result.tax).toBeUndefined()
+  })
+
+  // Smoke-test from real Alegra: numbers come as strings in detail view.
+  it('coerce numeric strings (price, quantity, discount, percentage)', () => {
+    const item = {
+      id: '1',
+      name: 'Servicio',
+      price: '1000',        // string
+      quantity: '2',         // string
+      discount: '50',        // string
+      tax: [{ id: '6', name: 'IVA', percentage: '19' }],  // string percentage
+    }
+    const result = InvoiceItemSchema.parse(item)
+    expect(result.price).toBe(1000)
+    expect(result.quantity).toBe(2)
+    expect(result.discount).toBe(50)
+    expect(result.tax![0]!.percentage).toBe(19)
+    expect(typeof result.price).toBe('number')
+    expect(typeof result.tax![0]!.percentage).toBe('number')
+  })
+
+  it('acepta discount ausente', () => {
+    const item = { id: '1', name: 'Sin descuento', price: 100, quantity: 1 }
+    const result = InvoiceItemSchema.parse(item)
+    expect(result.discount).toBeUndefined()
+  })
+
+  it('tolerante a campos extra (passthrough)', () => {
+    const item = {
+      id: '1',
+      name: 'X',
+      price: 100,
+      quantity: 1,
+      customField: 'whatever',
+    }
+    const result = InvoiceItemSchema.parse(item) as Record<string, unknown>
+    expect(result.customField).toBe('whatever')
   })
 })
 
