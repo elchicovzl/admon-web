@@ -42,8 +42,9 @@ async function FinancesKpis() {
   const todayStr = format(today, 'yyyy-MM-dd')
   const thirtyDaysAgoStr = format(subDays(today, 30), 'yyyy-MM-dd')
 
-  // 3 parallel calls: ~all of them within the 150 req/min budget for a single page load.
-  const [company, mtd, open] = await Promise.all([
+  // All 4 calls are independent — fire them in parallel so the user only
+  // pays for ONE round-trip's worth of latency, not 4.
+  const [company, mtd, open, overdue] = await Promise.all([
     client.getCompany(),
     client.listInvoices({
       date_after: monthStart,
@@ -52,22 +53,18 @@ async function FinancesKpis() {
     client.listInvoices({
       status: 'open',
     }),
+    client.listInvoices({
+      status: 'open',
+      dueDate_before: thirtyDaysAgoStr,
+    }),
   ])
-
-  // Count of overdue invoices (separate call because filtering by dueDate on /open
-  // would still return the same set if we did it client-side, but Alegra supports
-  // dueDate_before on the API side — use it to avoid fetching invoices we'll discard).
-  const { data: overdueData } = await client.listInvoices({
-    status: 'open',
-    dueDate_before: thirtyDaysAgoStr,
-  })
 
   const fmt = (amount: number) => formatCurrency(amount, company.currency.code)
 
   const kpis = {
     mtdBilled: fmt(sumInvoices(mtd.data, 'total')),
     openReceivables: fmt(sumInvoices(open.data, 'balance')),
-    overdue30: fmt(sumInvoices(overdueData, 'balance')),
+    overdue30: fmt(sumInvoices(overdue.data, 'balance')),
     // After the InvoiceListResponseSchema transform, the count is at .total
     // (top level), NOT .metadata.total — the metadata object is stripped
     // during normalization. Originally I wrote .metadata.total which would
