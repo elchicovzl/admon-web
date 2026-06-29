@@ -31,9 +31,7 @@ export const metadata: Metadata = {
   description: 'Detalle de factura — Alegra',
 }
 
-// Always render at request time (prevents build-time prerender crashing
-// on the AlegraClient constructor's env-var check).
-export const dynamic = 'force-dynamic'
+// 'dynamic = force-dynamic' is inherited from app/dashboard/finances/layout.tsx.
 
 interface PageProps {
   params: Promise<{ id: string }>

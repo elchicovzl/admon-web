@@ -40,10 +40,7 @@ interface PageProps {
   searchParams: Promise<SearchParams>
 }
 
-// Without this directive, next build tries to prerender the page and crashes
-// when getAlegraClient()'s env-var check fires during build. searchParams
-// also makes it implicitly dynamic, but the directive is safer + self-documenting.
-export const dynamic = 'force-dynamic'
+// 'dynamic = force-dynamic' is inherited from app/dashboard/finances/layout.tsx.
 
 export default async function InvoicesListPage({ searchParams }: PageProps) {
   const sp = await searchParams

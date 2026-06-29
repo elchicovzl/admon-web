@@ -26,10 +26,7 @@ export const metadata: Metadata = {
   description: 'Resumen financiero — facturas, cobros y vencidos (Alegra)',
 }
 
-// The page depends on external API state (Alegra) and is read-only-on-demand;
-// skip build-time prerendering — render per request so the env-var check in the
-// AlegraClient constructor runs only when the user actually opens the page.
-export const dynamic = 'force-dynamic'
+// 'dynamic = force-dynamic' is inherited from app/dashboard/finances/layout.tsx.
 
 // -----------------------------------------------------------------------------
 // Data fetch (async server component inside Suspense)
