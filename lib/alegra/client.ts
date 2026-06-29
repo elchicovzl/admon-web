@@ -146,17 +146,20 @@ export class AlegraClient {
   // Core request method
   // ---------------------------------------------------------------------------
 
-  private async request<T>(
+  private async request<S extends z.ZodTypeAny>(
     path: string,
     params: Record<string, unknown> | undefined,
-    // `z.ZodTypeAny` is the base of all Zod schemas (ZodObject, ZodEffects,
-    // ZodUnion, etc.). Using `z.ZodType<T>` directly fails with Zod 4 because
-    // it requires matching the OUTPUT type, but schemas with `.transform()`
-    // have different input/output types and TS rejects them. We use the
-    // broadest type and let TS infer T from the call site via the cast
-    // below.
-    schema: z.ZodTypeAny,
-  ): Promise<T> {
+    // Generic schema parameter that lets TS infer the return type from the
+    // schema itself (`z.infer<S>` is the OUTPUT type, after `.transform()`).
+    // Previous incarnation used `z.ZodTypeAny` which decoupled T from the
+    // schema and let the compiler accept mismatches like passing
+    // EstimateDetailSchema with a Promise<Invoice> return type — which is
+    // exactly how the KPI `date_after` bug slipped through. Constraining
+    // `S` to `z.ZodTypeAny` (rather than `unknown`) keeps the variance
+    // happy while still enforcing that the schema actually matches the
+    // declared return type at every call site.
+    schema: S,
+  ): Promise<z.infer<S>> {
     await this.waitForRateLimit()
 
     const url = this.buildUrl(path, params)
