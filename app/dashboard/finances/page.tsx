@@ -25,6 +25,7 @@ import { getAlegraClient } from '@/lib/alegra/client'
 import {
   sumInvoices,
   sumEstimates,
+  filterEstimatesByDateRange,
   formatCurrency,
 } from '@/lib/alegra/transformers'
 import { KpiCards, KpiCardsSkeleton } from '@/components/dashboard/finances/kpi-cards'
@@ -81,12 +82,23 @@ async function FinancesKpis() {
     // also work on the raw Alegra response but breaks the contract.
     openCount: open.total,
     // V2 — estimates
-    // estimatesMtd may underreport on accounts with >30 cotizaciones/mes
-    // (we only sum the first 30 from the DESC-ordered response — same
-    // limitation as the date-range filter on the /estimates page).
-    // estimatesActive uses `result.total` from metadata, which IS the
+    // IMPORTANT: /estimates does NOT support `date_after` (only exact
+    // `date`), so the API ignores it and returns the top-30 most recent
+    // cotizaciones regardless of month. We MUST filter client-side with
+    // filterEstimatesByDateRange, otherwise the KPI sums cotizaciones from
+    // previous months and labels them as "este mes".
+    //
+    // Limitation after the fix: if the account has >30 cotizaciones in
+    // a single month, only the 30 most recent (DESC) are summed —
+    // subreports if the count exceeds 30/month. Acceptable for V2.
+    // `estimatesActive` uses `result.total` from metadata, which IS the
     // exact count regardless of pagination.
-    estimatesMtd: fmt(sumEstimates(estimatesMtd.data, 'total')),
+    estimatesMtd: fmt(
+      sumEstimates(
+        filterEstimatesByDateRange(estimatesMtd.data, monthStart, null),
+        'total',
+      ),
+    ),
     estimatesActive: estimatesAll.total,
     currencyCode: company.currency.code,
   }
