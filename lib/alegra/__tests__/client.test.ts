@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AlegraClient, getAlegraClient } from '../client'
+import { AlegraClient, formatValidationFailure, getAlegraClient } from '../client'
 import { AlegraError, AuthError, RateLimitError, ValidationError } from '../errors'
 
 // -----------------------------------------------------------------------------
@@ -428,5 +428,54 @@ describe('AlegraClient — getCompany', () => {
     expect(fetchMock.mock.calls[0]![0] as string).toContain('/company')
     expect(result.country).toBe('CO')
     expect(result.currency.code).toBe('COP')
+  })
+})
+
+// =============================================================================
+// formatValidationFailure (helper for readable Zod error logs)
+// =============================================================================
+
+describe('formatValidationFailure', () => {
+  it('lista cada issue con field path + expected/received', () => {
+    const issues = [
+      { path: ['country'], message: 'Required', expected: 'string', received: 'undefined' },
+      { path: ['currency', 'code'], message: 'Required', expected: 'string', received: 'undefined' },
+    ]
+    const out = formatValidationFailure('/company', { name: 'X' }, issues)
+    expect(out).toContain('[Alegra] Zod validation failed at /company:')
+    expect(out).toContain('  • country: Required expected string, received "undefined"')
+    expect(out).toContain('  • currency.code: Required expected string, received "undefined"')
+    expect(out).toContain('Raw response:')
+    expect(out).toContain('"name": "X"')
+  })
+
+  it('marca el path como (root) cuando está vacío', () => {
+    const issues = [{ path: [], message: 'Expected object', expected: 'object' }]
+    const out = formatValidationFailure('/x', {}, issues)
+    expect(out).toContain('  • (root): Expected object')
+  })
+
+  it('omite "received" cuando no está definido en el issue', () => {
+    const issues = [{ path: ['a'], message: 'Bad' }]
+    const out = formatValidationFailure('/x', {}, issues)
+    expect(out).not.toContain('received')
+  })
+
+  it('trunca el preview a 2000 chars', () => {
+    const huge = { data: 'x'.repeat(5000) }
+    const out = formatValidationFailure('/x', huge, [])
+    expect(out).toContain('(truncated at 2000 chars)')
+  })
+
+  it('no explota con valores no serializables en el preview', () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    const out = formatValidationFailure('/x', circular, [])
+    expect(out).toContain('could not serialize')
+  })
+
+  it('maneja undefined y null sin explotar', () => {
+    expect(formatValidationFailure('/x', undefined, [])).toContain('undefined — no JSON parsed')
+    expect(formatValidationFailure('/x', null, [])).toContain('null')
   })
 })

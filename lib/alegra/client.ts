@@ -154,14 +154,18 @@ export class AlegraClient {
 
     const parsed = schema.safeParse(json)
     if (!parsed.success) {
-      // Log to server console so we can spot upstream API drift quickly.
-      console.error('[Alegra] Zod validation failed:', {
-        path,
-        issues: parsed.error.issues,
-      })
+      // Log a STRUCTURED, human-readable summary to the server console so the
+      // developer/operator can immediately see which field of the schema
+      // failed and what the upstream actually sent. Default Zod output uses
+      // `[object Object]` for the issues array, which is useless in a server
+      // log. Format it explicitly.
+      console.error(formatValidationFailure(path, json, parsed.error.issues))
       throw new ValidationError(
         'Alegra devolvió un shape inesperado',
-        parsed.error.format(),
+        {
+          formatted: formatValidationFailure(path, json, parsed.error.issues),
+          zod: parsed.error.format(),
+        },
       )
     }
 
@@ -251,4 +255,60 @@ export class AlegraClient {
   getRateLimitState(): Readonly<RateLimitState> {
     return { ...this.rateLimit }
   }
+}
+
+// -----------------------------------------------------------------------------
+// Validation error formatter (exported for unit testing)
+// -----------------------------------------------------------------------------
+
+/**
+ * Format a Zod validation failure into a readable multi-line string with:
+ *   - The request path
+ *   - Each issue with its field path (e.g. "currency.code"), expected/received
+ *   - A truncated JSON preview of the upstream response
+ *
+ * Truncation is at 2 KB to keep logs bounded — large arrays are clipped.
+ */
+export function formatValidationFailure(
+  requestPath: string,
+  rawJson: unknown,
+  issues: ReadonlyArray<{
+    path: ReadonlyArray<string | number>
+    message: string
+    expected?: string
+    received?: unknown
+  }>,
+): string {
+  const MAX_PREVIEW_CHARS = 2000
+
+  const issueLines = issues.map((issue) => {
+    const fieldPath = issue.path.length > 0 ? issue.path.join('.') : '(root)'
+    const expected = issue.expected ? ` expected ${issue.expected}` : ''
+    const received = issue.received !== undefined ? `, received ${JSON.stringify(issue.received)}` : ''
+    return `  • ${fieldPath}: ${issue.message}${expected}${received}`
+  })
+
+  let preview: string
+  if (rawJson === undefined) {
+    preview = '(undefined — no JSON parsed)'
+  } else if (rawJson === null) {
+    preview = 'null'
+  } else {
+    try {
+      preview = JSON.stringify(rawJson, null, 2)
+    } catch {
+      preview = '(could not serialize response — possibly circular)'
+    }
+  }
+  if (preview.length > MAX_PREVIEW_CHARS) {
+    preview = `${preview.slice(0, MAX_PREVIEW_CHARS)}\n  … (truncated at ${MAX_PREVIEW_CHARS} chars)`
+  }
+
+  return [
+    `[Alegra] Zod validation failed at ${requestPath}:`,
+    issueLines.join('\n') || '  • (no issues reported)',
+    '',
+    'Raw response:',
+    preview,
+  ].join('\n')
 }
