@@ -6,7 +6,7 @@
  * Components (though it's primarily used server-side).
  */
 
-import type { InvoiceListItem, NumberTemplate, InvoiceStatus } from './types'
+import type { EstimateListItem, InvoiceListItem, NumberTemplate, InvoiceStatus } from './types'
 
 // =============================================================================
 // Invoice list filters (URL-driven — pure parsing helpers)
@@ -348,4 +348,142 @@ export function getInvoiceStatusLabel(status: InvoiceListItem['status']): string
 
 export function getInvoiceStatusBadgeClass(status: InvoiceListItem['status']): string {
   return INVOICE_STATUS_BADGE_CLASS[status] ?? 'bg-slate-100 text-slate-700'
+}
+
+// =============================================================================
+// Estimates (cotizaciones) — V2
+//
+// Differences vs the invoice filters:
+//   - NO `status` — estimates have no status field (informational documents)
+//   - Date-range filtering is CLIENT-SIDE: the /estimates endpoint does NOT
+//     support `date_after` / `date_before` (only exact `date`). We fetch a
+//     page of 30 and filter in memory; acceptable for V2 since typical pyme
+//     accounts have <100 cotizaciones/month. If volume grows, we can switch
+//     to multi-request pagination with start/limit — see the design doc.
+// =============================================================================
+
+/**
+ * Mirrors the URL-driven filters for the estimates list page.
+ * NOTE: no `status` field — estimates have no status.
+ */
+export interface EstimateFilters {
+  dateFrom: string | null // YYYY-MM-DD or null
+  dateTo: string | null
+  clientName: string | null // substring match against Alegra `client_name`
+  page: number
+}
+
+/**
+ * Parse Next.js `searchParams` into a validated `EstimateFilters` object.
+ *
+ * Same conventions as `parseInvoiceFilters` — accept both array and
+ * comma-joined forms for repeated params, drop malformed values silently.
+ *
+ * NOTE: `dateFrom` / `dateTo` here are UI hints only. The /estimates API
+ * doesn't support range filters, so these are applied client-side after
+ * fetching. If both are set and the fetched page doesn't include items in
+ * that range, the list shows zero results — same UX as a no-match.
+ */
+export function parseEstimateFilters(
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+): EstimateFilters {
+  const sp = searchParams ?? {}
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  const dateFrom = typeof sp.date_from === 'string' && dateRegex.test(sp.date_from) ? sp.date_from : null
+  const dateTo = typeof sp.date_to === 'string' && dateRegex.test(sp.date_to) ? sp.date_to : null
+
+  const clientNameRaw = typeof sp.client_name === 'string' ? sp.client_name.trim() : ''
+  const clientName = clientNameRaw.length > 0 ? clientNameRaw : null
+
+  const pageRaw = typeof sp.page === 'string' ? Number.parseInt(sp.page, 10) : DEFAULT_PAGE
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : DEFAULT_PAGE
+
+  return { dateFrom, dateTo, clientName, page }
+}
+
+/**
+ * Build a URL query string from a partial filters object.
+ * Mirrors `buildInvoicesSearchString` minus the status handling.
+ */
+export function buildEstimatesSearchString(filters: Partial<EstimateFilters>): string {
+  const params = new URLSearchParams()
+
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
+  if (filters.dateTo) params.set('date_to', filters.dateTo)
+  if (filters.clientName) params.set('client_name', filters.clientName)
+  if (filters.page && filters.page > 1) params.set('page', String(filters.page))
+
+  const s = params.toString()
+  return s.length > 0 ? `?${s}` : ''
+}
+
+/**
+ * Pagination links for the estimates list. Reuses `totalPages` and the
+ * 30-item hard cap from the invoice module.
+ */
+export function buildEstimatePaginationLinks(
+  filters: EstimateFilters,
+  total: number,
+): { prev: string | null; next: string | null } {
+  const pages = totalPages(total)
+  const prev = filters.page > 1 ? buildEstimatesSearchString({ ...filters, page: filters.page - 1 }) : null
+  const next = filters.page < pages ? buildEstimatesSearchString({ ...filters, page: filters.page + 1 }) : null
+  return { prev, next }
+}
+
+/**
+ * Client-side date-range filter applied AFTER fetching the /estimates page.
+ *
+ * Compares against the estimate's `date` field (YYYY-MM-DD string compare
+ * is locale-independent and faster than Date construction). An estimate
+ * without a date is excluded from any ranged query (would be confusing
+ * to show it when the user explicitly filtered by date).
+ *
+ * Returns the SAME array reference if no range filter is active, so the
+ * caller can skip the no-op case without a re-render cost.
+ */
+export function filterEstimatesByDateRange(
+  estimates: EstimateListItem[],
+  dateFrom: string | null,
+  dateTo: string | null,
+): EstimateListItem[] {
+  if (!dateFrom && !dateTo) return estimates
+
+  return estimates.filter((e) => {
+    if (!e.date) return false
+    if (dateFrom && e.date < dateFrom) return false
+    if (dateTo && e.date > dateTo) return false
+    return true
+  })
+}
+
+/**
+ * Format an estimate's `number` field for display.
+ *
+ * Estimates don't use numberTemplate — they have a flat `number` field
+ * (string per the API). We coerce to string with no thousands separators
+ * (the UI shows it monospaced next to other identifiers, so "10" looks
+ * cleaner than "10.00" or "1,000").
+ *
+ * @example
+ *   formatEstimateNumber({ number: 22, ... }) // "22"
+ *   formatEstimateNumber({ number: 'COT-8', ... }) // "COT-8" (defensive: some
+ *     accounts echo the prefix here too)
+ */
+export function formatEstimateNumber(estimate: Pick<EstimateListItem, 'number'>): string {
+  if (estimate.number === null || estimate.number === undefined) return '—'
+  return String(estimate.number)
+}
+
+/**
+ * Sum a numeric field across a list of estimates. Reuses the `sumInvoices`
+ * pattern but typed for `EstimateListItem`. Currently only `total` is
+ * summed (no balance/totalPaid on estimates).
+ */
+export function sumEstimates(
+  estimates: EstimateListItem[],
+  field: 'total',
+): number {
+  return estimates.reduce((acc, est) => acc + (est[field] ?? 0), 0)
 }

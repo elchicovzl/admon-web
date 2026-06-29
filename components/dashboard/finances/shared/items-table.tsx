@@ -1,6 +1,22 @@
 /**
- * Items table on the invoice detail page.
- * Renders the `items[]` array from the invoice detail.
+ * Items table for any finances document detail page (invoice or estimate).
+ *
+ * The `items[]` shape is identical between /invoices and /estimates (verified
+ * against the Alegra API — /estimates returns a `total` field per item that
+ * invoices don't, plus extra tax metadata like `type` / `status`, all of
+ * which pass through thanks to `InvoiceItemSchema.passthrough()`).
+ *
+ * Renders:
+ *   - Empty state ("Sin items registrados.") if `items.length === 0`
+ *   - Otherwise a table with: descripción / cant / precio / descuento /
+ *     impuestos (as badges) / total por línea
+ *
+ * Line totals are computed locally (`price * quantity - discount`) because
+ * Alegra's `item.total` already includes tax, while the column expectation
+ * is "net price × qty − discount" — same convention as the V1 invoice
+ * detail. The discrepancy is small in practice (taxes are already included
+ * in the displayed total via the items.tax[] badges) and consistent across
+ * documents.
  */
 
 import { Package } from 'lucide-react'

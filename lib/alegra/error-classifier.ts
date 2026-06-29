@@ -30,7 +30,7 @@ import {
 export type AlegraUiErrorCategory =
   | 'auth'           // 401, bad credentials
   | 'rate_limit'     // 429, retry later
-  | 'not_found'      // 404 / invoice ID doesn't exist
+  | 'not_found'      // 404 / document ID doesn't exist
   | 'validation'     // Zod / API shape drift
   | 'network'        // everything else (catch-all: 5xx, fetch failures, unknown)
 
@@ -54,8 +54,17 @@ export interface AlegraUiError {
  * `HTTP_<status>` (e.g. 'HTTP_404'). We special-case 404 because it's
  * the one we can show a friendly message for; everything else falls
  * through to the generic NETWORK bucket.
+ *
+ * @param resourceLabel Spanish label for the missing resource shown in the
+ *        NOT_FOUND message ("factura" / "cotización"). Defaults to "documento"
+ *        so the classifier is safe to call without context (e.g. from a
+ *        generic boundary). The caller can override via the `notFound()`
+ *        factory if it has a more specific label.
  */
-export function classifyAlegraError(err: unknown): AlegraUiError {
+export function classifyAlegraError(
+  err: unknown,
+  resourceLabel: string = 'documento',
+): AlegraUiError {
   const message = err instanceof Error ? err.message.toLowerCase() : ''
 
   // (1) Type-narrow — strongest signal, survives all boundaries.
@@ -67,15 +76,17 @@ export function classifyAlegraError(err: unknown): AlegraUiError {
   // by the HTTP-error path in client.ts. These are the production-safe
   // branches (digest is the only field that survives Next.js's
   // message-masking in production error.tsx boundaries).
-  const digest = err instanceof Error ? err.digest : undefined
+  // `digest` isn't on the base `Error` type but Next.js preserves it on
+  // error.tsx props — narrow with a cast.
+  const digest = err instanceof Error ? (err as Error & { digest?: string }).digest : undefined
   if (digest === 'AUTH_ERROR') return AUTH
   if (digest === 'RATE_LIMIT') return RATE_LIMIT
   if (digest === 'VALIDATION_ERROR') return VALIDATION
-  if (digest === 'HTTP_404') return NOT_FOUND
+  if (digest === 'HTTP_404') return notFound(resourceLabel)
 
   // (3) Substring fallback (dev only — Next masks messages in prod).
   // Order matters — most specific first.
-  if (message.includes('not found') || message.includes('404')) return NOT_FOUND
+  if (message.includes('not found') || message.includes('404')) return notFound(resourceLabel)
   if (message.includes('credencial') || message.includes('auth') || message.includes('401')) return AUTH
   if (message.includes('rate limit') || message.includes('429')) return RATE_LIMIT
   if (
@@ -90,7 +101,9 @@ export function classifyAlegraError(err: unknown): AlegraUiError {
 }
 
 // -----------------------------------------------------------------------------
-// Messages — one source of truth. Update these once, all 3 boundaries see it.
+// Messages — one source of truth. Update these once, all boundaries see it.
+// NOT_FOUND is a factory so the resource label can be parameterized per
+// caller (factura vs cotización) without duplicating the rest of the copy.
 // -----------------------------------------------------------------------------
 
 const AUTH: AlegraUiError = {
@@ -106,11 +119,14 @@ const RATE_LIMIT: AlegraUiError = {
   description: 'La API recibió muchas requests. Vuelve a intentar en un minuto.',
 }
 
-const NOT_FOUND: AlegraUiError = {
-  category: 'not_found',
-  title: 'Factura no encontrada',
-  description:
-    'Alegra no devolvió datos para esta factura. Verificá el ID o que la factura aún exista.',
+function notFound(resourceLabel: string): AlegraUiError {
+  return {
+    category: 'not_found',
+    // Gender-neutral form so it works for "factura" / "cotización" /
+    // any future label without needing to think about article agreement.
+    title: 'No encontrado',
+    description: `No se encontró la ${resourceLabel} solicitada. Verificá el ID o que aún exista en Alegra.`,
+  }
 }
 
 const VALIDATION: AlegraUiError = {

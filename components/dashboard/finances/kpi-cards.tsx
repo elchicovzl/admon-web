@@ -3,14 +3,18 @@
  *
  * Server Component (pure display, no interactivity in V1).
  *
- * Shows 4 cards:
- *   - Facturado mes actual: sum of total of invoices this month
- *   - Por cobrar (abiertas): sum of balance of all open invoices
- *   - Vencido >30 días:     sum of balance of open invoices past 30 days
- *   - Facturas abiertas:    count of open invoices
+ * Shows 6 cards (V1: 4 invoices + V2: 2 estimates):
+ *   - Facturado mes actual:      sum of total of invoices this month
+ *   - Por cobrar (abiertas):     sum of balance of all open invoices
+ *   - Vencido >30 días:          sum of balance of open invoices past 30 days
+ *   - Facturas abiertas:         count of open invoices
+ *   - Cotizado mes actual (V2):  sum of total of estimates created this month
+ *   - Cotizaciones activas (V2): total count of all estimates in the account
  *
  * All values are pre-formatted by the parent (page.tsx) using
  * `formatCurrency()` from lib/alegra/transformers.
+ *
+ * Grid: 1 col mobile → 2 cols md → 3 cols lg (so 6 cards = 2 rows of 3).
  */
 
 import {
@@ -26,6 +30,8 @@ import {
   Clock,
   AlertTriangle,
   FileText,
+  ScrollText,
+  Layers,
 } from 'lucide-react'
 
 // -----------------------------------------------------------------------------
@@ -33,10 +39,14 @@ import {
 // -----------------------------------------------------------------------------
 
 export interface FinancesKpis {
+  // V1 — invoices
   mtdBilled: string
   openReceivables: string
   overdue30: string
   openCount: number
+  // V2 — estimates
+  estimatesMtd: string
+  estimatesActive: number
   currencyCode: string
 }
 
@@ -78,10 +88,30 @@ export function KpiCards({ kpis }: { kpis: FinancesKpis }) {
       accent: 'text-violet-600',
       accentBg: 'bg-violet-50 dark:bg-violet-950',
     },
+    // V2 — estimates. estimatesActive is the exact total (from metadata),
+    // not just the first 30. estimatesMtd may underreport on accounts with
+    // >30 cotizaciones/mes — same limitation as the date-range filter on the
+    // /estimates page (see `filterEstimatesByDateRange` for the rationale).
+    {
+      label: 'Cotizado mes actual',
+      value: kpis.estimatesMtd,
+      description: 'Cotizaciones creadas este mes',
+      icon: ScrollText,
+      accent: 'text-teal-600',
+      accentBg: 'bg-teal-50 dark:bg-teal-950',
+    },
+    {
+      label: 'Cotizaciones activas',
+      value: kpis.estimatesActive.toLocaleString('es-CO'),
+      description: `Total registradas en Alegra`,
+      icon: Layers,
+      accent: 'text-indigo-600',
+      accentBg: 'bg-indigo-50 dark:bg-indigo-950',
+    },
   ]
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map(({ label, value, description, icon: Icon, accent, accentBg }) => (
         <Card key={label}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -108,8 +138,8 @@ export function KpiCards({ kpis }: { kpis: FinancesKpis }) {
 
 export function KpiCardsSkeleton() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
         <Card key={i}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <Skeleton className="h-4 w-28" />

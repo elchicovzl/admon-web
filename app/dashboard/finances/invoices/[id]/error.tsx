@@ -30,6 +30,7 @@ export default function InvoiceDetailError({ error, reset }: ErrorProps) {
         reset={reset}
         surface="Listado de facturas"
         homeHref="/dashboard/finances/invoices"
+        resourceLabel="factura"
       />
     </div>
   )

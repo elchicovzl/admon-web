@@ -8,12 +8,15 @@
  *                       surface="Resumen"
  *                       homeHref="/dashboard/finances" />
  *
- * The classification logic + message catalog live in `@/lib/alegra/error-ui`
+ * The classification logic + message catalog live in `@/lib/alegra/error-classifier`
  * (pure .ts so Vitest can import them without a React JSX transform).
  *
  * @param surface Human label for what page broke — shown in the heading
- *               ("Resumen", "Listado de facturas", "Detalle de factura")
+ *               ("Resumen", "Listado de facturas", "Detalle de cotización")
  * @param homeHref Where the "← Volver" button points (typically /dashboard/finances)
+ * @param resourceLabel Spanish label for the missing document used in the
+ *               NOT_FOUND message ("factura" / "cotización"). Defaults to
+ *               "documento" if omitted.
  */
 
 import Link from 'next/link'
@@ -34,13 +37,15 @@ export function FinancesErrorShell({
   reset,
   surface,
   homeHref,
+  resourceLabel = 'documento',
 }: {
   error: Error & { digest?: string }
   reset: () => void
   surface: string
   homeHref: string
+  resourceLabel?: string
 }) {
-  const classified = classifyAlegraError(error)
+  const classified = classifyAlegraError(error, resourceLabel)
 
   // Server-side log already happens; don't expose digest/stack to user.
   useEffect(() => {
