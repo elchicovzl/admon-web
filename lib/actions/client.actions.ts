@@ -20,7 +20,7 @@ import {
   type UpdateClientInput,
   type LegalRepresentativeInput,
 } from '@/lib/validations/client.schema'
-import type { SafeClient, ClientWithRelations, ClientNote, LegalRepresentative } from '@/lib/types/client.types'
+import type { SafeClient, ClientWithRelations, ClientNote, LegalRepresentative, CompanyEmployee } from '@/lib/types/client.types'
 import type { ActionResponse } from '@/lib/types/auth.types'
 import { revalidatePath } from 'next/cache'
 
@@ -263,6 +263,22 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
         arl: { select: { id: true, name: true, code: true, type: true } },
         arlRiskLevel: true,
         ccf: { select: { id: true, name: true, code: true, type: true } },
+        // Phase 2: active employments from the join table (for client-info-panel)
+        employmentsAsEmployee: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            employeeType: true,
+            workDaysRange: true,
+            startDate: true,
+            company: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
       },
     })
 
@@ -286,7 +302,9 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
 
     return {
       success: true,
-      data: clientData as ClientWithRelations,
+      // Double-cast: Prisma select omits encryptedPassword/createdById from credentials
+      // (intentionally, for security) so the structural types don't fully overlap.
+      data: clientData as unknown as ClientWithRelations,
     }
   } catch (error) {
     console.error('Get client error:', error)
@@ -890,20 +908,35 @@ export async function removeEmployeeFromCompany(employeeId: string): Promise<Act
 }
 
 /**
- * Get available employees (not assigned to any company)
+ * Get available employee candidates for a specific company.
+ * Phase 2 migration: excludes only clients already actively employed by THIS company
+ * (instead of old filter: clientType=EMPLEADO + companyId=null).
+ * Covers REQ-3 (3.1–3.6):
+ *   - 3.1: excludes clients with an active Employment at the target company
+ *   - 3.2: includes clients employed at OTHER companies (multi-employer)
+ *   - 3.3: EMPRESA-type clients are now valid candidates
+ *   - 3.4: EMPLEADO-type clients not constrained by companyId shadow
+ *   - 3.5: the company itself is excluded (id: { not: companyId })
+ *   - 3.6: clients with inactive Employment at target ARE included
  */
-export const getAvailableEmployees = cache(async (): Promise<ActionResponse<SafeClient[]>> => {
+export const getAvailableEmployees = cache(async (companyId: string): Promise<ActionResponse<SafeClient[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error }
     }
 
+    // Validate companyId input
+    const validatedFields = getCompanyEmployeesSchema.safeParse({ companyId })
+    if (!validatedFields.success) {
+      return { success: false, error: 'Datos inválidos' }
+    }
+
     const employees = await prisma.client.findMany({
       where: {
-        clientType: 'EMPLEADO',
-        companyId: null,
         isActive: true,
+        id: { not: companyId },
+        NOT: { employmentsAsEmployee: { some: { companyId, isActive: true } } },
       },
       select: {
         id: true,
@@ -911,15 +944,12 @@ export const getAvailableEmployees = cache(async (): Promise<ActionResponse<Safe
         identificationType: true,
         identificationNumber: true,
         clientType: true,
-        employeeType: true,
-        workDaysRange: true,
         email: true,
         phone: true,
         status: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        companyId: true,
       },
       orderBy: {
         fullName: 'asc',
@@ -928,7 +958,7 @@ export const getAvailableEmployees = cache(async (): Promise<ActionResponse<Safe
 
     return {
       success: true,
-      data: employees,
+      data: employees as SafeClient[],
     }
   } catch (error) {
     console.error('Get available employees error:', error)
@@ -940,9 +970,14 @@ export const getAvailableEmployees = cache(async (): Promise<ActionResponse<Safe
 })
 
 /**
- * Get company employees
+ * Get active employees of a company via the Employment join table.
+ * Phase 2 migration: reads from `employment` table instead of Client.companyId shadow.
+ * Covers REQ-4 (4.1–4.3):
+ *   - 4.1: returns only active Employment rows (isActive=true)
+ *   - 4.2: returns [] when no active Employments exist
+ *   - 4.3: employeeType/workDaysRange come from Employment, NOT from Client shadow columns
  */
-export const getCompanyEmployees = cache(async (companyId: string): Promise<ActionResponse<SafeClient[]>> => {
+export const getCompanyEmployees = cache(async (companyId: string): Promise<ActionResponse<CompanyEmployee[]>> => {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
@@ -966,36 +1001,43 @@ export const getCompanyEmployees = cache(async (companyId: string): Promise<Acti
       return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados' }
     }
 
-    const employees = await prisma.client.findMany({
-      where: {
-        companyId,
-        isActive: true,
-      },
+    // Read from the Employment join table — role fields come from Employment, not Client shadow
+    const employments = await prisma.employment.findMany({
+      where: { companyId, isActive: true },
       select: {
-        id: true,
-        fullName: true,
-        identificationType: true,
-        identificationNumber: true,
-        clientType: true,
         employeeType: true,
         workDaysRange: true,
-        email: true,
-        phone: true,
-        status: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        companyId: true,
+        startDate: true,
+        employee: {
+          select: {
+            id: true,
+            fullName: true,
+            identificationType: true,
+            identificationNumber: true,
+            clientType: true,
+            email: true,
+            phone: true,
+            status: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
-      orderBy: {
-        fullName: 'asc',
-      },
+      orderBy: { employee: { fullName: 'asc' } },
     })
 
-    return {
-      success: true,
-      data: employees,
-    }
+    // Flatten: merge employee identity fields with per-employment role fields
+    const data: CompanyEmployee[] = employments
+      .filter((e) => e.employee.isActive)
+      .map((e) => ({
+        ...e.employee,
+        employeeType: e.employeeType,
+        workDaysRange: e.workDaysRange,
+        startDate: e.startDate,
+      }))
+
+    return { success: true, data }
   } catch (error) {
     console.error('Get company employees error:', error)
     return {

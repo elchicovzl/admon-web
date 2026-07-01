@@ -38,6 +38,9 @@ export {
   updateLegalRepresentative,
 } from './client.actions'
 
+// Employment actions (Phase 2 — new join-table based actions)
+export { createEmployment, deactivateEmployment } from './employment.actions'
+
 // Document actions
 export {
   generateUploadUrl,
