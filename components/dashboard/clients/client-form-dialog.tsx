@@ -26,7 +26,7 @@ import {
   DEPARTAMENTOS_COLOMBIA,
   getMunicipiosPorDepartamento,
 } from '@/lib/data/colombia-geo'
-import { ClientType, IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
+import { ClientType, IdentificationType } from '@prisma/client'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -164,8 +164,6 @@ export function ClientFormDialog({
       identificationNumber: '',
       email: '',
       phone: '',
-      employeeType: undefined,
-      workDaysRange: undefined,
       legalRepresentative: undefined,
       address: {
         departamento: '',
@@ -190,10 +188,7 @@ export function ClientFormDialog({
   // Watch clientType to show/hide legal representative fields and filter ID types
   const clientType = form.watch('clientType')
   const identificationType = form.watch('identificationType')
-  const employeeType = form.watch('employeeType')
   const isCompany = clientType === ClientType.EMPRESA
-  const isEmployee = clientType === ClientType.EMPLEADO
-  const isPartTime = employeeType === EmployeeType.TIEMPO_PARCIAL
 
   // Track previous identification type to clear number only when it actually changes
   const prevIdTypeRef = useRef<IdentificationType | null>(null)
@@ -217,21 +212,6 @@ export function ClientFormDialog({
     prevIdTypeRef.current = identificationType
   }, [identificationType, form])
 
-  // Clear employee type fields when switching away from EMPLEADO
-  useEffect(() => {
-    if (!isEmployee) {
-      form.setValue('employeeType', undefined)
-      form.setValue('workDaysRange', undefined)
-    }
-  }, [isEmployee, form])
-
-  // Clear workDaysRange when switching away from TIEMPO_PARCIAL
-  useEffect(() => {
-    if (!isPartTime) {
-      form.setValue('workDaysRange', undefined)
-    }
-  }, [isPartTime, form])
-
   // Clear legal representative data when switching away from EMPRESA
   useEffect(() => {
     if (!isCompany) {
@@ -249,8 +229,6 @@ export function ClientFormDialog({
         identificationNumber: editClient.identificationNumber,
         email: editClient.email,
         phone: editClient.phone,
-        employeeType: editClient.employeeType ?? undefined,
-        workDaysRange: editClient.workDaysRange ?? undefined,
         legalRepresentative: undefined,
         address: {
           departamento: editAddress?.departamento ?? '',
@@ -273,8 +251,6 @@ export function ClientFormDialog({
         identificationNumber: '',
         email: '',
         phone: '',
-        employeeType: undefined,
-        workDaysRange: undefined,
         legalRepresentative: undefined,
         address: {
           departamento: '',
@@ -457,67 +433,6 @@ export function ClientFormDialog({
                 </FormItem>
               )}
             />
-
-            {/* Employee type - only for EMPLEADO */}
-            {isEmployee && (
-              <FormField
-                control={form.control}
-                name="employeeType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Empleado</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ''}
-                      disabled={isLoading}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar tipo de empleado" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={EmployeeType.TIEMPO_COMPLETO}>Trabajador tiempo completo</SelectItem>
-                        <SelectItem value={EmployeeType.TIEMPO_PARCIAL}>Trabajador tiempo parcial</SelectItem>
-                        <SelectItem value={EmployeeType.INDEPENDIENTE_CONTRATISTA}>Independiente Contratista</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Work days range - only for TIEMPO_PARCIAL */}
-            {isEmployee && isPartTime && (
-              <FormField
-                control={form.control}
-                name="workDaysRange"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Días laborados al mes</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value || ''}
-                      disabled={isLoading}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar rango de días" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={WorkDaysRange.DIAS_1_7}>1 a 7 días al mes</SelectItem>
-                        <SelectItem value={WorkDaysRange.DIAS_8_14}>8 a 14 días al mes</SelectItem>
-                        <SelectItem value={WorkDaysRange.DIAS_15_21}>15 a 21 días al mes</SelectItem>
-                        <SelectItem value={WorkDaysRange.DIAS_22_30}>22 a 30 días al mes</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
 
             {/* Identification type and number */}
             <div className="grid grid-cols-2 gap-4">

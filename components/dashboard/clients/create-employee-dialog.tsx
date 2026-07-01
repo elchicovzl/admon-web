@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { IMaskInput } from 'react-imask'
-import { createClient, assignEmployeeToCompany } from '@/lib/actions'
+import { createClient, createEmployment } from '@/lib/actions'
 import { getAdministradoras, updateClientAdministradoras } from '@/lib/actions/client.actions'
 import { createEmployeeSchema, type CreateEmployeeInput } from '@/lib/validations/client.schema'
 import type { SafeClient, AdministradoraInfo } from '@/lib/types/client.types'
@@ -182,11 +182,16 @@ export function CreateEmployeeDialog({
 
       const newEmployee = createResult.data
 
-      // Assign the employee to the company
-      const assignResult = await assignEmployeeToCompany(newEmployee.id, companyId)
+      // Create the Employment row (authoritative) — employeeType/workDaysRange go here
+      const employmentResult = await createEmployment({
+        employeeId: newEmployee.id,
+        companyId,
+        employeeType: data.employeeType ?? undefined,
+        workDaysRange: data.workDaysRange ?? undefined,
+      })
 
-      if (!assignResult.success) {
-        toast.error(assignResult.error || 'Empleado creado pero no pudo ser asignado a la empresa')
+      if (!employmentResult.success) {
+        toast.error(employmentResult.error || 'Empleado creado pero no pudo ser asignado a la empresa')
         setIsLoading(false)
         return
       }

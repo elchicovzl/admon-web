@@ -1,5 +1,55 @@
 import { ClientType, IdentificationType, AdministratorType, DocumentCategory, EmployeeType, WorkDaysRange } from '@prisma/client'
 
+// ---------------------------------------------------------------------------
+// Employment join table types (Phase 2 additions)
+// ---------------------------------------------------------------------------
+
+/**
+ * Represents an Employment row from the `employments` table.
+ * employeeType and workDaysRange are nullable (legacy backfill tolerance per REQ-7.4).
+ */
+export interface Employment {
+  id: string
+  employeeId: string
+  companyId: string
+  employeeType?: EmployeeType | null
+  workDaysRange?: WorkDaysRange | null
+  startDate: Date
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+/**
+ * Flattened employee shape returned by getCompanyEmployees.
+ * Extends SafeClient with per-employment role fields sourced from the
+ * Employment row (NOT from the legacy Client shadow columns).
+ */
+export interface CompanyEmployee extends SafeClient {
+  employeeType?: EmployeeType | null
+  workDaysRange?: WorkDaysRange | null
+  startDate?: Date
+}
+
+/**
+ * Minimal shape returned by getAvailableEmployees.
+ * Excludes legacy companyId / employeeType / workDaysRange shadow fields.
+ */
+export type AvailableEmployee = Pick<
+  SafeClient,
+  | 'id'
+  | 'fullName'
+  | 'identificationType'
+  | 'identificationNumber'
+  | 'clientType'
+  | 'email'
+  | 'phone'
+  | 'status'
+  | 'isActive'
+  | 'createdAt'
+  | 'updatedAt'
+>
+
 export interface Client {
   id: string
   fullName: string
@@ -46,9 +96,20 @@ export interface ClientWithRelations extends SafeClient {
     name: string | null
     email: string
   }
-  // Company-Employee relations
+  // Company-Employee relations (legacy shadow — kept through Phase 2)
   company?: SafeClient | null
   employees?: SafeClient[]
+  // Phase 2: active employments from the Employment join table
+  employmentsAsEmployee?: Array<{
+    id: string
+    employeeType?: EmployeeType | null
+    workDaysRange?: WorkDaysRange | null
+    startDate: Date
+    company: {
+      id: string
+      fullName: string
+    }
+  }>
   // Address and additional info
   address?: ClientAddress | null
   additionalInfo?: ClientAdditionalInfo | null

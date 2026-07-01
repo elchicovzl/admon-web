@@ -157,18 +157,6 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                 <p className="text-xs font-medium text-muted-foreground">Tipo de Cliente</p>
                 <p className="text-sm">{CLIENT_TYPE_LABELS[client.clientType]}</p>
               </div>
-              {client.clientType === ClientType.EMPLEADO && client.employeeType && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Tipo de Empleado</p>
-                  <p className="text-sm">{EMPLOYEE_TYPE_LABELS[client.employeeType]}</p>
-                </div>
-              )}
-              {client.clientType === ClientType.EMPLEADO && client.workDaysRange && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">Días Laborados</p>
-                  <p className="text-sm">{WORK_DAYS_LABELS[client.workDaysRange]}</p>
-                </div>
-              )}
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Identificación</p>
                 <p className="text-sm">
@@ -181,18 +169,52 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                   {client.isActive ? 'Activo' : 'Inactivo'}
                 </Badge>
               </div>
-              {client.clientType === ClientType.EMPLEADO && client.company && (
+              {/* Employment info: list of active employments from join table */}
+              {client.employmentsAsEmployee && client.employmentsAsEmployee.length > 0 && (
                 <div className="col-span-full">
-                  <p className="text-xs font-medium text-muted-foreground">Empresa</p>
-                  <Link
-                    href={`/dashboard/clients/${client.company.id}`}
-                    className="text-sm text-primary hover:underline flex items-center gap-1"
-                  >
-                    <Building2 className="h-3.5 w-3.5" />
-                    {client.company.fullName}
-                  </Link>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {client.employmentsAsEmployee.length === 1 ? 'Empresa' : 'Empresas'}
+                  </p>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {client.employmentsAsEmployee.map((emp) => (
+                      <div key={emp.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <Link
+                          href={`/dashboard/clients/${emp.company.id}`}
+                          className="text-sm text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Building2 className="h-3.5 w-3.5" />
+                          {emp.company.fullName}
+                        </Link>
+                        {emp.employeeType && (
+                          <span className="text-xs text-muted-foreground">
+                            · {EMPLOYEE_TYPE_LABELS[emp.employeeType]}
+                          </span>
+                        )}
+                        {emp.workDaysRange && (
+                          <span className="text-xs text-muted-foreground">
+                            · {WORK_DAYS_LABELS[emp.workDaysRange]}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+              {/* Fallback: shadow column — only shown when no Employment rows exist (legacy clients) */}
+              {(!client.employmentsAsEmployee || client.employmentsAsEmployee.length === 0) &&
+                client.clientType === ClientType.EMPLEADO &&
+                client.company && (
+                  <div className="col-span-full">
+                    <p className="text-xs font-medium text-muted-foreground">Empresa</p>
+                    <Link
+                      href={`/dashboard/clients/${client.company.id}`}
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Building2 className="h-3.5 w-3.5" />
+                      {client.company.fullName}
+                    </Link>
+                  </div>
+                )}
             </div>
           </div>
 

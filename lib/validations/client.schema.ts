@@ -33,6 +33,10 @@ export type LegalRepresentativeInput = z.infer<typeof legalRepresentativeSchema>
 export type UpdateLegalRepresentativeInput = LegalRepresentativeInput
 
 // Create client schema
+// NOTE (Phase 2): employeeType / workDaysRange are accepted here for legacy/dual-write
+// compatibility, but are no longer *required* — they now belong to the Employment join table.
+// The UI forms that manage employment (assign-employee-dialog, create-employee-dialog)
+// enforce them client-side and route them to createEmployment().
 export const createClientSchema = z
   .object({
     fullName: z
@@ -60,7 +64,7 @@ export const createClientSchema = z
       .min(1, 'El teléfono es requerido')
       .min(7, 'El teléfono debe tener al menos 7 caracteres')
       .max(20, 'El teléfono no puede exceder 20 caracteres'),
-    // Employee type (conditional - only for employees)
+    // Phase 2: still accepted (shadow write), but no longer required — Employment owns these
     employeeType: z.nativeEnum(EmployeeType).optional(),
     workDaysRange: z.nativeEnum(WorkDaysRange).optional(),
     // Legal representative (conditional - required for companies)
@@ -76,30 +80,6 @@ export const createClientSchema = z
     {
       message: 'El representante legal es requerido para empresas',
       path: ['legalRepresentative'],
-    }
-  )
-  .refine(
-    (data) => {
-      if (data.clientType === ClientType.EMPLEADO) {
-        return !!data.employeeType
-      }
-      return true
-    },
-    {
-      message: 'El tipo de empleado es requerido',
-      path: ['employeeType'],
-    }
-  )
-  .refine(
-    (data) => {
-      if (data.employeeType === EmployeeType.TIEMPO_PARCIAL) {
-        return !!data.workDaysRange
-      }
-      return true
-    },
-    {
-      message: 'Los días laborados son requeridos para tiempo parcial',
-      path: ['workDaysRange'],
     }
   )
 

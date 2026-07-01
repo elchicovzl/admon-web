@@ -388,16 +388,18 @@ export async function createAffiliation(
         return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
       }
 
-      const employees = await prisma.client.findMany({
+      const employments = await prisma.employment.findMany({
         where: {
-          id: { in: uniqueEmployeeIds },
           companyId: data.clientId,
-          clientType: 'EMPLEADO',
           isActive: true,
+          employeeId: { in: uniqueEmployeeIds },
+          employee: { isActive: true },
         },
+        select: { employeeId: true },
       })
 
-      if (employees.length !== uniqueEmployeeIds.length) {
+      const validIds = new Set(employments.map((e) => e.employeeId))
+      if (validIds.size !== uniqueEmployeeIds.length) {
         return { success: false, error: 'Uno o más empleados no son válidos o no pertenecen a esta empresa' }
       }
     }
@@ -1368,16 +1370,18 @@ export async function addSubProcesses(
         return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
       }
 
-      const employees = await prisma.client.findMany({
+      const employments = await prisma.employment.findMany({
         where: {
-          id: { in: uniqueEmployeeIds },
           companyId: affiliation.clientId,
-          clientType: 'EMPLEADO',
           isActive: true,
+          employeeId: { in: uniqueEmployeeIds },
+          employee: { isActive: true },
         },
+        select: { employeeId: true },
       })
 
-      if (employees.length !== uniqueEmployeeIds.length) {
+      const validIds = new Set(employments.map((e) => e.employeeId))
+      if (validIds.size !== uniqueEmployeeIds.length) {
         return { success: false, error: 'Uno o más empleados no son válidos o no pertenecen a esta empresa' }
       }
     }

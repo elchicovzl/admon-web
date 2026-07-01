@@ -225,8 +225,41 @@ model Client {
   ccfId        String?
   ccf   Administradora? @relation("ClientCcf", fields: [ccfId], references: [id])
 
+  // Employment join table back-relations (Phase 1 additive; legacy CompanyEmployees stays)
+  employmentsAsEmployee Employment[] @relation("EmploymentEmployee")
+  employmentsAsCompany  Employment[] @relation("EmploymentCompany")
+
   @@map("clients")
   @@index([companyId])
+}
+
+// Employment join table — replaces Client self-relation in Phase 3
+// Coexists with legacy companyId/employeeType/workDaysRange shadow through Phase 1-2
+model Employment {
+  id           String        @id @default(cuid())
+
+  // The person/entity that is employed
+  employeeId   String
+  employee     Client        @relation("EmploymentEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // The company that employs them
+  companyId    String
+  company      Client        @relation("EmploymentCompany", fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Role attributes (MOVED from Client in Phase 3; nullable for REQ-7.4 legacy tolerance)
+  employeeType  EmployeeType?
+  workDaysRange WorkDaysRange?
+
+  startDate    DateTime      @default(now())
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([employeeId, companyId])
+  @@index([employeeId])
+  @@index([companyId])
+  @@index([isActive])
+  @@map("employments")
 }
 
 // Client Note model

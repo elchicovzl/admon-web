@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { SafeClient } from '@/lib/types/client.types'
-import { getAvailableEmployees, assignEmployeeToCompany } from '@/lib/actions'
+import { getAvailableEmployees, createEmployment } from '@/lib/actions'
 import {
   Dialog,
   DialogContent,
@@ -24,12 +24,32 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Loader2, Check, ChevronsUpDown, X } from 'lucide-react'
-import { IdentificationType } from '@prisma/client'
+import { IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { cn } from '@/lib/utils'
+
+const EMPLOYEE_TYPE_LABELS: Record<EmployeeType, string> = {
+  TIEMPO_COMPLETO: 'Tiempo completo',
+  TIEMPO_PARCIAL: 'Tiempo parcial',
+  INDEPENDIENTE_CONTRATISTA: 'Independiente Contratista',
+}
+
+const WORK_DAYS_LABELS: Record<WorkDaysRange, string> = {
+  DIAS_1_7: '1 a 7 días al mes',
+  DIAS_8_14: '8 a 14 días al mes',
+  DIAS_15_21: '15 a 21 días al mes',
+  DIAS_22_30: '22 a 30 días al mes',
+}
 
 interface AssignEmployeeDialogProps {
   companyId: string
@@ -46,9 +66,13 @@ export function AssignEmployeeDialog({
 }: AssignEmployeeDialogProps) {
   const [availableEmployees, setAvailableEmployees] = useState<SafeClient[]>([])
   const [selectedEmployee, setSelectedEmployee] = useState<SafeClient | null>(null)
+  const [selectedEmployeeType, setSelectedEmployeeType] = useState<EmployeeType | null>(null)
+  const [selectedWorkDaysRange, setSelectedWorkDaysRange] = useState<WorkDaysRange | null>(null)
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isAssigning, setIsAssigning] = useState(false)
+
+  const isPartTime = selectedEmployeeType === EmployeeType.TIEMPO_PARCIAL
 
   const getIdentificationTypeLabel = (type: IdentificationType) => {
     const labels: Record<IdentificationType, string> = {
@@ -61,6 +85,7 @@ export function AssignEmployeeDialog({
       PEP: 'PEP',
       NUIP: 'NUIP',
       NIT: 'NIT',
+      SALVOCONDUCTO: 'SC',
     }
     return labels[type]
   }
@@ -71,14 +96,23 @@ export function AssignEmployeeDialog({
     } else {
       // Reset state when dialog closes
       setSelectedEmployee(null)
+      setSelectedEmployeeType(null)
+      setSelectedWorkDaysRange(null)
       setOpen(false)
     }
   }, [isOpen])
 
+  // Clear workDaysRange when switching away from TIEMPO_PARCIAL
+  useEffect(() => {
+    if (!isPartTime) {
+      setSelectedWorkDaysRange(null)
+    }
+  }, [isPartTime])
+
   const loadAvailableEmployees = async () => {
     setIsLoading(true)
     try {
-      const result = await getAvailableEmployees()
+      const result = await getAvailableEmployees(companyId)
 
       if (result.success && result.data) {
         setAvailableEmployees(result.data)
@@ -107,14 +141,23 @@ export function AssignEmployeeDialog({
       toast.error('Selecciona un empleado')
       return
     }
+    if (!selectedEmployeeType) {
+      toast.error('Selecciona el tipo de empleado')
+      return
+    }
 
     setIsAssigning(true)
 
     try {
-      const result = await assignEmployeeToCompany(selectedEmployee.id, companyId)
+      const result = await createEmployment({
+        employeeId: selectedEmployee.id,
+        companyId,
+        employeeType: selectedEmployeeType,
+        workDaysRange: selectedWorkDaysRange ?? undefined,
+      })
 
       if (result.success) {
-        toast.success(result.message || 'Empleado asignado exitosamente')
+        toast.success('Empleado asignado exitosamente')
         onEmployeeAssigned(selectedEmployee)
         onClose()
       } else {
@@ -147,7 +190,7 @@ export function AssignEmployeeDialog({
             <div className="text-center py-8 text-muted-foreground">
               <p className="text-sm">No hay empleados disponibles</p>
               <p className="text-xs mt-2">
-                Todos los empleados ya están asignados a empresas
+                Todos los empleados ya están asignados a esta empresa
               </p>
             </div>
           ) : (
@@ -211,6 +254,52 @@ export function AssignEmployeeDialog({
                 </Popover>
               </div>
 
+              {/* Employment type select (required) */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none">
+                  Tipo de empleado <span className="text-destructive">*</span>
+                </label>
+                <Select
+                  value={selectedEmployeeType ?? ''}
+                  onValueChange={(val) => setSelectedEmployeeType(val as EmployeeType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar tipo de empleado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(EMPLOYEE_TYPE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Work days range (only for TIEMPO_PARCIAL) */}
+              {isPartTime && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium leading-none">
+                    Días laborados al mes
+                  </label>
+                  <Select
+                    value={selectedWorkDaysRange ?? ''}
+                    onValueChange={(val) => setSelectedWorkDaysRange(val as WorkDaysRange)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar rango de días" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(WORK_DAYS_LABELS).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               {/* Selected employee summary card */}
               {selectedEmployee && (
                 <Card className="border-primary/20 bg-primary/5">
@@ -263,7 +352,7 @@ export function AssignEmployeeDialog({
           </Button>
           <Button
             onClick={handleAssign}
-            disabled={!selectedEmployee || isAssigning || isLoading}
+            disabled={!selectedEmployee || !selectedEmployeeType || isAssigning || isLoading}
           >
             {isAssigning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Asignar Empleado

@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import type { SafeClient } from '@/lib/types/client.types'
-import { removeEmployeeFromCompany } from '@/lib/actions'
+import type { CompanyEmployee } from '@/lib/types/client.types'
+import { deactivateEmployment } from '@/lib/actions'
 import {
   Card,
   CardContent,
@@ -40,13 +40,27 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { IdentificationType } from '@prisma/client'
+import { IdentificationType, EmployeeType, WorkDaysRange } from '@prisma/client'
 import { AssignEmployeeDialog } from './assign-employee-dialog'
 import { CreateEmployeeDialog } from './create-employee-dialog'
+import type { SafeClient } from '@/lib/types/client.types'
+
+const EMPLOYEE_TYPE_LABELS: Record<EmployeeType, string> = {
+  TIEMPO_COMPLETO: 'Tiempo completo',
+  TIEMPO_PARCIAL: 'Tiempo parcial',
+  INDEPENDIENTE_CONTRATISTA: 'Independiente Contratista',
+}
+
+const WORK_DAYS_LABELS: Record<WorkDaysRange, string> = {
+  DIAS_1_7: '1-7 días',
+  DIAS_8_14: '8-14 días',
+  DIAS_15_21: '15-21 días',
+  DIAS_22_30: '22-30 días',
+}
 
 interface CompanyEmployeesSectionProps {
   companyId: string
-  initialEmployees: SafeClient[]
+  initialEmployees: CompanyEmployee[]
 }
 
 export function CompanyEmployeesSection({
@@ -54,7 +68,7 @@ export function CompanyEmployeesSection({
   initialEmployees,
 }: CompanyEmployeesSectionProps) {
   const router = useRouter()
-  const [employees, setEmployees] = useState<SafeClient[]>(initialEmployees)
+  const [employees, setEmployees] = useState<CompanyEmployee[]>(initialEmployees)
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
@@ -70,15 +84,16 @@ export function CompanyEmployeesSection({
       PEP: 'PEP',
       NUIP: 'NUIP',
       NIT: 'NIT',
+      SALVOCONDUCTO: 'Salvoconducto',
     }
     return labels[type]
   }
 
-  const handleViewEmployee = (employee: SafeClient) => {
+  const handleViewEmployee = (employee: CompanyEmployee) => {
     router.push(`/dashboard/clients/${employee.id}`)
   }
 
-  const handleRemoveEmployee = async (employee: SafeClient) => {
+  const handleRemoveEmployee = async (employee: CompanyEmployee) => {
     if (!confirm(`¿Estás seguro de desasignar a ${employee.fullName} de esta empresa?`)) {
       return
     }
@@ -86,10 +101,10 @@ export function CompanyEmployeesSection({
     setIsRemoving(true)
 
     try {
-      const result = await removeEmployeeFromCompany(employee.id)
+      const result = await deactivateEmployment({ employeeId: employee.id, companyId })
 
       if (result.success) {
-        toast.success(result.message || 'Empleado desasignado exitosamente')
+        toast.success('Empleado desasignado exitosamente')
         setEmployees((prev) => prev.filter((e) => e.id !== employee.id))
         router.refresh()
       } else {
@@ -104,7 +119,7 @@ export function CompanyEmployeesSection({
   }
 
   const handleEmployeeAdded = (employee: SafeClient) => {
-    setEmployees((prev) => [...prev, employee])
+    setEmployees((prev) => [...prev, employee as CompanyEmployee])
     router.refresh()
   }
 
@@ -160,8 +175,8 @@ export function CompanyEmployeesSection({
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Identificación</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Teléfono</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Días laborados</TableHead>
                     <TableHead>Fecha de Registro</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -185,8 +200,20 @@ export function CompanyEmployeesSection({
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm">{employee.email}</TableCell>
-                      <TableCell className="text-sm">{employee.phone}</TableCell>
+                      <TableCell>
+                        {employee.employeeType ? (
+                          <Badge variant="secondary" className="text-xs">
+                            {EMPLOYEE_TYPE_LABELS[employee.employeeType]}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {employee.workDaysRange
+                          ? WORK_DAYS_LABELS[employee.workDaysRange]
+                          : '—'}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {format(new Date(employee.createdAt), "d 'de' MMMM, yyyy", {
                           locale: es,
