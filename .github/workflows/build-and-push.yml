@@ -14,6 +14,9 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # Reads the DOKPLOY_WEBHOOK_URL secret and NEXT_PUBLIC_* vars scoped to this
+    # environment. Without it the job only sees repo-level secrets/vars (empty).
+    environment: Production
     permissions:
       contents: read
       packages: write # necesario para pushear a GHCR
