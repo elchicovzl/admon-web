@@ -1,0 +1,27 @@
+# Deps y build — se generan dentro de la imagen
+node_modules
+.next
+out
+build
+
+# Env / secretos — NUNCA dentro de la imagen
+.env
+.env.*
+!.env.example
+
+# Git / CI
+.git
+.github
+.gitignore
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+
+# Tests / docs / misc
+coverage
+*.log
+README*.md
+CLAUDE*.md
+DASHBOARD_README.md
