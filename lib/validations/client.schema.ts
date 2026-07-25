@@ -308,21 +308,6 @@ export const getClientSchema = z.object({
 
 export type GetClientInput = z.infer<typeof getClientSchema>
 
-// Assign employee to company schema
-export const assignEmployeeToCompanySchema = z.object({
-  employeeId: z.string().cuid('ID de empleado inválido'),
-  companyId: z.string().cuid('ID de empresa inválido'),
-})
-
-export type AssignEmployeeToCompanyInput = z.infer<typeof assignEmployeeToCompanySchema>
-
-// Remove employee from company schema
-export const removeEmployeeFromCompanySchema = z.object({
-  employeeId: z.string().cuid('ID de empleado inválido'),
-})
-
-export type RemoveEmployeeFromCompanyInput = z.infer<typeof removeEmployeeFromCompanySchema>
-
 // Get company employees schema
 export const getCompanyEmployeesSchema = z.object({
   companyId: z.string().cuid('ID de empresa inválido'),

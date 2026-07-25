@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ClipboardList, FileText, History } from 'lucide-react'
 import type { ClientHistoryListItem } from '@/lib/types/client-history.types'
+import { formatEmployeeCompanies } from '@/lib/utils/employment'
 
 const identificationTypeLabels: Record<IdentificationType, string> = {
   CEDULA: 'CC',
@@ -80,9 +81,9 @@ export function ClientHistoryTable({ clients }: ClientHistoryTableProps) {
                     {identificationTypeLabels[client.identificationType]}{' '}
                     {client.identificationNumber}
                   </span>
-                  {client.company && (
+                  {formatEmployeeCompanies(client.employmentsAsEmployee) && (
                     <span className="text-xs text-muted-foreground">
-                      Empresa: {client.company.fullName}
+                      Empresa: {formatEmployeeCompanies(client.employmentsAsEmployee)}
                     </span>
                   )}
                 </div>

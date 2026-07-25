@@ -11,8 +11,6 @@ import {
   toggleClientStatusSchema,
   addClientNoteSchema,
   deleteClientNoteSchema,
-  assignEmployeeToCompanySchema,
-  removeEmployeeFromCompanySchema,
   getCompanyEmployeesSchema,
   legalRepresentativeSchema,
   type CreateClientInput,
@@ -70,10 +68,16 @@ export const getClients = cache(async (): Promise<ActionResponse<SafeClient[]>> 
         createdAt: true,
         updatedAt: true,
         companyId: true,
-        company: {
+        // Phase 3: companies come from the Employment join table, not the shadow
+        employmentsAsEmployee: {
+          where: { isActive: true },
           select: {
-            id: true,
-            fullName: true,
+            company: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
           },
         },
       },
@@ -791,121 +795,6 @@ export const getClientsCount = cache(async (): Promise<
     }
   }
 })
-
-/**
- * Assign employee to company
- */
-export async function assignEmployeeToCompany(
-  employeeId: string,
-  companyId: string
-): Promise<ActionResponse> {
-  try {
-    const authCheck = await requireManagerOrAdmin()
-    if (!authCheck.authorized) {
-      return { success: false, error: authCheck.error }
-    }
-
-    // Validate input
-    const validatedFields = assignEmployeeToCompanySchema.safeParse({ employeeId, companyId })
-    if (!validatedFields.success) {
-      return { success: false, error: 'Datos inválidos' }
-    }
-
-    // Check if employee exists
-    const employee = await prisma.client.findUnique({ where: { id: employeeId } })
-    if (!employee) {
-      return { success: false, error: 'Empleado no encontrado' }
-    }
-
-    // Check if employee is actually an employee type
-    if (employee.clientType !== 'EMPLEADO') {
-      return { success: false, error: 'Solo clientes tipo EMPLEADO pueden ser asignados a una empresa' }
-    }
-
-    // Check if employee already has a company
-    if (employee.companyId) {
-      return { success: false, error: 'El empleado ya está asignado a una empresa' }
-    }
-
-    // Check if company exists
-    const company = await prisma.client.findUnique({ where: { id: companyId } })
-    if (!company) {
-      return { success: false, error: 'Empresa no encontrada' }
-    }
-
-    // Check if company is actually a company type
-    if (company.clientType !== 'EMPRESA') {
-      return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados asignados' }
-    }
-
-    // Assign employee to company
-    await prisma.client.update({
-      where: { id: employeeId },
-      data: { companyId },
-    })
-
-    revalidatePath('/dashboard/clients')
-    revalidatePath(`/dashboard/clients/${employeeId}`)
-    revalidatePath(`/dashboard/clients/${companyId}`)
-
-    return {
-      success: true,
-      message: 'Empleado asignado exitosamente a la empresa',
-    }
-  } catch (error) {
-    console.error('Assign employee to company error:', error)
-    return { success: false, error: 'Error al asignar empleado a la empresa' }
-  }
-}
-
-/**
- * Remove employee from company
- */
-export async function removeEmployeeFromCompany(employeeId: string): Promise<ActionResponse> {
-  try {
-    const authCheck = await requireManagerOrAdmin()
-    if (!authCheck.authorized) {
-      return { success: false, error: authCheck.error }
-    }
-
-    // Validate input
-    const validatedFields = removeEmployeeFromCompanySchema.safeParse({ employeeId })
-    if (!validatedFields.success) {
-      return { success: false, error: 'Datos inválidos' }
-    }
-
-    // Check if employee exists
-    const employee = await prisma.client.findUnique({ where: { id: employeeId } })
-    if (!employee) {
-      return { success: false, error: 'Empleado no encontrado' }
-    }
-
-    // Check if employee has a company
-    if (!employee.companyId) {
-      return { success: false, error: 'El empleado no está asignado a ninguna empresa' }
-    }
-
-    const companyId = employee.companyId
-
-    // Remove employee from company
-    await prisma.client.update({
-      where: { id: employeeId },
-      data: { companyId: null },
-    })
-
-    revalidatePath('/dashboard/clients')
-    revalidatePath(`/dashboard/clients/${employeeId}`)
-    revalidatePath(`/dashboard/clients/${companyId}`)
-
-    return {
-      success: true,
-      message: 'Empleado desasignado exitosamente de la empresa',
-    }
-  } catch (error) {
-    console.error('Remove employee from company error:', error)
-    return { success: false, error: 'Error al desasignar empleado de la empresa' }
-  }
-}
 
 /**
  * Get available employee candidates for a specific company.

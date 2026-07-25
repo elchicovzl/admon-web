@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { getClientById } from '@/lib/actions/client.actions'
-import type { ClientWithRelations } from '@/lib/types/client.types'
+import { getClientById, getCompanyEmployees } from '@/lib/actions/client.actions'
+import type { ClientWithRelations, CompanyEmployee } from '@/lib/types/client.types'
+import { employeeCompanies } from '@/lib/utils/employment'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -43,6 +44,7 @@ export default function ClientDetailPage() {
     returnTo === 'subprocess' && !!returnSubProcessId && !!returnAffiliationId
 
   const [client, setClient] = useState<ClientWithRelations | null>(null)
+  const [companyEmployees, setCompanyEmployees] = useState<CompanyEmployee[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -52,6 +54,15 @@ export default function ClientDetailPage() {
 
         if (result.success && result.data) {
           setClient(result.data)
+
+          // Company employees live in the Employment join table (Phase 2), not the
+          // legacy Client.companyId relation — read them from the source of truth.
+          if (result.data.clientType === ClientType.EMPRESA) {
+            const employeesResult = await getCompanyEmployees(clientId)
+            if (employeesResult.success && employeesResult.data) {
+              setCompanyEmployees(employeesResult.data)
+            }
+          }
         } else {
           console.error('Error loading client:', result.error)
         }
@@ -97,6 +108,9 @@ export default function ClientDetailPage() {
     )
   }
 
+  // Companies this employee belongs to (Employment join table, may be several)
+  const companies = employeeCompanies(client.employmentsAsEmployee)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -106,7 +120,7 @@ export default function ClientDetailPage() {
             variant="ghost"
             size="icon"
             onClick={() => router.push(
-              client.company ? `/dashboard/clients/${client.company.id}` : '/dashboard/clients'
+              companies[0] ? `/dashboard/clients/${companies[0].id}` : '/dashboard/clients'
             )}
           >
             <ArrowLeft className="h-5 w-5" />
@@ -118,14 +132,23 @@ export default function ClientDetailPage() {
                 Cliente desde{' '}
                 {format(new Date(client.createdAt), "d 'de' MMMM, yyyy", { locale: es })}
               </p>
-              {client.company && (
-                <Link
-                  href={`/dashboard/clients/${client.company.id}`}
-                  className="flex items-center gap-1 text-sm text-primary hover:underline"
-                >
-                  <Building2 className="h-3.5 w-3.5" />
-                  {client.company.fullName}
-                </Link>
+              {companies.length > 0 && (
+                <span className="flex items-center gap-1 text-sm">
+                  <Building2 className="h-3.5 w-3.5 text-primary" />
+                  {companies.map((c, i) => (
+                    <span key={c.id}>
+                      <Link
+                        href={`/dashboard/clients/${c.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        {c.fullName}
+                      </Link>
+                      {i < companies.length - 1 && (
+                        <span className="text-muted-foreground">, </span>
+                      )}
+                    </span>
+                  ))}
+                </span>
               )}
             </div>
           </div>
@@ -150,7 +173,7 @@ export default function ClientDetailPage() {
       {client.clientType === ClientType.EMPRESA && (
         <CompanyEmployeesSection
           companyId={client.id}
-          initialEmployees={client.employees || []}
+          initialEmployees={companyEmployees}
         />
       )}
 

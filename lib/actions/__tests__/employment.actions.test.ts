@@ -192,8 +192,6 @@ describe('createEmployment', () => {
       .mockResolvedValueOnce(employee)  // employee lookup
     prismaMock.employment.findUnique.mockResolvedValueOnce(null) // no existing row
     prismaMock.employment.upsert.mockResolvedValueOnce(created)
-    // shadow write: employee has no companyId yet
-    prismaMock.client.update.mockResolvedValueOnce({ ...employee, companyId: ID.COMPANY_X })
 
     const result = await createEmployment({
       employeeId:    ID.CLIENT_A,
@@ -207,6 +205,8 @@ describe('createEmployment', () => {
     expect(result.data!.employeeId).toBe(ID.CLIENT_A)
     expect(result.data!.companyId).toBe(ID.COMPANY_X)
     expect(result.data!.isActive).toBe(true)
+    // Phase 3: no legacy shadow write to Client.companyId
+    expect(prismaMock.client.update).not.toHaveBeenCalled()
   })
 
   // -------------------------------------------------------------------------
@@ -230,8 +230,6 @@ describe('createEmployment', () => {
       .mockResolvedValueOnce(employee)
     prismaMock.employment.findUnique.mockResolvedValueOnce(null)
     prismaMock.employment.upsert.mockResolvedValueOnce(created)
-    prismaMock.client.update.mockResolvedValue({ ...employee, companyId: ID.COMPANY_X })
-
     const result = await createEmployment({
       employeeId:    ID.CLIENT_B,
       companyId:     ID.COMPANY_X,
@@ -321,8 +319,6 @@ describe('createEmployment', () => {
       .mockResolvedValueOnce(employee)
     prismaMock.employment.findUnique.mockResolvedValueOnce(null)
     prismaMock.employment.upsert.mockResolvedValueOnce(created)
-    prismaMock.client.update.mockResolvedValue({ ...employee, companyId: ID.COMPANY_X })
-
     const result = await createEmployment({
       employeeId:    ID.CLIENT_A,
       companyId:     ID.COMPANY_X,
@@ -350,8 +346,6 @@ describe('createEmployment', () => {
       .mockResolvedValueOnce(employee)
     prismaMock.employment.findUnique.mockResolvedValueOnce(inactive) // isActive=false → allow
     prismaMock.employment.upsert.mockResolvedValueOnce(reactivated)
-    prismaMock.client.update.mockResolvedValue(employee)
-
     const result = await createEmployment({
       employeeId:    ID.CLIENT_A,
       companyId:     ID.COMPANY_X,
@@ -390,8 +384,6 @@ describe('createEmployment — REQ-2 multi-employer', () => {
       .mockResolvedValueOnce(employee)
     prismaMock.employment.findUnique.mockResolvedValueOnce(null) // no existing at companyY
     prismaMock.employment.upsert.mockResolvedValueOnce(newEmp)
-    prismaMock.client.update.mockResolvedValue(employee)
-
     const result = await createEmployment({
       employeeId:    ID.CLIENT_A,
       companyId:     ID.COMPANY_Y,
@@ -422,8 +414,6 @@ describe('createEmployment — REQ-2 multi-employer', () => {
       .mockResolvedValueOnce(empresaEmp)
     prismaMock.employment.findUnique.mockResolvedValueOnce(null)
     prismaMock.employment.upsert.mockResolvedValueOnce(created)
-    prismaMock.client.update.mockResolvedValue(empresaEmp)
-
     const result = await createEmployment({
       employeeId:   ID.EMPRESA,
       companyId:    ID.COMPANY_Z,
@@ -451,10 +441,6 @@ describe('deactivateEmployment', () => {
 
     prismaMock.employment.findUnique.mockResolvedValueOnce(activeEmp)
     prismaMock.employment.update.mockResolvedValueOnce(updated)
-    // shadow clear
-    const employee = makeClient({ id: ID.CLIENT_A, companyId: ID.COMPANY_X })
-    prismaMock.client.findUnique.mockResolvedValueOnce(employee)
-    prismaMock.client.update.mockResolvedValueOnce({ ...employee, companyId: null })
 
     const result = await deactivateEmployment({ employeeId: ID.CLIENT_A, companyId: ID.COMPANY_X })
 
@@ -462,6 +448,8 @@ describe('deactivateEmployment', () => {
     expect(prismaMock.employment.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { isActive: false } })
     )
+    // Phase 3: no legacy shadow clear on Client.companyId
+    expect(prismaMock.client.update).not.toHaveBeenCalled()
   })
 
   // -------------------------------------------------------------------------
@@ -506,9 +494,6 @@ describe('deactivateEmployment', () => {
 
     prismaMock.employment.findUnique.mockResolvedValueOnce(empAtX)
     prismaMock.employment.update.mockResolvedValueOnce({ ...empAtX, isActive: false })
-    const employee = makeClient({ id: ID.CLIENT_A, companyId: ID.COMPANY_X })
-    prismaMock.client.findUnique.mockResolvedValueOnce(employee)
-    prismaMock.client.update.mockResolvedValueOnce({ ...employee, companyId: null })
 
     const result = await deactivateEmployment({ employeeId: ID.CLIENT_A, companyId: ID.COMPANY_X })
 

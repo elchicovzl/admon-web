@@ -45,6 +45,7 @@ import { MoreHorizontal, Eye, Edit, Ban, CheckCircle, Trash2, Building2, Search,
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { formatEmployeeCompanies } from '@/lib/utils/employment'
 
 // Pure helper functions moved outside component for better performance
 const getIdentificationTypeLabel = (type: IdentificationType) => {
@@ -256,10 +257,12 @@ export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
                     onClick={() => handleViewDetails(client)}
                   >
                     <span className="font-medium hover:underline">{client.fullName}</span>
-                    {client.company && (
+                    {formatEmployeeCompanies(client.employmentsAsEmployee) && (
                       <div className="flex items-center gap-1 mt-0.5">
                         <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                        <span className="text-xs text-muted-foreground">{client.company.fullName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatEmployeeCompanies(client.employmentsAsEmployee)}
+                        </span>
                       </div>
                     )}
                   </TableCell>

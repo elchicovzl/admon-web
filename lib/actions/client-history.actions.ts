@@ -57,10 +57,16 @@ export const getClientHistoryList = cache(
           isActive: true,
           createdAt: true,
           updatedAt: true,
-          company: {
+          // Phase 3: companies come from the Employment join table, not the shadow
+          employmentsAsEmployee: {
+            where: { isActive: true },
             select: {
-              id: true,
-              fullName: true,
+              company: {
+                select: {
+                  id: true,
+                  fullName: true,
+                },
+              },
             },
           },
           _count: {
@@ -88,7 +94,7 @@ export const getClientHistoryList = cache(
         isDeleted: c.status === 'ELIMINADO',
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
-        company: c.company,
+        employmentsAsEmployee: c.employmentsAsEmployee,
         affiliationsCount: c._count.affiliations,
         documentsCount: c._count.documents,
       }))

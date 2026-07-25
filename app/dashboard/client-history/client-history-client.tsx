@@ -12,6 +12,7 @@ import {
 import { Search } from 'lucide-react'
 import { ClientHistoryTable } from '@/components/dashboard/client-history/client-history-table'
 import type { ClientHistoryListItem } from '@/lib/types/client-history.types'
+import { formatEmployeeCompanies } from '@/lib/utils/employment'
 
 type StatusFilter = 'active' | 'deleted' | 'all'
 
@@ -35,7 +36,7 @@ export function ClientHistoryClient({ initialClients }: ClientHistoryClientProps
         client.fullName.toLowerCase().includes(term) ||
         client.identificationNumber.toLowerCase().includes(term) ||
         client.email.toLowerCase().includes(term) ||
-        (client.company?.fullName.toLowerCase().includes(term) ?? false)
+        formatEmployeeCompanies(client.employmentsAsEmployee).toLowerCase().includes(term)
       )
     })
   }, [initialClients, search, statusFilter])
