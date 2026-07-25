@@ -69,9 +69,18 @@ jobs:
         env:
           WEBHOOK: ${{ secrets.DOKPLOY_WEBHOOK_URL }}
         run: |
-          if [ -n "$WEBHOOK" ]; then
-            echo "Triggering Dokploy deploy…"
-            curl -fsSL -X POST "$WEBHOOK"
-          else
+          if [ -z "$WEBHOOK" ]; then
             echo "DOKPLOY_WEBHOOK_URL no seteado — se saltea el trigger de deploy."
+            exit 0
+          fi
+          echo "Triggering Dokploy deploy…"
+          # Capture status + body; NEVER fail the build if the webhook errors —
+          # the image is already pushed, redeploy can be done manually.
+          code=$(curl -sS -o /tmp/dokploy_resp -w '%{http_code}' -X POST "$WEBHOOK" || echo 000)
+          echo "HTTP $code"
+          echo "Response body:"; cat /tmp/dokploy_resp 2>/dev/null || true; echo
+          if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+            echo "Dokploy deploy triggered."
+          else
+            echo "::warning::Dokploy webhook returned $code — deploy NOT triggered. Deploy manually or fix the webhook URL/method."
           fi
