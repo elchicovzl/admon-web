@@ -31,8 +31,6 @@ export {
   addClientNote,
   deleteClientNote,
   getClientsCount,
-  assignEmployeeToCompany,
-  removeEmployeeFromCompany,
   getAvailableEmployees,
   getCompanyEmployees,
   updateLegalRepresentative,

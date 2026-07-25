@@ -1,24 +1,16 @@
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { ClientType, IdentificationType } from '@prisma/client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import {
-  Mail,
-  Phone,
-  IdCard,
-  MapPin,
-  Building2,
-  ShieldCheck,
-} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import type { ClientWithRelations } from '@/lib/types/client.types'
+import { formatEmployeeCompanies } from '@/lib/utils/employment'
 
 const identificationTypeLabels: Record<IdentificationType, string> = {
-  CEDULA: 'Cédula (CC)',
-  TARJETA_IDENTIDAD: 'Tarjeta Identidad (TI)',
-  REGISTRO_CIVIL: 'Registro Civil (RC)',
-  CEDULA_EXTRANJERIA: 'Cédula Extranjería (CE)',
-  PASAPORTE: 'Pasaporte (PA)',
+  CEDULA: 'CC',
+  TARJETA_IDENTIDAD: 'TI',
+  REGISTRO_CIVIL: 'RC',
+  CEDULA_EXTRANJERIA: 'CE',
+  PASAPORTE: 'PA',
   PPT: 'PPT',
   PEP: 'PEP',
   NUIP: 'NUIP',
@@ -32,13 +24,21 @@ const clientTypeLabels: Record<ClientType, string> = {
   INDEPENDIENTE: 'Independiente',
 }
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function Field({
+  label,
+  value,
+  className,
+}: {
+  label: string
+  value: React.ReactNode
+  className?: string
+}) {
   return (
-    <div className="space-y-0.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    <div className={cn('min-w-0', className)}>
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p className="text-sm">{value || '—'}</p>
+      <p className="truncate text-sm">{value || '—'}</p>
     </div>
   )
 }
@@ -48,164 +48,63 @@ interface ClientSummaryCardProps {
 }
 
 export function ClientSummaryCard({ client }: ClientSummaryCardProps) {
-  const admins = [
-    { label: 'EPS', value: client.eps?.name },
-    { label: 'AFP', value: client.afp?.name },
-    {
-      label: 'ARL',
-      value: client.arl
-        ? `${client.arl.name}${client.arlRiskLevel ? ` (Riesgo ${client.arlRiskLevel})` : ''}`
-        : null,
-    },
-    { label: 'CCF', value: client.ccf?.name },
-  ]
+  const ss: { k: string; v: string }[] = []
+  if (client.eps) ss.push({ k: 'EPS', v: client.eps.name })
+  if (client.afp) ss.push({ k: 'AFP', v: client.afp.name })
+  if (client.arl) {
+    ss.push({
+      k: 'ARL',
+      v: `${client.arl.name}${client.arlRiskLevel ? ` · Riesgo ${client.arlRiskLevel}` : ''}`,
+    })
+  }
+  if (client.ccf) ss.push({ k: 'CCF', v: client.ccf.name })
+
+  const addressLine = client.address
+    ? [
+        client.address.direccion,
+        client.address.ciudad,
+        client.address.municipio,
+        client.address.departamento,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : null
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Resumen del cliente</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {/* Identification & type */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <CardContent className="space-y-3 p-4">
+        {/* Identity grid — dense */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
           <Field
             label="Identificación"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <IdCard className="h-3.5 w-3.5 text-muted-foreground" />
-                {identificationTypeLabels[client.identificationType]} {client.identificationNumber}
-              </span>
-            }
+            value={`${identificationTypeLabels[client.identificationType]} ${client.identificationNumber}`}
           />
-          <Field label="Tipo de cliente" value={clientTypeLabels[client.clientType]} />
-          <Field
-            label="Email"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                {client.email}
-              </span>
-            }
-          />
-          <Field
-            label="Teléfono"
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                {client.phone}
-              </span>
-            }
-          />
+          <Field label="Tipo" value={clientTypeLabels[client.clientType]} />
+          <Field label="Email" value={client.email} />
+          <Field label="Teléfono" value={client.phone} />
+          {addressLine && (
+            <Field label="Dirección" value={addressLine} className="col-span-2" />
+          )}
+          {formatEmployeeCompanies(client.employmentsAsEmployee) && (
+            <Field label="Empresa" value={formatEmployeeCompanies(client.employmentsAsEmployee)} />
+          )}
+          {client.legalRepresentative && (
+            <Field label="Rep. legal" value={client.legalRepresentative.fullName} />
+          )}
         </div>
 
-        {/* Administradoras */}
-        <Separator />
-        <div>
-          <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Seguridad social
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {admins.map((a) => (
-              <Field key={a.label} label={a.label} value={a.value} />
+        {/* Seguridad social — compact inline badges */}
+        {ss.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Seguridad social
+            </span>
+            {ss.map((a) => (
+              <Badge key={a.k} variant="outline" className="font-normal">
+                <span className="font-semibold">{a.k}</span>&nbsp;{a.v}
+              </Badge>
             ))}
           </div>
-        </div>
-
-        {/* Address */}
-        {client.address && (
-          <>
-            <Separator />
-            <Field
-              label="Dirección"
-              value={
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                  {[
-                    client.address.direccion,
-                    client.address.ciudad,
-                    client.address.municipio,
-                    client.address.departamento,
-                  ]
-                    .filter(Boolean)
-                    .join(', ')}
-                </span>
-              }
-            />
-          </>
-        )}
-
-        {/* Additional info */}
-        {client.additionalInfo && (
-          <>
-            <Separator />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field
-                label="Actividad comercial"
-                value={client.additionalInfo.actividadComercial}
-              />
-              <Field
-                label="Salario"
-                value={
-                  client.additionalInfo.salario != null
-                    ? `$ ${client.additionalInfo.salario.toLocaleString('es-CO')}`
-                    : null
-                }
-              />
-              <Field
-                label="Fecha de ingreso"
-                value={
-                  client.additionalInfo.fechaIngreso
-                    ? format(new Date(client.additionalInfo.fechaIngreso), 'dd/MM/yyyy', {
-                        locale: es,
-                      })
-                    : null
-                }
-              />
-              <Field
-                label="Fecha de retiro"
-                value={
-                  client.additionalInfo.fechaRetiro
-                    ? format(new Date(client.additionalInfo.fechaRetiro), 'dd/MM/yyyy', {
-                        locale: es,
-                      })
-                    : null
-                }
-              />
-            </div>
-          </>
-        )}
-
-        {/* Company relation (for employees) */}
-        {client.company && (
-          <>
-            <Separator />
-            <Field
-              label="Empresa"
-              value={
-                <span className="inline-flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  {client.company.fullName}
-                </span>
-              }
-            />
-          </>
-        )}
-
-        {/* Legal representative (for companies) */}
-        {client.legalRepresentative && (
-          <>
-            <Separator />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Rep. legal" value={client.legalRepresentative.fullName} />
-              <Field
-                label="Identificación rep. legal"
-                value={`${identificationTypeLabels[client.legalRepresentative.identificationType]} ${client.legalRepresentative.identificationNumber}`}
-              />
-              <Field label="Email rep. legal" value={client.legalRepresentative.email} />
-              <Field label="Teléfono rep. legal" value={client.legalRepresentative.phone} />
-            </div>
-          </>
         )}
       </CardContent>
     </Card>

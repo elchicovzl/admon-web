@@ -111,19 +111,6 @@ export async function createEmployment(
       },
     })
 
-    // Phase 2 optional dual-write shadow: keep Client.companyId current for rollback safety.
-    // Only written when it wouldn't overwrite an already-different value (single-employer shadow).
-    try {
-      if (!employee.companyId) {
-        await prisma.client.update({
-          where: { id: employeeId },
-          data: { companyId },
-        })
-      }
-    } catch {
-      // Shadow write is best-effort; never fail the main operation
-    }
-
     revalidatePath('/dashboard/clients')
     revalidatePath(`/dashboard/clients/${employeeId}`)
     revalidatePath(`/dashboard/clients/${companyId}`)
@@ -180,19 +167,6 @@ export async function deactivateEmployment(
       where: { employeeId_companyId: { employeeId, companyId } },
       data: { isActive: false },
     })
-
-    // Phase 2 optional shadow clear: null out Client.companyId if it still points here
-    try {
-      const employeeClient = await prisma.client.findUnique({ where: { id: employeeId } })
-      if (employeeClient?.companyId === companyId) {
-        await prisma.client.update({
-          where: { id: employeeId },
-          data: { companyId: null },
-        })
-      }
-    } catch {
-      // Shadow clear is best-effort; never fail the main operation
-    }
 
     revalidatePath('/dashboard/clients')
     revalidatePath(`/dashboard/clients/${employeeId}`)

@@ -200,21 +200,6 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
                   </div>
                 </div>
               )}
-              {/* Fallback: shadow column — only shown when no Employment rows exist (legacy clients) */}
-              {(!client.employmentsAsEmployee || client.employmentsAsEmployee.length === 0) &&
-                client.clientType === ClientType.EMPLEADO &&
-                client.company && (
-                  <div className="col-span-full">
-                    <p className="text-xs font-medium text-muted-foreground">Empresa</p>
-                    <Link
-                      href={`/dashboard/clients/${client.company.id}`}
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
-                    >
-                      <Building2 className="h-3.5 w-3.5" />
-                      {client.company.fullName}
-                    </Link>
-                  </div>
-                )}
             </div>
           </div>
 

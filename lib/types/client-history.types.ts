@@ -30,6 +30,13 @@ export interface ClientHistoryListItem {
     id: string
     fullName: string
   } | null
+  // Phase 3: companies from the Employment join table (an employee may have several)
+  employmentsAsEmployee?: Array<{
+    company: {
+      id: string
+      fullName: string
+    }
+  }>
   affiliationsCount: number
   documentsCount: number
 }

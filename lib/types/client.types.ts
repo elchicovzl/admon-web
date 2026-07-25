@@ -85,6 +85,14 @@ export interface SafeClient {
     id: string
     fullName: string
   } | null
+  // Phase 3: companies derived from the Employment join table (authoritative).
+  // An employee may belong to several companies.
+  employmentsAsEmployee?: Array<{
+    company: {
+      id: string
+      fullName: string
+    }
+  }>
 }
 
 export interface ClientWithRelations extends SafeClient {
