@@ -4,6 +4,40 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { containsActiveHref, findActiveHref } from '@/lib/nav/active-link'
+import { cn } from '@/lib/utils'
+
+/**
+ * Styling for the ONE link matching the current page.
+ *
+ * The shadcn default is `bg-sidebar-accent`, which in this theme is
+ * oklch(0.97) against a oklch(0.985) sidebar — a 1.5% luminance difference,
+ * i.e. invisible. Worse, ancestors of the active item used the SAME class, so
+ * "Finanzas", "Egresos" and "Pagos" all looked equally selected and none read
+ * as the answer to "where am I?".
+ *
+ * Solid primary matches the language already used elsewhere in the app for a
+ * chosen option (see the Movimiento toggle on the payments filter). The
+ * `data-[active=true]:` prefix is required so tailwind-merge treats it as a
+ * conflict with the component's own default and actually replaces it.
+ */
+const ACTIVE_LINK_CLASS =
+  'data-[active=true]:bg-primary data-[active=true]:text-primary-foreground ' +
+  'data-[active=true]:font-medium data-[active=true]:hover:bg-primary/90 ' +
+  'data-[active=true]:hover:text-primary-foreground ' +
+  // The icon needs its own override: SidebarMenuSubButton hard-codes
+  // `[&>svg]:text-sidebar-accent-foreground` (oklch 0.205), which on a
+  // primary background — also near-black in this theme — would render the
+  // icon invisible. Text inherits the button colour; the icon does not.
+  'data-[active=true]:[&>svg]:text-primary-foreground'
+
+/**
+ * Styling for a branch that CONTAINS the active link (Finanzas, Egresos).
+ *
+ * Deliberately no background: these are context, not destination. Weight and
+ * full-strength foreground are enough to show the open path while leaving
+ * exactly one element looking selected.
+ */
+const ACTIVE_BRANCH_CLASS = 'font-medium text-sidebar-foreground'
 import {
   LayoutDashboard,
   Users,
@@ -132,7 +166,12 @@ function SubItemNode({
       <Collapsible defaultOpen={hasActiveChild}>
         <SidebarMenuSubItem>
           <CollapsibleTrigger asChild>
-            <SidebarMenuSubButton isActive={hasActiveChild} className="cursor-pointer">
+            {/* isActive stays FALSE on purpose — a branch is not a
+                destination. Marking it active gave it the same treatment as
+                the real page and diluted the selection. */}
+            <SidebarMenuSubButton
+              className={cn('cursor-pointer', hasActiveChild && ACTIVE_BRANCH_CLASS)}
+            >
               <ItemIcon className="h-4 w-4" />
               <span>{item.title}</span>
               <ChevronDown className="ml-auto h-4 w-4 transition-transform ui-expanded:rotate-180" />
@@ -151,10 +190,14 @@ function SubItemNode({
     )
   }
 
-  // Leaf link.
+  // Leaf link — the only element that gets the full active treatment.
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton asChild isActive={item.href === activeHref}>
+      <SidebarMenuSubButton
+        asChild
+        isActive={item.href === activeHref}
+        className={ACTIVE_LINK_CLASS}
+      >
         <Link href={item.href}>
           <ItemIcon className="h-4 w-4" />
           <span>{item.title}</span>
@@ -417,7 +460,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
                     <Collapsible key={item.href} defaultOpen={isActive || isAnySubItemActive}>
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
-                          <SidebarMenuButton isActive={isActive || isAnySubItemActive}>
+                          {/* Never `isActive` — an item with children is a
+                              branch, never the destination. "Finanzas" also
+                              matches /finances/payments by prefix, so marking
+                              it active would put a solid background on it AND
+                              on "Pagos" at the same time. Weight only. */}
+                          <SidebarMenuButton
+                            className={cn(
+                              (isActive || isAnySubItemActive) && ACTIVE_BRANCH_CLASS,
+                            )}
+                          >
                             <Icon className="h-4 w-4" />
                             <span>{item.title}</span>
                             <ChevronDown className="ml-auto h-4 w-4 transition-transform ui-expanded:rotate-180" />
@@ -442,7 +494,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 // Regular item without sub-items
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} className={ACTIVE_LINK_CLASS}>
                       <Link href={item.href}>
                         <Icon className="h-4 w-4" />
                         <span>{item.title}</span>
