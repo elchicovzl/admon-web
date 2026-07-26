@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -27,6 +27,7 @@ import {
   TrendingUp,
   TrendingDown,
   Banknote,
+  ArrowDownCircle,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -71,6 +72,13 @@ interface NavSubItemBase {
 /** A navigable leaf. */
 interface NavSubLink extends NavSubItemBase {
   href: string
+  /**
+   * Query param that distinguishes this entry from a sibling pointing at the
+   * SAME path. "Cobros" and "Pagos" are both /finances/payments differing only
+   * by `?type=`; without this they'd both highlight at once, because
+   * `usePathname()` doesn't include the query string.
+   */
+  matchParam?: { key: string; value: string }
   subItems?: never
 }
 
@@ -99,10 +107,34 @@ interface NavItem {
  * both "Finanzas" and "Egresos" collapsed, and the user wouldn't see where
  * they are.
  */
-function containsActivePath(items: NavSubItem[], pathname: string): boolean {
+/**
+ * Is this leaf the page the user is currently on?
+ *
+ * `usePathname()` strips the query string, so an entry that only differs from
+ * its sibling by `?type=` has to check the param explicitly. When
+ * `matchParam` is absent the query is ignored entirely — the common case.
+ */
+function isLinkActive(
+  item: NavSubLink,
+  pathname: string,
+  searchParams: URLSearchParams,
+): boolean {
+  // Compare against the path portion only; `href` may carry a query.
+  const [linkPath] = item.href.split('?')
+  if (pathname !== linkPath) return false
+
+  if (!item.matchParam) return true
+  return searchParams.get(item.matchParam.key) === item.matchParam.value
+}
+
+function containsActivePath(
+  items: NavSubItem[],
+  pathname: string,
+  searchParams: URLSearchParams,
+): boolean {
   return items.some((item) => {
-    if (item.subItems) return containsActivePath(item.subItems, pathname)
-    return pathname === item.href
+    if (item.subItems) return containsActivePath(item.subItems, pathname, searchParams)
+    return isLinkActive(item, pathname, searchParams)
   })
 }
 
@@ -113,12 +145,20 @@ function containsActivePath(items: NavSubItem[], pathname: string): boolean {
  * path — the alternative was duplicating the link markup inside the group
  * branch, and the two copies would drift.
  */
-function SubItemNode({ item, pathname }: { item: NavSubItem; pathname: string }) {
+function SubItemNode({
+  item,
+  pathname,
+  searchParams,
+}: {
+  item: NavSubItem
+  pathname: string
+  searchParams: URLSearchParams
+}) {
   const ItemIcon = item.icon
 
   // Grouping header (Ingresos / Egresos) — collapsible, not navigable.
   if (item.subItems) {
-    const hasActiveChild = containsActivePath(item.subItems, pathname)
+    const hasActiveChild = containsActivePath(item.subItems, pathname, searchParams)
 
     return (
       <Collapsible defaultOpen={hasActiveChild}>
@@ -134,7 +174,12 @@ function SubItemNode({ item, pathname }: { item: NavSubItem; pathname: string })
             {/* Indented one more step so the hierarchy is readable at a glance. */}
             <SidebarMenuSub className="ml-2">
               {item.subItems.map((child) => (
-                <SubItemNode key={child.href ?? child.title} item={child} pathname={pathname} />
+                <SubItemNode
+                  key={child.href}
+                  item={child}
+                  pathname={pathname}
+                  searchParams={searchParams}
+                />
               ))}
             </SidebarMenuSub>
           </CollapsibleContent>
@@ -146,7 +191,7 @@ function SubItemNode({ item, pathname }: { item: NavSubItem; pathname: string })
   // Leaf link.
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton asChild isActive={pathname === item.href}>
+      <SidebarMenuSubButton asChild isActive={isLinkActive(item, pathname, searchParams)}>
         <Link href={item.href}>
           <ItemIcon className="h-4 w-4" />
           <span>{item.title}</span>
@@ -167,6 +212,9 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
+  // Needed to tell "Cobros" from "Pagos" — both are /finances/payments and
+  // differ only by `?type=`, which usePathname() drops.
+  const searchParams = useSearchParams()
   const router = useRouter()
 
   const navItems: NavItem[] = [
@@ -249,6 +297,15 @@ export function AppSidebar({ user }: AppSidebarProps) {
               href: '/dashboard/finances/estimates',
               icon: ScrollText,
             },
+            // Same page as "Pagos" below, pre-filtered by direction. A
+            // collection is money coming IN, so it belongs here — landing on
+            // it from Egresos and seeing incoming money was the bug.
+            {
+              title: 'Cobros',
+              href: '/dashboard/finances/payments?type=in',
+              matchParam: { key: 'type', value: 'in' },
+              icon: ArrowDownCircle,
+            },
           ],
         },
         {
@@ -262,7 +319,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
             },
             {
               title: 'Pagos',
-              href: '/dashboard/finances/payments',
+              href: '/dashboard/finances/payments?type=out',
+              matchParam: { key: 'type', value: 'out' },
               icon: Banknote,
             },
           ],
@@ -373,7 +431,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 if (item.subItems && item.subItems.length > 0) {
                   // Recursive so a match on a GRANDCHILD (e.g. /finances/bills
                   // under Egresos) still opens the top-level group.
-                  const isAnySubItemActive = containsActivePath(item.subItems, pathname)
+                  const isAnySubItemActive = containsActivePath(
+                    item.subItems,
+                    pathname,
+                    searchParams,
+                  )
 
                   return (
                     <Collapsible key={item.href} defaultOpen={isActive || isAnySubItemActive}>
@@ -392,6 +454,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                                 key={subItem.href ?? subItem.title}
                                 item={subItem}
                                 pathname={pathname}
+                                searchParams={searchParams}
                               />
                             ))}
                           </SidebarMenuSub>

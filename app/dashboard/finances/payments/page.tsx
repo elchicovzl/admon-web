@@ -35,11 +35,11 @@ import { RefreshButton } from '@/components/dashboard/finances/refresh-button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
 import { AlertTriangle, FileSearch } from 'lucide-react'
-import type { PaymentListItem } from '@/lib/alegra/types'
+import type { PaymentListItem, PaymentType } from '@/lib/alegra/types'
 
 export const metadata: Metadata = {
-  title: 'Pagos | Finanzas',
-  description: 'Cobros y pagos registrados — Alegra',
+  title: 'Cobros y pagos | Finanzas',
+  description: 'Movimientos de caja registrados — Alegra',
 }
 
 type SearchParams = Record<string, string | string[] | undefined>
@@ -50,9 +50,37 @@ interface PageProps {
 
 // 'dynamic = force-dynamic' is inherited from app/dashboard/finances/layout.tsx.
 
+/**
+ * The heading follows the `type` filter, so the page names whatever is
+ * actually on screen.
+ *
+ * Both "Cobros" (Ingresos) and "Pagos" (Egresos) point here, differing only
+ * by `?type=`. A fixed title would mean arriving from Ingresos and being told
+ * you're looking at "Pagos" — the page contradicting the menu that sent you.
+ */
+function headingFor(type: PaymentType | null) {
+  if (type === 'in') {
+    return {
+      title: 'Cobros',
+      subtitle: 'Plata que entró — pagos recibidos de clientes',
+    }
+  }
+  if (type === 'out') {
+    return {
+      title: 'Pagos',
+      subtitle: 'Plata que salió — pagos a proveedores y gastos',
+    }
+  }
+  return {
+    title: 'Movimientos de caja',
+    subtitle: 'Cobros y pagos registrados en Alegra',
+  }
+}
+
 export default async function PaymentsListPage({ searchParams }: PageProps) {
   const sp = await searchParams
   const filters = parsePaymentFilters(sp)
+  const heading = headingFor(filters.type)
 
   const activeCount =
     (filters.type ? 1 : 0) + (filters.dateFrom ? 1 : 0) + (filters.dateTo ? 1 : 0)
@@ -61,26 +89,26 @@ export default async function PaymentsListPage({ searchParams }: PageProps) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pagos</h1>
-          <p className="text-muted-foreground">
-            Movimientos de caja registrados en Alegra — cobros y pagos
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">{heading.title}</h1>
+          <p className="text-muted-foreground">{heading.subtitle}</p>
         </div>
         <RefreshButton />
       </div>
 
-      {/* This note is load-bearing, not decoration: without it the two expense
-          figures in this module look like two separate pools of money. */}
-      <Alert variant="default" className="border-sky-500/40">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription className="text-sm">
-          Los pagos <strong>cancelan</strong> facturas, no se suman a ellas. Un
-          pago asociado a una factura de compra ya está contado en{' '}
-          <strong>Facturas de compra</strong> — sumar ambos duplicaría el gasto.
-          Los marcados como <em>&ldquo;Gasto sin factura&rdquo;</em> son los
-          únicos que no aparecen en ese listado.
-        </AlertDescription>
-      </Alert>
+      {/* Only shown when outgoing money is on screen. Under "Cobros" this
+          warning would be about documents the user isn't looking at. */}
+      {filters.type !== 'in' && (
+        <Alert variant="default" className="border-sky-500/40">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            Los pagos <strong>cancelan</strong> facturas, no se suman a ellas. Un
+            pago asociado a una factura de compra ya está contado en{' '}
+            <strong>Facturas de compra</strong> — sumar ambos duplicaría el gasto.
+            Los marcados como <em>&ldquo;Gasto sin factura&rdquo;</em> son los
+            únicos que no aparecen en ese listado.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <PaymentFiltersBar initial={filters} />
 

@@ -6,6 +6,16 @@ import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { Toaster } from '@/components/ui/sonner'
 import { SessionProvider } from '@/components/dashboard/session-provider'
 
+/**
+ * Every route under /dashboard is already dynamic in practice — `auth()`
+ * below reads cookies. Declaring it makes that explicit and, more to the
+ * point, guarantees it: `AppSidebar` calls `useSearchParams()` (to tell
+ * "Cobros" from "Pagos", which share a path and differ only by `?type=`),
+ * and Next fails the BUILD on that hook if it ever tries to prerender a
+ * route in this segment statically.
+ */
+export const dynamic = 'force-dynamic'
+
 export default async function DashboardLayout({
   children,
 }: {

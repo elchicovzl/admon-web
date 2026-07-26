@@ -23,10 +23,18 @@ interface PaymentFiltersBarProps {
   initial: PaymentFilters
 }
 
+/**
+ * Labelled by what the money DOES, not by document type.
+ *
+ * The previous pair said "Cobros" / "Pagos" under a heading of "Dirección" —
+ * on a page also called Pagos, so you picked "Pagos" inside Pagos. "Entra" /
+ * "Sale" can't collide with a page name and needs no accounting vocabulary
+ * to parse.
+ */
 const TYPE_OPTIONS = [
   { value: '', label: 'Todos' },
-  { value: 'in', label: 'Cobros' },
-  { value: 'out', label: 'Pagos' },
+  { value: 'in', label: 'Entra' },
+  { value: 'out', label: 'Sale' },
 ] as const
 
 export function PaymentFiltersBar({ initial }: PaymentFiltersBarProps) {
@@ -75,7 +83,7 @@ export function PaymentFiltersBar({ initial }: PaymentFiltersBarProps) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Dirección
+            Movimiento
           </Label>
           <div className="flex gap-1 rounded-md border p-1">
             {TYPE_OPTIONS.map((opt) => {
