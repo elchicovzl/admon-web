@@ -6,7 +6,16 @@
  * Components (though it's primarily used server-side).
  */
 
-import type { EstimateListItem, InvoiceListItem, NumberTemplate, InvoiceStatus } from './types'
+import type {
+  BillListItem,
+  BillStatus,
+  EstimateListItem,
+  InvoiceListItem,
+  InvoiceStatus,
+  NumberTemplate,
+  PaymentListItem,
+  PaymentType,
+} from './types'
 
 // =============================================================================
 // Invoice list filters (URL-driven — pure parsing helpers)
@@ -474,4 +483,277 @@ export function sumEstimates(
   field: 'total',
 ): number {
   return estimates.reduce((acc, est) => acc + (est[field] ?? 0), 0)
+}
+
+// =============================================================================
+// Bills (facturas de compra) — EGRESOS
+// =============================================================================
+
+export interface BillFilters {
+  status: BillStatus[]
+  dateFrom: string | null
+  dateTo: string | null
+  providerName: string | null
+  page: number
+}
+
+function isValidBillStatus(value: string): value is BillStatus {
+  return value === 'open' || value === 'closed' || value === 'void'
+}
+
+/**
+ * Parse `searchParams` into validated `BillFilters`.
+ * Same conventions as `parseInvoiceFilters` — malformed values fall back to
+ * defaults rather than throwing.
+ */
+export function parseBillFilters(
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+): BillFilters {
+  const sp = searchParams ?? {}
+
+  const statusRaw = sp.status
+  const status: BillStatus[] = (
+    Array.isArray(statusRaw) ? statusRaw : statusRaw ? [statusRaw] : []
+  )
+    .flatMap((s) => s.split(','))
+    .map((s) => s.trim())
+    .filter(isValidBillStatus)
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  const dateFrom = typeof sp.date_from === 'string' && dateRegex.test(sp.date_from) ? sp.date_from : null
+  const dateTo = typeof sp.date_to === 'string' && dateRegex.test(sp.date_to) ? sp.date_to : null
+
+  const providerRaw = typeof sp.provider_name === 'string' ? sp.provider_name.trim() : ''
+  const providerName = providerRaw.length > 0 ? providerRaw : null
+
+  const pageRaw = typeof sp.page === 'string' ? Number.parseInt(sp.page, 10) : DEFAULT_PAGE
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : DEFAULT_PAGE
+
+  return { status, dateFrom, dateTo, providerName, page }
+}
+
+export function buildBillsSearchString(filters: Partial<BillFilters>): string {
+  const params = new URLSearchParams()
+
+  if (filters.status && filters.status.length > 0) {
+    for (const s of filters.status) params.append('status', s)
+  }
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
+  if (filters.dateTo) params.set('date_to', filters.dateTo)
+  if (filters.providerName) params.set('provider_name', filters.providerName)
+  if (filters.page && filters.page > 1) params.set('page', String(filters.page))
+
+  const s = params.toString()
+  return s.length > 0 ? `?${s}` : ''
+}
+
+export function buildBillPaginationLinks(
+  filters: BillFilters,
+  total: number,
+): { prev: string | null; next: string | null } {
+  const pages = totalPages(total)
+  const prev = filters.page > 1 ? buildBillsSearchString({ ...filters, page: filters.page - 1 }) : null
+  const next = filters.page < pages ? buildBillsSearchString({ ...filters, page: filters.page + 1 }) : null
+  return { prev, next }
+}
+
+/** Sum a numeric field across bills. Returns 0 for an empty list, not NaN. */
+export function sumBills(
+  bills: BillListItem[],
+  field: 'total' | 'totalPaid' | 'balance',
+): number {
+  return bills.reduce((acc, bill) => acc + (bill[field] ?? 0), 0)
+}
+
+/**
+ * Human-readable bill number. Bills use a flat `billNumber` string (unlike
+ * invoices, which nest it in a numberTemplate) and it can legitimately be
+ * absent on bills captured without a supplier document number.
+ */
+export function formatBillNumber(bill: Pick<BillListItem, 'billNumber'>): string {
+  const n = bill.billNumber
+  if (n === null || n === undefined || n === '') return '—'
+  return String(n)
+}
+
+export const BILL_STATUS_LABELS = {
+  open: 'Por pagar',
+  closed: 'Pagada',
+  void: 'Anulada',
+} as const
+
+export const BILL_STATUS_BADGE_CLASS = {
+  // Deliberately NOT the same palette as invoices: an open SALE is money
+  // coming in, an open PURCHASE is money going out. Same word, opposite
+  // meaning for the business — the colours should not imply otherwise.
+  open: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  closed: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  void: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400',
+} as const
+
+export function getBillStatusLabel(status: BillStatus): string {
+  return BILL_STATUS_LABELS[status] ?? status
+}
+
+export function getBillStatusBadgeClass(status: BillStatus): string {
+  return BILL_STATUS_BADGE_CLASS[status] ?? 'bg-slate-100 text-slate-700'
+}
+
+// =============================================================================
+// Payments (pagos)
+//
+// ⚠️ THE DOUBLE-COUNTING RULE — the reason this section exists.
+//
+// A payment SETTLES an obligation; it is not a new one. Bills and their
+// payments are the same money seen at two moments:
+//
+//     /bills                → accrual ("what we owe")
+//     /payments type=out    → cash    ("what actually left")
+//
+// NEVER add a bills total to a payments total. The UI shows them as two
+// separate, explicitly-labelled figures for exactly this reason.
+//
+// The one asymmetry: a payment associated ONLY with a category (no bill) is
+// an expense that appears nowhere in /bills — a taxi, a bank fee. That is
+// the only expense the cash view holds and the accrual view does not, and
+// `classifyPaymentAssociation` is how you find them.
+// =============================================================================
+
+export interface PaymentFilters {
+  type: PaymentType | null
+  dateFrom: string | null
+  dateTo: string | null
+  page: number
+}
+
+function isValidPaymentType(value: string): value is PaymentType {
+  return value === 'in' || value === 'out'
+}
+
+export function parsePaymentFilters(
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+): PaymentFilters {
+  const sp = searchParams ?? {}
+
+  const typeRaw = typeof sp.type === 'string' ? sp.type.trim() : ''
+  const type = isValidPaymentType(typeRaw) ? typeRaw : null
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  const dateFrom = typeof sp.date_from === 'string' && dateRegex.test(sp.date_from) ? sp.date_from : null
+  const dateTo = typeof sp.date_to === 'string' && dateRegex.test(sp.date_to) ? sp.date_to : null
+
+  const pageRaw = typeof sp.page === 'string' ? Number.parseInt(sp.page, 10) : DEFAULT_PAGE
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? pageRaw : DEFAULT_PAGE
+
+  return { type, dateFrom, dateTo, page }
+}
+
+export function buildPaymentsSearchString(filters: Partial<PaymentFilters>): string {
+  const params = new URLSearchParams()
+
+  if (filters.type) params.set('type', filters.type)
+  if (filters.dateFrom) params.set('date_from', filters.dateFrom)
+  if (filters.dateTo) params.set('date_to', filters.dateTo)
+  if (filters.page && filters.page > 1) params.set('page', String(filters.page))
+
+  const s = params.toString()
+  return s.length > 0 ? `?${s}` : ''
+}
+
+export function buildPaymentPaginationLinks(
+  filters: PaymentFilters,
+  total: number,
+): { prev: string | null; next: string | null } {
+  const pages = totalPages(total)
+  const prev = filters.page > 1 ? buildPaymentsSearchString({ ...filters, page: filters.page - 1 }) : null
+  const next = filters.page < pages ? buildPaymentsSearchString({ ...filters, page: filters.page + 1 }) : null
+  return { prev, next }
+}
+
+/** Sum payment amounts. Returns 0 for an empty list, not NaN. */
+export function sumPayments(payments: PaymentListItem[]): number {
+  return payments.reduce((acc, p) => acc + (p.amount ?? 0), 0)
+}
+
+/**
+ * What a payment is settling — the tri-state that keeps expense math honest.
+ *
+ *   'bill'       → cancels a purchase invoice. ALREADY counted in /bills.
+ *                  Adding it to a bills total double-counts.
+ *   'invoice'    → collects a sales invoice. Income side, not an expense.
+ *   'standalone' → associated only with a category. An expense that exists
+ *                  NOWHERE in /bills — the one thing the cash view has that
+ *                  the accrual view doesn't.
+ *   'unknown'    → `associations` was absent from the response. This is NOT
+ *                  the same as 'standalone': it usually means the caller
+ *                  forgot `fields=associations`. Treating unknown as
+ *                  standalone would invent expenses out of a missing field,
+ *                  so callers doing arithmetic must exclude it explicitly.
+ */
+export type PaymentAssociationKind = 'bill' | 'invoice' | 'standalone' | 'unknown'
+
+export function classifyPaymentAssociation(
+  payment: Pick<PaymentListItem, 'associations'>,
+): PaymentAssociationKind {
+  const assoc = payment.associations
+
+  // Absent entirely → we simply don't know. See the doc comment above.
+  if (assoc === null || assoc === undefined) return 'unknown'
+
+  if (Array.isArray(assoc.bills) && assoc.bills.length > 0) return 'bill'
+  if (Array.isArray(assoc.invoices) && assoc.invoices.length > 0) return 'invoice'
+  if (Array.isArray(assoc.categories) && assoc.categories.length > 0) return 'standalone'
+
+  // An associations object with no populated arrays means the payment really
+  // isn't tied to a document — treat it as standalone, not unknown.
+  return 'standalone'
+}
+
+/**
+ * Expenses that would be MISSED by looking at /bills alone: outgoing payments
+ * with no bill behind them.
+ *
+ * Deliberately excludes 'unknown'. If `fields=associations` wasn't requested
+ * every payment classifies as unknown, and counting those would silently
+ * double the expense figure — the precise failure this module exists to
+ * prevent.
+ */
+export function sumStandaloneExpenses(payments: PaymentListItem[]): number {
+  return payments
+    .filter((p) => p.type === 'out' && classifyPaymentAssociation(p) === 'standalone')
+    .reduce((acc, p) => acc + (p.amount ?? 0), 0)
+}
+
+export const PAYMENT_TYPE_LABELS = {
+  in: 'Cobro',
+  out: 'Pago',
+} as const
+
+export const PAYMENT_TYPE_BADGE_CLASS = {
+  in: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
+  out: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+} as const
+
+export function getPaymentTypeLabel(type: PaymentType): string {
+  return PAYMENT_TYPE_LABELS[type] ?? type
+}
+
+export function getPaymentTypeBadgeClass(type: PaymentType): string {
+  return PAYMENT_TYPE_BADGE_CLASS[type] ?? 'bg-slate-100 text-slate-700'
+}
+
+/** Short Spanish description of what a payment settles, for the table. */
+export function describePaymentAssociation(
+  payment: Pick<PaymentListItem, 'associations'>,
+): string {
+  switch (classifyPaymentAssociation(payment)) {
+    case 'bill':
+      return 'Factura de compra'
+    case 'invoice':
+      return 'Factura de venta'
+    case 'standalone':
+      return 'Sin factura'
+    default:
+      return '—'
+  }
 }

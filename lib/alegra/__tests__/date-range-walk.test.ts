@@ -1,5 +1,8 @@
 /**
- * Tests for the paginated date-range walk over /estimates.
+ * Tests for the generic paginated date-range walk.
+ *
+ * Exercised here with estimates, but the same helper backs /bills and
+ * /payments — none of the three can filter a date RANGE server-side.
  *
  * The bug this replaced was a SILENT undercount: one 30-row page was summed
  * and presented as the month's total. So the assertions here care about two
@@ -9,10 +12,10 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
-  collectEstimatesInRange,
-  ESTIMATES_PAGE_SIZE,
-  type EstimatesPageFetcher,
-} from '../estimates-range'
+  collectByDateRange,
+  ALEGRA_WALK_PAGE_SIZE,
+  type PageFetcher,
+} from '../date-range-walk'
 import type { EstimateListItem, EstimateListResponse } from '../types'
 
 // -----------------------------------------------------------------------------
@@ -37,7 +40,10 @@ function buildEstimate(date: string | null, overrides: Partial<EstimateListItem>
  * exactly what the API contract promises when `order_field: 'date'` and
  * `order_direction: 'DESC'` are sent.
  */
-function fetcherOver(all: EstimateListItem[], total = all.length): EstimatesPageFetcher {
+function fetcherOver(
+  all: EstimateListItem[],
+  total = all.length,
+): PageFetcher<EstimateListItem> {
   return vi.fn(async (start: number, limit: number): Promise<EstimateListResponse> => ({
     data: all.slice(start, start + limit),
     total,
@@ -53,15 +59,15 @@ function repeat(date: string, count: number): EstimateListItem[] {
 // Happy paths
 // -----------------------------------------------------------------------------
 
-describe('collectEstimatesInRange — cobertura del rango', () => {
+describe('collectByDateRange — cobertura del rango', () => {
   it('junta todo cuando el mes entra en una sola página', async () => {
     const all = repeat('2026-07-10', 5)
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates).toHaveLength(5)
+    expect(result.items).toHaveLength(5)
     expect(result.truncated).toBe(false)
     expect(result.pagesFetched).toBe(1)
   })
@@ -72,12 +78,12 @@ describe('collectEstimatesInRange — cobertura del rango', () => {
     const all = [...repeat('2026-07-15', 45), ...repeat('2026-06-20', 10)]
 
     const fetchPage = fetcherOver(all)
-    const result = await collectEstimatesInRange(fetchPage, {
+    const result = await collectByDateRange(fetchPage, {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates).toHaveLength(45)
+    expect(result.items).toHaveLength(45)
     expect(result.truncated).toBe(false)
     // page 1 (30 in-month) → page 2 (15 in-month, then hits June and stops)
     expect(fetchPage).toHaveBeenCalledTimes(2)
@@ -87,12 +93,12 @@ describe('collectEstimatesInRange — cobertura del rango', () => {
     const all = [...repeat('2026-07-15', 5), ...repeat('2026-06-01', 100)]
 
     const fetchPage = fetcherOver(all)
-    const result = await collectEstimatesInRange(fetchPage, {
+    const result = await collectByDateRange(fetchPage, {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates).toHaveLength(5)
+    expect(result.items).toHaveLength(5)
     // Sorted DESC, so the first out-of-range item proves the rest are too.
     expect(fetchPage).toHaveBeenCalledTimes(1)
     expect(result.truncated).toBe(false)
@@ -102,42 +108,42 @@ describe('collectEstimatesInRange — cobertura del rango', () => {
     const all = repeat('2026-07-10', 12)
     const fetchPage = fetcherOver(all)
 
-    const result = await collectEstimatesInRange(fetchPage, {
+    const result = await collectByDateRange(fetchPage, {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates).toHaveLength(12)
+    expect(result.items).toHaveLength(12)
     expect(fetchPage).toHaveBeenCalledTimes(1)
     expect(result.truncated).toBe(false)
   })
 
   it('maneja una cuenta sin cotizaciones', async () => {
-    const result = await collectEstimatesInRange(fetcherOver([], 0), {
+    const result = await collectByDateRange(fetcherOver([], 0), {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates).toEqual([])
+    expect(result.items).toEqual([])
     expect(result.truncated).toBe(false)
     expect(result.total).toBe(0)
   })
 
   it('junta todo cuando no hay rango', async () => {
     const all = repeat('2026-07-10', 40)
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: null,
       dateTo: null,
     })
 
-    expect(result.estimates).toHaveLength(40)
+    expect(result.items).toHaveLength(40)
     expect(result.truncated).toBe(false)
   })
 
   it('toma el total exacto del metadata de la primera página', async () => {
     const all = repeat('2026-07-10', 5)
     // metadata.total is account-wide and independent of the range walked.
-    const result = await collectEstimatesInRange(fetcherOver(all, 873), {
+    const result = await collectByDateRange(fetcherOver(all, 873), {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
@@ -150,26 +156,26 @@ describe('collectEstimatesInRange — cobertura del rango', () => {
 // Boundaries
 // -----------------------------------------------------------------------------
 
-describe('collectEstimatesInRange — bordes del rango', () => {
+describe('collectByDateRange — bordes del rango', () => {
   it('incluye documentos exactamente en dateFrom (borde inclusivo)', async () => {
     const all = [buildEstimate('2026-07-01'), buildEstimate('2026-06-30')]
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates).toHaveLength(1)
-    expect(result.estimates[0]!.date).toBe('2026-07-01')
+    expect(result.items).toHaveLength(1)
+    expect(result.items[0]!.date).toBe('2026-07-01')
   })
 
   it('incluye documentos exactamente en dateTo (borde inclusivo)', async () => {
     const all = [buildEstimate('2026-07-31'), buildEstimate('2026-07-15')]
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: '2026-07-01',
       dateTo: '2026-07-31',
     })
 
-    expect(result.estimates).toHaveLength(2)
+    expect(result.items).toHaveLength(2)
   })
 
   it('saltea los más nuevos que dateTo SIN cortar el recorrido', async () => {
@@ -183,12 +189,12 @@ describe('collectEstimatesInRange — bordes del rango', () => {
       buildEstimate('2026-06-01'),
     ]
 
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: '2026-07-01',
       dateTo: '2026-07-31',
     })
 
-    expect(result.estimates.map((e) => e.date)).toEqual(['2026-07-20', '2026-07-10'])
+    expect(result.items.map((e) => e.date)).toEqual(['2026-07-20', '2026-07-10'])
   })
 
   it('saltea documentos sin fecha sin cortar el recorrido', async () => {
@@ -201,12 +207,12 @@ describe('collectEstimatesInRange — bordes del rango', () => {
       buildEstimate('2026-06-01'),
     ]
 
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: '2026-07-01',
       dateTo: null,
     })
 
-    expect(result.estimates.map((e) => e.date)).toEqual(['2026-07-20', '2026-07-10'])
+    expect(result.items.map((e) => e.date)).toEqual(['2026-07-20', '2026-07-10'])
   })
 })
 
@@ -214,15 +220,15 @@ describe('collectEstimatesInRange — bordes del rango', () => {
 // Truncation — must never be silent
 // -----------------------------------------------------------------------------
 
-describe('collectEstimatesInRange — truncado', () => {
+describe('collectByDateRange — truncado', () => {
   it('marca truncated cuando se alcanza el tope de páginas', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     // Every page is full and in-range, so the walk can never prove it's done.
-    const all = repeat('2026-07-15', ESTIMATES_PAGE_SIZE * 12)
+    const all = repeat('2026-07-15', ALEGRA_WALK_PAGE_SIZE * 12)
     const fetchPage = fetcherOver(all)
 
-    const result = await collectEstimatesInRange(fetchPage, {
+    const result = await collectByDateRange(fetchPage, {
       dateFrom: '2026-07-01',
       dateTo: null,
       maxPages: 3,
@@ -230,7 +236,7 @@ describe('collectEstimatesInRange — truncado', () => {
 
     expect(result.truncated).toBe(true)
     expect(result.pagesFetched).toBe(3)
-    expect(result.estimates).toHaveLength(ESTIMATES_PAGE_SIZE * 3)
+    expect(result.items).toHaveLength(ALEGRA_WALK_PAGE_SIZE * 3)
 
     warnSpy.mockRestore()
   })
@@ -238,7 +244,7 @@ describe('collectEstimatesInRange — truncado', () => {
   it('avisa por consola al truncar — no debe pasar en silencio', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    await collectEstimatesInRange(fetcherOver(repeat('2026-07-15', 200)), {
+    await collectByDateRange(fetcherOver(repeat('2026-07-15', 200)), {
       dateFrom: '2026-07-01',
       dateTo: null,
       maxPages: 2,
@@ -252,25 +258,25 @@ describe('collectEstimatesInRange — truncado', () => {
   it('NO marca truncated cuando el rango se cubrió justo en el tope', async () => {
     // Exactly 2 full pages then out-of-range: covered, not truncated.
     const all = [
-      ...repeat('2026-07-15', ESTIMATES_PAGE_SIZE * 2),
+      ...repeat('2026-07-15', ALEGRA_WALK_PAGE_SIZE * 2),
       ...repeat('2026-06-01', 5),
     ]
 
-    const result = await collectEstimatesInRange(fetcherOver(all), {
+    const result = await collectByDateRange(fetcherOver(all), {
       dateFrom: '2026-07-01',
       dateTo: null,
       maxPages: 3,
     })
 
     expect(result.truncated).toBe(false)
-    expect(result.estimates).toHaveLength(ESTIMATES_PAGE_SIZE * 2)
+    expect(result.items).toHaveLength(ALEGRA_WALK_PAGE_SIZE * 2)
   })
 
   it('respeta pageSize custom al paginar', async () => {
     const all = repeat('2026-07-15', 25)
     const fetchPage = fetcherOver(all)
 
-    await collectEstimatesInRange(fetchPage, {
+    await collectByDateRange(fetchPage, {
       dateFrom: '2026-07-01',
       dateTo: null,
       pageSize: 10,

@@ -10,16 +10,27 @@
  * Alegra's 150 req/min quota. The "Actualizar" button flushes every tag for
  * operators who need the number NOW.
  *
- * 5 parallel reads via `Promise.all`:
+ * 7 parallel reads via `Promise.all`:
+ *
+ *   INGRESOS
  *   - company       : company config (currency, locale)
- *   - mtd           : invoices this month, any status (open/closed/draft)
- *   - open          : all open invoices (data + total count for the 4th KPI)
- *   - overdue30     : open invoices past 30 days
- *   - estimatesMtd  : V2 — a paginated walk of this month's estimates. Backs
- *                     BOTH "Cotizado mes" (summed) and "Cotizaciones activas"
- *                     (its `metadata.total`, which is account-wide). This is
- *                     1..N upstream requests depending on monthly volume;
- *                     every other entry above is exactly one.
+ *   - mtd           : sales invoices this month, any status
+ *   - open          : all open sales invoices (data + exact count)
+ *   - overdue30     : open sales invoices past 30 days
+ *   - estimatesMtd  : paginated walk of this month's estimates. Backs BOTH
+ *                     "Cotizado mes" (summed) and "Cotizaciones activas"
+ *                     (its `metadata.total`, which is account-wide).
+ *
+ *   EGRESOS
+ *   - billsMtd        : paginated walk of this month's purchase invoices
+ *   - paymentsOutMtd  : paginated walk of this month's outgoing payments
+ *
+ * ⚠️ The two expense reads are two LENSES on the same money (accrual vs
+ * cash), not two pools. They are never summed — see the note next to the
+ * KPI assembly below.
+ *
+ * The three walks are 1..N upstream requests each depending on volume;
+ * every other entry is exactly one.
  *
  * Error handling: any thrown Alegra error propagates to the nearest
  * `error.tsx` boundary (alongside this file) which shows a friendly UI.
@@ -33,13 +44,18 @@ import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
 import {
   ALEGRA_TTL,
+  getCachedBillsInRange,
   getCachedCompany,
   getCachedEstimatesInRange,
   getCachedInvoices,
+  getCachedPaymentsInRange,
 } from '@/lib/alegra/cache'
 import {
   sumInvoices,
   sumEstimates,
+  sumBills,
+  sumPayments,
+  sumStandaloneExpenses,
   formatCurrency,
 } from '@/lib/alegra/transformers'
 import { KpiCards, KpiCardsSkeleton } from '@/components/dashboard/finances/kpi-cards'
@@ -68,34 +84,43 @@ async function FinancesKpis() {
   // cache this page makes ZERO upstream requests; on a cold one, the
   // client's single-flight de-duplication collapses any overlapping
   // identical calls into one socket.
-  const [company, mtd, open, overdue, estimatesMtd] = await Promise.all([
-    getCachedCompany(),
-    getCachedInvoices(
-      {
-        date_after: monthStart,
-        status: 'open,closed,draft',
-      },
-      ALEGRA_TTL.kpis,
-    ),
-    getCachedInvoices({ status: 'open' }, ALEGRA_TTL.kpis),
-    getCachedInvoices(
-      {
-        status: 'open',
-        dueDate_before: thirtyDaysAgoStr,
-      },
-      ALEGRA_TTL.kpis,
-    ),
-    // V2 — estimates. Paginates until the month is fully covered instead of
-    // trusting one 30-row page — see lib/alegra/estimates-range.ts. The old
-    // call passed `date_after`, which /estimates silently IGNORES, so the
-    // param only ever added noise to the cache key.
-    //
-    // This ALSO covers the "Cotizaciones activas" count: the walk reads
-    // `metadata.total` off its first page, and since it sends no filters
-    // that total is already account-wide. A separate request just to read
-    // the same integer would be a wasted round trip.
-    getCachedEstimatesInRange({ dateFrom: monthStart, dateTo: null }, ALEGRA_TTL.kpis),
-  ])
+  const [company, mtd, open, overdue, estimatesMtd, billsMtd, paymentsOutMtd] =
+    await Promise.all([
+      // --- INGRESOS ------------------------------------------------------
+      getCachedCompany(),
+      getCachedInvoices(
+        {
+          date_after: monthStart,
+          status: 'open,closed,draft',
+        },
+        ALEGRA_TTL.kpis,
+      ),
+      getCachedInvoices({ status: 'open' }, ALEGRA_TTL.kpis),
+      getCachedInvoices(
+        {
+          status: 'open',
+          dueDate_before: thirtyDaysAgoStr,
+        },
+        ALEGRA_TTL.kpis,
+      ),
+      // Estimates. Paginates until the month is fully covered instead of
+      // trusting one 30-row page — see lib/alegra/date-range-walk.ts.
+      //
+      // This ALSO covers the "Cotizaciones activas" count: the walk reads
+      // `metadata.total` off its first page, and since it sends no filters
+      // that total is already account-wide. A separate request just to read
+      // the same integer would be a wasted round trip.
+      getCachedEstimatesInRange({ dateFrom: monthStart, dateTo: null }, ALEGRA_TTL.kpis),
+
+      // --- EGRESOS -------------------------------------------------------
+      // Two reads because there are two QUESTIONS, not because there are two
+      // pools of money. See the arithmetic note below before touching either.
+      getCachedBillsInRange({ dateFrom: monthStart, dateTo: null }, ALEGRA_TTL.kpis),
+      getCachedPaymentsInRange(
+        { dateFrom: monthStart, dateTo: null, type: 'out' },
+        ALEGRA_TTL.kpis,
+      ),
+    ])
 
   const fmt = (amount: number) => formatCurrency(amount, company.currency.code)
 
@@ -117,9 +142,36 @@ async function FinancesKpis() {
     // instead of presenting a short count as the total.
     // `estimatesActive` uses `result.total` from metadata, which IS the
     // exact count regardless of pagination.
-    estimatesMtd: fmt(sumEstimates(estimatesMtd.estimates, 'total')),
+    estimatesMtd: fmt(sumEstimates(estimatesMtd.items, 'total')),
     estimatesMtdTruncated: estimatesMtd.truncated,
     estimatesActive: estimatesMtd.total,
+
+    // -----------------------------------------------------------------------
+    // EGRESOS — ⚠️ READ THIS BEFORE ADDING ANY EXPENSE ARITHMETIC HERE.
+    //
+    // `billedExpensesMtd` and `paidExpensesMtd` are the SAME MONEY seen at two
+    // moments. A purchase invoice is the obligation; a payment against it is
+    // that obligation being settled. Alegra's own docs call this out as a
+    // double-counting hazard.
+    //
+    //     ❌ total de gastos = billed + paid          ← counts twice
+    //     ✅ total sin duplicar = billed + standalone  ← if you ever need one
+    //
+    // We deliberately do NOT compute a combined "total expenses" figure. Two
+    // labelled numbers that the operator can reason about beat one blended
+    // number whose definition nobody remembers in three months.
+    //
+    // `standaloneExpensesMtd` is the only cash-side amount with no accrual
+    // counterpart: outgoing payments with no bill behind them. Note that
+    // `classifyPaymentAssociation` returns 'unknown' — and is therefore
+    // EXCLUDED from this sum — when `associations` is missing from the
+    // response, which is why the client forces `fields=associations`.
+    // -----------------------------------------------------------------------
+    billedExpensesMtd: fmt(sumBills(billsMtd.items, 'total')),
+    paidExpensesMtd: fmt(sumPayments(paymentsOutMtd.items)),
+    standaloneExpensesMtd: fmt(sumStandaloneExpenses(paymentsOutMtd.items)),
+    expensesTruncated: billsMtd.truncated || paymentsOutMtd.truncated,
+
     currencyCode: company.currency.code,
   }
 

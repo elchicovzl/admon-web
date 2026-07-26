@@ -23,6 +23,10 @@ import {
   Wallet,
   Receipt,
   ScrollText,
+  ReceiptText,
+  TrendingUp,
+  TrendingDown,
+  Banknote,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -54,11 +58,29 @@ import { logout } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-interface NavSubItem {
+/**
+ * A sub-item is either a link (`href` set, no children) or a pure grouping
+ * header (`href` omitted, `subItems` set). Finanzas needs the second kind:
+ * "Ingresos" and "Egresos" organise the menu but have no page of their own.
+ */
+interface NavSubItemBase {
   title: string
-  href: string
   icon: React.ComponentType<{ className?: string }>
 }
+
+/** A navigable leaf. */
+interface NavSubLink extends NavSubItemBase {
+  href: string
+  subItems?: never
+}
+
+/** A grouping header with children and no page of its own. */
+interface NavSubGroup extends NavSubItemBase {
+  href?: undefined
+  subItems: NavSubLink[]
+}
+
+type NavSubItem = NavSubLink | NavSubGroup
 
 interface NavItem {
   title: string
@@ -67,6 +89,71 @@ interface NavItem {
   badge?: string
   roles?: UserRole[]
   subItems?: NavSubItem[]
+}
+
+/**
+ * Does this sub-tree contain the current path?
+ *
+ * Recursive because a nested group ("Egresos") must report the active state
+ * of its children upward — otherwise landing on /finances/bills would leave
+ * both "Finanzas" and "Egresos" collapsed, and the user wouldn't see where
+ * they are.
+ */
+function containsActivePath(items: NavSubItem[], pathname: string): boolean {
+  return items.some((item) => {
+    if (item.subItems) return containsActivePath(item.subItems, pathname)
+    return pathname === item.href
+  })
+}
+
+/**
+ * Renders one sub-item: a link, or a nested collapsible group.
+ *
+ * Split into its own component so the two levels share exactly one code
+ * path — the alternative was duplicating the link markup inside the group
+ * branch, and the two copies would drift.
+ */
+function SubItemNode({ item, pathname }: { item: NavSubItem; pathname: string }) {
+  const ItemIcon = item.icon
+
+  // Grouping header (Ingresos / Egresos) — collapsible, not navigable.
+  if (item.subItems) {
+    const hasActiveChild = containsActivePath(item.subItems, pathname)
+
+    return (
+      <Collapsible defaultOpen={hasActiveChild}>
+        <SidebarMenuSubItem>
+          <CollapsibleTrigger asChild>
+            <SidebarMenuSubButton isActive={hasActiveChild} className="cursor-pointer">
+              <ItemIcon className="h-4 w-4" />
+              <span>{item.title}</span>
+              <ChevronDown className="ml-auto h-4 w-4 transition-transform ui-expanded:rotate-180" />
+            </SidebarMenuSubButton>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            {/* Indented one more step so the hierarchy is readable at a glance. */}
+            <SidebarMenuSub className="ml-2">
+              {item.subItems.map((child) => (
+                <SubItemNode key={child.href ?? child.title} item={child} pathname={pathname} />
+              ))}
+            </SidebarMenuSub>
+          </CollapsibleContent>
+        </SidebarMenuSubItem>
+      </Collapsible>
+    )
+  }
+
+  // Leaf link.
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton asChild isActive={pathname === item.href}>
+        <Link href={item.href}>
+          <ItemIcon className="h-4 w-4" />
+          <span>{item.title}</span>
+        </Link>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
+  )
 }
 
 interface AppSidebarProps {
@@ -145,15 +232,40 @@ export function AppSidebar({ user }: AppSidebarProps) {
           href: '/dashboard/finances',
           icon: LayoutDashboard,
         },
+        // Grouped by direction of money. "Facturas" alone was ambiguous —
+        // it read as sales to some people and purchases to others, which is
+        // exactly the confusion this split removes.
         {
-          title: 'Facturas',
-          href: '/dashboard/finances/invoices',
-          icon: Receipt,
+          title: 'Ingresos',
+          icon: TrendingUp,
+          subItems: [
+            {
+              title: 'Facturas de venta',
+              href: '/dashboard/finances/invoices',
+              icon: Receipt,
+            },
+            {
+              title: 'Cotizaciones',
+              href: '/dashboard/finances/estimates',
+              icon: ScrollText,
+            },
+          ],
         },
         {
-          title: 'Cotizaciones',
-          href: '/dashboard/finances/estimates',
-          icon: ScrollText,
+          title: 'Egresos',
+          icon: TrendingDown,
+          subItems: [
+            {
+              title: 'Facturas de compra',
+              href: '/dashboard/finances/bills',
+              icon: ReceiptText,
+            },
+            {
+              title: 'Pagos',
+              href: '/dashboard/finances/payments',
+              icon: Banknote,
+            },
+          ],
         },
       ],
     },
@@ -259,9 +371,9 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
                 // If item has sub-items, render as Collapsible
                 if (item.subItems && item.subItems.length > 0) {
-                  const isAnySubItemActive = item.subItems.some(
-                    (subItem) => pathname === subItem.href
-                  )
+                  // Recursive so a match on a GRANDCHILD (e.g. /finances/bills
+                  // under Egresos) still opens the top-level group.
+                  const isAnySubItemActive = containsActivePath(item.subItems, pathname)
 
                   return (
                     <Collapsible key={item.href} defaultOpen={isActive || isAnySubItemActive}>
@@ -275,21 +387,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <SidebarMenuSub>
-                            {item.subItems.map((subItem) => {
-                              const SubIcon = subItem.icon
-                              const isSubItemActive = pathname === subItem.href
-
-                              return (
-                                <SidebarMenuSubItem key={subItem.href}>
-                                  <SidebarMenuSubButton asChild isActive={isSubItemActive}>
-                                    <Link href={subItem.href}>
-                                      <SubIcon className="h-4 w-4" />
-                                      <span>{subItem.title}</span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )
-                            })}
+                            {item.subItems.map((subItem) => (
+                              <SubItemNode
+                                key={subItem.href ?? subItem.title}
+                                item={subItem}
+                                pathname={pathname}
+                              />
+                            ))}
                           </SidebarMenuSub>
                         </CollapsibleContent>
                       </SidebarMenuItem>

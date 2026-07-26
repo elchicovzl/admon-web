@@ -219,8 +219,8 @@ async function fetchRangedPage(
   const start = (filters.page - 1) * perPage
 
   return {
-    rows: result.estimates.slice(start, start + perPage),
-    total: result.estimates.length,
+    rows: result.items.slice(start, start + perPage),
+    total: result.items.length,
     truncated: result.truncated,
   }
 }

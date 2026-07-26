@@ -1,27 +1,50 @@
 /**
- * Client card for any finances document detail page (invoice or estimate).
+ * Counterparty card for any finances document detail page.
  *
- * Renders the embedded client object from the document — NOT a lookup of
- * our own `Client` model. The two are kept decoupled in V1.
+ * Renders the embedded contact object from the document — NOT a lookup of
+ * our own `Client` model. The two are kept decoupled.
  *
- * The client shape is identical between /invoices and /estimates (verified
- * against the Alegra API — /estimates returns extra fields like `fax`,
- * `mobile`, `phoneSecondary`, `observations`, all of which pass through
- * thanks to the `InvoiceClientSchema.passthrough()`).
+ * The contact shape is identical across /invoices, /estimates and /bills
+ * (verified against the Alegra API — extra fields like `fax`, `mobile`,
+ * `phoneSecondary` pass through thanks to `InvoiceClientSchema.passthrough()`).
+ * Only the LABEL differs: a sales document has a cliente, a purchase document
+ * has a proveedor. Hence the `title` prop rather than a duplicated component.
  *
- * If the schemas ever diverge, this component will need to accept a union
- * type or be specialized per document type.
+ * If the schemas ever diverge, this will need a union type or a split.
  */
 
 import { Mail, Phone, MapPin, Building2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { InvoiceClient } from '@/lib/alegra/types'
 
-interface ClientCardProps {
-  client: InvoiceClient
+/**
+ * Structural minimum this card needs, declared here rather than importing a
+ * Zod-inferred type.
+ *
+ * Clients and providers are the same contact in Alegra but their schemas
+ * differ in optionality (`identification` is nullable-required on clients,
+ * fully optional on providers). Depending on one concrete inferred type made
+ * the other fail to assign for a reason that has nothing to do with
+ * rendering. The component states its own contract; both shapes satisfy it.
+ */
+export interface ContactCardData {
+  name: string
+  identification?: string | null
+  email?: string | null
+  phonePrimary?: string | null
+  address?: {
+    address?: string | null
+    city?: string | null
+    country?: string | null
+  } | null
 }
 
-export function ClientCard({ client }: ClientCardProps) {
+interface ClientCardProps {
+  client: ContactCardData
+  /** Card heading. Defaults to "Cliente"; pass "Proveedor" on bills. */
+  title?: string
+}
+
+export function ClientCard({ client, title = 'Cliente' }: ClientCardProps) {
   const address = client.address
   const addressLine = address
     ? [address.address, address.city, address.country].filter(Boolean).join(', ')
@@ -32,7 +55,7 @@ export function ClientCard({ client }: ClientCardProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Building2 className="h-4 w-4 text-muted-foreground" />
-          Cliente
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1.5">
