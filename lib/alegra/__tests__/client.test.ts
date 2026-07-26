@@ -331,23 +331,33 @@ describe('AlegraClient — error mapping', () => {
     await expect(new AlegraClient().listInvoices()).rejects.toThrow(/creds inválidas/)
   })
 
-  it('429 → RateLimitError con resetAt', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+  it('429 → RateLimitError con resetAt (tras agotar los reintentos)', async () => {
+    // A 429 is now RETRIED before it ever reaches the caller — see
+    // client-resilience.test.ts. It still surfaces as a RateLimitError once
+    // the retries are exhausted, which is what this test pins down.
+    // Fake timers so the backoff waits don't run in real time.
+    vi.useFakeTimers()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const fetchMock = vi.fn().mockResolvedValue(
       buildResponse({
         status: 429,
         json: { code: 429, error: 'rate limit' },
         rateLimitRemaining: '0',
         rateLimitReset: '42',
       }),
-    ))
+    )
+    vi.stubGlobal('fetch', fetchMock)
 
-    try {
-      await new AlegraClient().listInvoices()
-      expect.fail('debería haber tirado error')
-    } catch (err) {
-      expect(err).toBeInstanceOf(RateLimitError)
-      expect((err as RateLimitError).resetAt).toBeGreaterThan(Date.now())
-    }
+    const promise = new AlegraClient().listInvoices()
+    // Attach the rejection handler BEFORE draining timers, otherwise the
+    // rejection lands with no handler and Vitest reports it as unhandled.
+    const assertion = expect(promise).rejects.toBeInstanceOf(RateLimitError)
+    await vi.runAllTimersAsync()
+    await assertion
+
+    // 1 initial attempt + 2 retries
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('500 → AlegraError con código HTTP_500', async () => {

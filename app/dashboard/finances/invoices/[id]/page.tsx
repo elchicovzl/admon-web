@@ -16,7 +16,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getAlegraClient } from '@/lib/alegra/client'
+import { getCachedCompany, getCachedInvoice } from '@/lib/alegra/cache'
 import { DetailHeader } from '@/components/dashboard/finances/invoice-detail/header'
 import { ClientCard } from '@/components/dashboard/finances/shared/client-card'
 import { TotalsCard } from '@/components/dashboard/finances/invoice-detail/totals-card'
@@ -59,11 +59,9 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
 }
 
 async function InvoiceDetailAsync({ id }: { id: string }) {
-  const client = getAlegraClient()
-
   const [invoice, company] = await Promise.all([
-    client.getInvoice(id),
-    client.getCompany(),
+    getCachedInvoice(id),
+    getCachedCompany(),
   ])
 
   // Defensive: should never happen (empty id is rejected by the client).

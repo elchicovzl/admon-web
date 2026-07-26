@@ -432,31 +432,19 @@ export function buildEstimatePaginationLinks(
   return { prev, next }
 }
 
-/**
- * Client-side date-range filter applied AFTER fetching the /estimates page.
+/*
+ * REMOVED: `filterEstimatesByDateRange`.
  *
- * Compares against the estimate's `date` field (YYYY-MM-DD string compare
- * is locale-independent and faster than Date construction). An estimate
- * without a date is excluded from any ranged query (would be confusing
- * to show it when the user explicitly filtered by date).
+ * It filtered a single already-fetched page by date range. That only ever
+ * looked correct on accounts small enough to fit in one 30-row page — beyond
+ * that it silently dropped documents, which is how the "Cotizado mes" KPI
+ * ended up reporting a fraction of the month as the total.
  *
- * Returns the SAME array reference if no range filter is active, so the
- * caller can skip the no-op case without a re-render cost.
+ * Range filtering now lives in `lib/alegra/estimates-range.ts`, which pages
+ * through the API until the range is genuinely covered and reports when it
+ * can't. Deliberately not kept "just in case": a public helper that filters
+ * ranges over one page is an invitation to reintroduce the same bug.
  */
-export function filterEstimatesByDateRange(
-  estimates: EstimateListItem[],
-  dateFrom: string | null,
-  dateTo: string | null,
-): EstimateListItem[] {
-  if (!dateFrom && !dateTo) return estimates
-
-  return estimates.filter((e) => {
-    if (!e.date) return false
-    if (dateFrom && e.date < dateFrom) return false
-    if (dateTo && e.date > dateTo) return false
-    return true
-  })
-}
 
 /**
  * Format an estimate's `number` field for display.

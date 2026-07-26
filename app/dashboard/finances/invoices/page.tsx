@@ -14,12 +14,13 @@
 
 import { Metadata } from 'next'
 import { Suspense } from 'react'
-import { getAlegraClient } from '@/lib/alegra/client'
+import { getCachedCompany, getCachedInvoices } from '@/lib/alegra/cache'
 import {
   ALEGRA_PAGE_SIZE,
   buildPaginationLinks,
   parseInvoiceFilters,
 } from '@/lib/alegra/transformers'
+import { RefreshButton } from '@/components/dashboard/finances/refresh-button'
 import { InvoiceTable } from '@/components/dashboard/finances/invoice-table'
 import {
   InvoiceFiltersBar,
@@ -55,13 +56,16 @@ export default async function InvoicesListPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Facturas de venta</h1>
-        <p className="text-muted-foreground">
-          {activeCount > 0
-            ? `Listado filtrado de facturas — ${activeCount} filtro${activeCount === 1 ? '' : 's'} activo${activeCount === 1 ? '' : 's'}`
-            : 'Listado completo de facturas emitidas en Alegra'}
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Facturas de venta</h1>
+          <p className="text-muted-foreground">
+            {activeCount > 0
+              ? `Listado filtrado de facturas — ${activeCount} filtro${activeCount === 1 ? '' : 's'} activo${activeCount === 1 ? '' : 's'}`
+              : 'Listado completo de facturas emitidas en Alegra'}
+          </p>
+        </div>
+        <RefreshButton />
       </div>
 
       {/* Filters — Client Component, URL-driven */}
@@ -89,8 +93,6 @@ async function InvoicesTableAsync({
   filters: ReturnType<typeof parseInvoiceFilters>
   activeCount: number
 }) {
-  const client = getAlegraClient()
-
   // Alegra's hard cap on `limit` is 30. Forcing it here keeps the URL-driven
   // page logic consistent even if a future caller passes a different value.
   const perPage = ALEGRA_PAGE_SIZE
@@ -108,9 +110,12 @@ async function InvoicesTableAsync({
     order_direction: 'DESC' as const,
   }
 
+  // Default `list` TTL (30s) — this is the operational view, so it stays
+  // much tighter than the KPI aggregates. `getCachedCompany` rides its own
+  // 1h TTL and will essentially always be a cache hit.
   const [company, result] = await Promise.all([
-    client.getCompany(),
-    client.listInvoices(listParams),
+    getCachedCompany(),
+    getCachedInvoices(listParams),
   ])
 
   if (result.data.length === 0) {
