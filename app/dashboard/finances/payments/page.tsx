@@ -101,11 +101,17 @@ export default async function PaymentsListPage({ searchParams }: PageProps) {
         <Alert variant="default" className="border-sky-500/40">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription className="text-sm">
-            Los pagos <strong>cancelan</strong> facturas, no se suman a ellas. Un
-            pago asociado a una factura de compra ya está contado en{' '}
-            <strong>Facturas de compra</strong> — sumar ambos duplicaría el gasto.
-            Los marcados como <em>&ldquo;Gasto sin factura&rdquo;</em> son los
-            únicos que no aparecen en ese listado.
+            {/* Single <p> on purpose: AlertDescription is a grid with gap-1,
+                so every direct child becomes its own row — inline <strong>
+                tags were each landing on a separate line. */}
+            <p>
+              Los pagos <strong>cancelan</strong> facturas, no se suman a ellas.
+              Un pago asociado a una factura de compra ya está contado en{' '}
+              <strong>Facturas de compra</strong>: sumar ambos duplicaría el
+              gasto. Los marcados como{' '}
+              <em>&ldquo;Gasto sin factura&rdquo;</em> son los únicos que no
+              aparecen en ese listado.
+            </p>
           </AlertDescription>
         </Alert>
       )}
@@ -150,9 +156,11 @@ async function PaymentsTableAsync({
         <Alert variant="default" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            El rango de fechas tiene más movimientos de los que se pueden listar
-            de una vez. Estás viendo los más recientes — acotá el rango para
-            verlos todos.
+            <p>
+              El rango de fechas tiene más movimientos de los que se pueden
+              listar de una vez. Estás viendo los más recientes — acotá el rango
+              para verlos todos.
+            </p>
           </AlertDescription>
         </Alert>
       )}

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { containsActiveHref, findActiveHref } from '@/lib/nav/active-link'
 import {
   LayoutDashboard,
   Users,
@@ -79,6 +80,14 @@ interface NavSubLink extends NavSubItemBase {
    * `usePathname()` doesn't include the query string.
    */
   matchParam?: { key: string; value: string }
+  /**
+   * Wins the highlight when the path matches but the `matchParam` key is
+   * ABSENT from the URL. Landing on /finances/payments with no `?type=`
+   * (the "Movimientos de caja" view) has to light SOMETHING up, and without
+   * this neither sibling matched — which left the whole Finanzas tree
+   * collapsed with nothing selected.
+   */
+  matchFallback?: boolean
   subItems?: never
 }
 
@@ -100,45 +109,6 @@ interface NavItem {
 }
 
 /**
- * Does this sub-tree contain the current path?
- *
- * Recursive because a nested group ("Egresos") must report the active state
- * of its children upward — otherwise landing on /finances/bills would leave
- * both "Finanzas" and "Egresos" collapsed, and the user wouldn't see where
- * they are.
- */
-/**
- * Is this leaf the page the user is currently on?
- *
- * `usePathname()` strips the query string, so an entry that only differs from
- * its sibling by `?type=` has to check the param explicitly. When
- * `matchParam` is absent the query is ignored entirely — the common case.
- */
-function isLinkActive(
-  item: NavSubLink,
-  pathname: string,
-  searchParams: URLSearchParams,
-): boolean {
-  // Compare against the path portion only; `href` may carry a query.
-  const [linkPath] = item.href.split('?')
-  if (pathname !== linkPath) return false
-
-  if (!item.matchParam) return true
-  return searchParams.get(item.matchParam.key) === item.matchParam.value
-}
-
-function containsActivePath(
-  items: NavSubItem[],
-  pathname: string,
-  searchParams: URLSearchParams,
-): boolean {
-  return items.some((item) => {
-    if (item.subItems) return containsActivePath(item.subItems, pathname, searchParams)
-    return isLinkActive(item, pathname, searchParams)
-  })
-}
-
-/**
  * Renders one sub-item: a link, or a nested collapsible group.
  *
  * Split into its own component so the two levels share exactly one code
@@ -147,18 +117,16 @@ function containsActivePath(
  */
 function SubItemNode({
   item,
-  pathname,
-  searchParams,
+  activeHref,
 }: {
   item: NavSubItem
-  pathname: string
-  searchParams: URLSearchParams
+  activeHref: string | null
 }) {
   const ItemIcon = item.icon
 
   // Grouping header (Ingresos / Egresos) — collapsible, not navigable.
   if (item.subItems) {
-    const hasActiveChild = containsActivePath(item.subItems, pathname, searchParams)
+    const hasActiveChild = containsActiveHref(item.subItems, activeHref)
 
     return (
       <Collapsible defaultOpen={hasActiveChild}>
@@ -174,12 +142,7 @@ function SubItemNode({
             {/* Indented one more step so the hierarchy is readable at a glance. */}
             <SidebarMenuSub className="ml-2">
               {item.subItems.map((child) => (
-                <SubItemNode
-                  key={child.href}
-                  item={child}
-                  pathname={pathname}
-                  searchParams={searchParams}
-                />
+                <SubItemNode key={child.href} item={child} activeHref={activeHref} />
               ))}
             </SidebarMenuSub>
           </CollapsibleContent>
@@ -191,7 +154,7 @@ function SubItemNode({
   // Leaf link.
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton asChild isActive={isLinkActive(item, pathname, searchParams)}>
+      <SidebarMenuSubButton asChild isActive={item.href === activeHref}>
         <Link href={item.href}>
           <ItemIcon className="h-4 w-4" />
           <span>{item.title}</span>
@@ -317,10 +280,14 @@ export function AppSidebar({ user }: AppSidebarProps) {
               href: '/dashboard/finances/bills',
               icon: ReceiptText,
             },
+            // Also the fallback for /finances/payments with NO `?type=` (the
+            // combined "Movimientos de caja" view). Something has to be
+            // highlighted there, and Egresos is where this page was asked for.
             {
               title: 'Pagos',
               href: '/dashboard/finances/payments?type=out',
               matchParam: { key: 'type', value: 'out' },
+              matchFallback: true,
               icon: Banknote,
             },
           ],
@@ -379,6 +346,19 @@ export function AppSidebar({ user }: AppSidebarProps) {
     return item.roles.includes(user.role)
   })
 
+  /**
+   * The single sub-item to highlight, resolved across the WHOLE menu.
+   *
+   * Computed once at the top rather than per-node so the "most specific link
+   * wins" rule is decided globally — a node can't know whether a deeper link
+   * elsewhere is a better match for the current URL.
+   */
+  const activeHref = findActiveHref(
+    filteredNavItems.flatMap((item) => item.subItems ?? []),
+    pathname,
+    searchParams,
+  )
+
   const getUserInitials = (name: string | null, email: string) => {
     if (name) {
       return name
@@ -431,11 +411,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 if (item.subItems && item.subItems.length > 0) {
                   // Recursive so a match on a GRANDCHILD (e.g. /finances/bills
                   // under Egresos) still opens the top-level group.
-                  const isAnySubItemActive = containsActivePath(
-                    item.subItems,
-                    pathname,
-                    searchParams,
-                  )
+                  const isAnySubItemActive = containsActiveHref(item.subItems, activeHref)
 
                   return (
                     <Collapsible key={item.href} defaultOpen={isActive || isAnySubItemActive}>
@@ -453,8 +429,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                               <SubItemNode
                                 key={subItem.href ?? subItem.title}
                                 item={subItem}
-                                pathname={pathname}
-                                searchParams={searchParams}
+                                activeHref={activeHref}
                               />
                             ))}
                           </SidebarMenuSub>

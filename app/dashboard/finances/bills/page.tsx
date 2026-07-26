@@ -119,9 +119,13 @@ async function BillsTableAsync({
         <Alert variant="default" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            El rango de fechas tiene más facturas de las que se pueden listar de
-            una vez. Estás viendo las más recientes — acotá el rango para verlas
-            todas.
+            {/* Wrapped in <p>: AlertDescription is a grid, so any future
+                inline emphasis added here would break onto its own line. */}
+            <p>
+              El rango de fechas tiene más facturas de las que se pueden listar
+              de una vez. Estás viendo las más recientes — acotá el rango para
+              verlas todas.
+            </p>
           </AlertDescription>
         </Alert>
       )}
