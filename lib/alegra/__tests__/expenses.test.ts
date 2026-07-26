@@ -27,6 +27,7 @@ import {
   BillListItemSchema,
   BillListResponseSchema,
   PaymentListItemSchema,
+  PaymentListResponseSchema,
   type BillListItem,
   type PaymentListItem,
 } from '../types'
@@ -51,6 +52,14 @@ function buildBill(overrides: Partial<BillListItem> = {}): BillListItem {
   } as unknown as BillListItem
 }
 
+/**
+ * Shaped after a REAL /payments row, not the published docs.
+ *
+ * The links live in sibling arrays (`invoices` / `bills` / `categories`);
+ * `associations` is a display string like "Facturas: FEAD9073". Modelling it
+ * the way the docs describe is what made the page 500 on first contact with
+ * live data.
+ */
 function buildPayment(overrides: Partial<PaymentListItem> = {}): PaymentListItem {
   return {
     id: 'p1',
@@ -60,8 +69,7 @@ function buildPayment(overrides: Partial<PaymentListItem> = {}): PaymentListItem
     status: 'open',
     paymentMethod: 'transfer',
     number: 1,
-    currency: { code: 'COP', symbol: '$' },
-    associations: { categories: [{ id: 'c1' }] },
+    categories: [{ id: 'c1' }],
     ...overrides,
   } as unknown as PaymentListItem
 }
@@ -76,7 +84,7 @@ describe('regla anti-duplicación de gastos', () => {
     // Naively "bills + payments" reports 2000 of expenses for 1000 of spend.
     const bills = [buildBill({ total: 1000, totalPaid: 1000, balance: 0, status: 'closed' })]
     const payments = [
-      buildPayment({ amount: 1000, associations: { bills: [{ id: 'b1' }] } }),
+      buildPayment({ amount: 1000, bills: [{ id: 'b1' }] }),
     ]
 
     const accrual = sumBills(bills, 'total')
@@ -97,7 +105,7 @@ describe('regla anti-duplicación de gastos', () => {
 
   it('un pago sin factura SÍ es un gasto que no aparece en /bills', () => {
     const payments = [
-      buildPayment({ amount: 250, associations: { categories: [{ id: 'taxi' }] } }),
+      buildPayment({ amount: 250, categories: [{ id: 'taxi' }] }),
     ]
 
     expect(sumStandaloneExpenses(payments)).toBe(250)
@@ -105,7 +113,7 @@ describe('regla anti-duplicación de gastos', () => {
 
   it('los cobros (type=in) nunca cuentan como gasto', () => {
     const payments = [
-      buildPayment({ type: 'in', amount: 5000, associations: { categories: [{ id: 'c1' }] } }),
+      buildPayment({ type: 'in', amount: 5000, categories: [{ id: 'c1' }] }),
     ]
 
     // Money arriving is not an expense no matter how it's associated.
@@ -116,7 +124,7 @@ describe('regla anti-duplicación de gastos', () => {
     // This is the `fields=associations` failure mode. If the client forgets
     // that param, EVERY payment arrives without associations. Counting them
     // as standalone would invent a second copy of every expense.
-    const payments = [buildPayment({ amount: 900, associations: undefined })]
+    const payments = [buildPayment({ amount: 900, invoices: undefined, bills: undefined, categories: undefined })]
 
     expect(classifyPaymentAssociation(payments[0]!)).toBe('unknown')
     expect(sumStandaloneExpenses(payments)).toBe(0)
@@ -125,9 +133,9 @@ describe('regla anti-duplicación de gastos', () => {
   it('mezcla realista: factura pagada + gasto suelto + cobro', () => {
     const bills = [buildBill({ total: 1000 })]
     const payments = [
-      buildPayment({ amount: 1000, associations: { bills: [{ id: 'b1' }] } }),
-      buildPayment({ id: 'p2', amount: 300, associations: { categories: [{ id: 'c1' }] } }),
-      buildPayment({ id: 'p3', type: 'in', amount: 7000, associations: { invoices: [{ id: 'i1' }] } }),
+      buildPayment({ amount: 1000, bills: [{ id: 'b1' }] }),
+      buildPayment({ id: 'p2', amount: 300, categories: [{ id: 'c1' }] }),
+      buildPayment({ id: 'p3', type: 'in', amount: 7000, invoices: [{ id: 'i1' }] }),
     ]
 
     expect(sumBills(bills, 'total')).toBe(1000)
@@ -144,53 +152,63 @@ describe('regla anti-duplicación de gastos', () => {
 // -----------------------------------------------------------------------------
 
 describe('classifyPaymentAssociation', () => {
+  const asPayment = (o: Record<string, unknown>) => o as unknown as PaymentListItem
+
   it('bills tiene prioridad', () => {
-    expect(
-      classifyPaymentAssociation({ associations: { bills: [{ id: 'b1' }] } } as PaymentListItem),
-    ).toBe('bill')
+    expect(classifyPaymentAssociation(asPayment({ bills: [{ id: 'b1' }] }))).toBe('bill')
   })
 
   it('invoices → invoice', () => {
-    expect(
-      classifyPaymentAssociation({ associations: { invoices: [{ id: 'i1' }] } } as PaymentListItem),
-    ).toBe('invoice')
+    expect(classifyPaymentAssociation(asPayment({ invoices: [{ id: 'i1' }] }))).toBe('invoice')
   })
 
   it('solo categories → standalone', () => {
+    expect(classifyPaymentAssociation(asPayment({ categories: [{ id: 'c' }] }))).toBe('standalone')
+  })
+
+  it('arrays presentes pero vacíos → standalone', () => {
+    // The arrays arrived and are empty — we DO know there's no document.
     expect(
-      classifyPaymentAssociation({ associations: { categories: [{ id: 'c' }] } } as PaymentListItem),
+      classifyPaymentAssociation(asPayment({ bills: [], invoices: [], categories: [] })),
     ).toBe('standalone')
   })
 
-  it('objeto vacío → standalone (no unknown)', () => {
-    // The object arrived, it's just empty — we DO know there's no document.
-    expect(classifyPaymentAssociation({ associations: {} } as PaymentListItem)).toBe('standalone')
+  it('ningún array presente → unknown', () => {
+    // We weren't told, which is NOT the same as "there is nothing".
+    expect(classifyPaymentAssociation(asPayment({}))).toBe('unknown')
   })
 
-  it('arrays vacíos → standalone', () => {
+  it('IGNORA el string `associations` — es una etiqueta, no una estructura', () => {
+    // Live data: "associations": "Facturas: FEAD9073". Parsing that sentence
+    // for logic breaks the moment Alegra rewords it or the account runs in
+    // another language. Only the arrays are authoritative.
     expect(
-      classifyPaymentAssociation({
-        associations: { bills: [], invoices: [], categories: [] },
-      } as unknown as PaymentListItem),
-    ).toBe('standalone')
+      classifyPaymentAssociation(asPayment({ associations: 'Facturas: FEAD9073' })),
+    ).toBe('unknown')
+
+    // …and when both are present, the arrays decide.
+    expect(
+      classifyPaymentAssociation(
+        asPayment({ associations: 'Facturas: FEAD9073', invoices: [{ id: '2070' }] }),
+      ),
+    ).toBe('invoice')
   })
 
-  it('undefined → unknown', () => {
-    expect(classifyPaymentAssociation({ associations: undefined } as PaymentListItem)).toBe('unknown')
+  it('describePaymentAssociation prefiere la etiqueta de Alegra cuando existe', () => {
+    // It names the actual document, which beats a generic category for an
+    // operator scanning the table.
+    expect(
+      describePaymentAssociation(
+        asPayment({ associations: 'Facturas: FEAD9073', invoices: [{ id: '2070' }] }),
+      ),
+    ).toBe('Facturas: FEAD9073')
   })
 
-  it('null → unknown', () => {
-    expect(classifyPaymentAssociation({ associations: null } as PaymentListItem)).toBe('unknown')
-  })
-
-  it('describePaymentAssociation devuelve etiquetas en español', () => {
-    expect(describePaymentAssociation({ associations: { bills: [{ id: 'b' }] } } as PaymentListItem))
-      .toBe('Factura de compra')
-    expect(describePaymentAssociation({ associations: { invoices: [{ id: 'i' }] } } as PaymentListItem))
-      .toBe('Factura de venta')
-    expect(describePaymentAssociation({ associations: { categories: [{ id: 'c' }] } } as PaymentListItem))
-      .toBe('Sin factura')
-    expect(describePaymentAssociation({ associations: undefined } as PaymentListItem)).toBe('—')
+  it('describePaymentAssociation cae a la clasificación sin etiqueta', () => {
+    expect(describePaymentAssociation(asPayment({ bills: [{ id: 'b' }] }))).toBe('Factura de compra')
+    expect(describePaymentAssociation(asPayment({ invoices: [{ id: 'i' }] }))).toBe('Factura de venta')
+    expect(describePaymentAssociation(asPayment({ categories: [{ id: 'c' }] }))).toBe('Sin factura')
+    expect(describePaymentAssociation(asPayment({}))).toBe('—')
   })
 })
 
@@ -377,19 +395,18 @@ describe('PaymentListItemSchema', () => {
     expect(parsed.amount).toBe(2500)
   })
 
-  it('acepta associations ausente sin romper', () => {
-    // This is the shape you get when `fields=associations` wasn't sent.
-    // It must parse — the classifier is what flags it as unknown.
+  it('acepta los arrays de links ausentes sin romper', () => {
+    // The shape you get when the extra `fields` weren't requested. It must
+    // parse — the classifier is what flags it as unknown.
     const parsed = PaymentListItemSchema.parse({ ...base, amount: 1 })
-    expect(parsed.associations).toBeUndefined()
     expect(classifyPaymentAssociation(parsed)).toBe('unknown')
   })
 
-  it('preserva las associations cuando vienen', () => {
+  it('preserva los links cuando vienen', () => {
     const parsed = PaymentListItemSchema.parse({
       ...base,
       amount: 1,
-      associations: { bills: [{ id: 'b1', number: 7 }] },
+      bills: [{ id: 'b1', number: 7 }],
     })
 
     expect(classifyPaymentAssociation(parsed)).toBe('bill')
@@ -397,5 +414,85 @@ describe('PaymentListItemSchema', () => {
 
   it('rechaza un type que no sea in/out', () => {
     expect(() => PaymentListItemSchema.parse({ ...base, type: 'maybe', amount: 1 })).toThrow()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Regression: the exact payload that 500'd the page
+  // ---------------------------------------------------------------------------
+
+  it('parsea una fila REAL de /payments (la que rompió el schema original)', () => {
+    // Copied verbatim from a live response. Every field here contradicted the
+    // published docs in some way: `associations` is a string, the links are
+    // sibling arrays, the account key is `bankAccount`, and `currency` is
+    // absent entirely.
+    const real = {
+      id: '2385',
+      date: '2026-12-30',
+      number: '1884',
+      amount: 409300,
+      observations: null,
+      anotation: null,
+      type: 'in',
+      paymentMethod: 'deposit',
+      status: 'open',
+      decimalPrecision: '0',
+      calculationScale: '6',
+      bankAccount: { id: '3', name: 'Banco 1', type: 'bank' },
+      client: {
+        id: '317',
+        name: 'AYDA ELIS RIVAS MORENO',
+        phone: null,
+        identification: '43077759',
+      },
+      invoices: [
+        {
+          id: '2070',
+          number: 'FEAD9073',
+          date: '2026-01-26',
+          amount: 409300,
+          total: 409300,
+          balance: 0,
+        },
+      ],
+      costCenter: null,
+      numberTemplate: {
+        id: '3',
+        prefix: null,
+        number: '1884',
+        fullNumber: '1884',
+        formattedNumber: '1884',
+      },
+      associations: 'Facturas: FEAD9073',
+    }
+
+    const parsed = PaymentListItemSchema.parse(real)
+
+    expect(parsed.amount).toBe(409300)
+    expect(parsed.number).toBe(1884) // string "1884" → number
+    expect(parsed.type).toBe('in')
+    expect(parsed.client?.name).toBe('AYDA ELIS RIVAS MORENO')
+    // The link array, not the label, drives classification.
+    expect(classifyPaymentAssociation(parsed)).toBe('invoice')
+    expect(describePaymentAssociation(parsed)).toBe('Facturas: FEAD9073')
+  })
+
+  it('parsea el envoltorio metadata real (3485 pagos)', () => {
+    const wrapped = {
+      metadata: { total: 3485 },
+      data: [
+        {
+          id: '2385',
+          date: '2026-12-30',
+          amount: 409300,
+          type: 'in',
+          associations: 'Facturas: FEAD9073',
+          invoices: [{ id: '2070', number: 'FEAD9073' }],
+        },
+      ],
+    }
+
+    const parsed = PaymentListResponseSchema.parse(wrapped)
+    expect(parsed.total).toBe(3485)
+    expect(parsed.data).toHaveLength(1)
   })
 })

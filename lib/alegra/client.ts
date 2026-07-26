@@ -254,16 +254,20 @@ export class AlegraClient {
   //
   //   order_field: 'date'  — same rationale as bills/estimates.
   //
-  //   fields: 'associations' — WITHOUT this, Alegra omits the associations
-  //     object entirely and every payment looks like a standalone expense.
-  //     That distinction is the difference between "this payment settles a
-  //     bill we already counted" and "this is an expense that exists nowhere
-  //     else", i.e. between correct expense totals and double counting.
-  //     It is not optional for anything that does arithmetic.
+  //   fields: 'associations,bills,categories' — the link arrays are what
+  //     `classifyPaymentAssociation` reads to tell "this settles a bill we
+  //     already counted in /bills" from "this is an expense that exists
+  //     nowhere else". Get that wrong and the month's expenses either double
+  //     or lose their uninvoiced half. `invoices` comes back by default;
+  //     `bills` and `categories` are opt-in fields, and `bills` is precisely
+  //     the one the expense side depends on.
   //
   // ⚠️ /payments has NO date filter at all — not even exact `date`. It is the
   // most restricted list endpoint of the four; every date-scoped read walks.
   // ---------------------------------------------------------------------------
+
+  /** Extra fields required for expense classification. See the note above. */
+  private static readonly PAYMENT_FIELDS = 'associations,bills,categories'
 
   /** List payments (both directions unless `type` narrows it). */
   async listPayments(params: ListPaymentsParams = {}): Promise<PaymentListResponse> {
@@ -271,7 +275,7 @@ export class AlegraClient {
       metadata: true,
       order_field: 'date',
       order_direction: 'DESC',
-      fields: 'associations',
+      fields: AlegraClient.PAYMENT_FIELDS,
       ...params,
     }
     return this.request('/payments', normalized, PaymentListResponseSchema)
@@ -284,7 +288,7 @@ export class AlegraClient {
     }
     return this.request(
       `/payments/${encodeURIComponent(id)}`,
-      { fields: 'associations' },
+      { fields: AlegraClient.PAYMENT_FIELDS },
       PaymentDetailSchema,
     )
   }

@@ -330,19 +330,22 @@ describe('AlegraClient — /bills y /payments', () => {
     expect(params.get('order_direction')).toBe('DESC')
   })
 
-  it('/payments SIEMPRE pide fields=associations', async () => {
+  it('/payments SIEMPRE pide los campos de asociación', async () => {
     const fetchMock = vi.fn().mockResolvedValue(emptyList())
     vi.stubGlobal('fetch', fetchMock)
 
     await settle(new AlegraClient().listPayments())
 
-    // Without this, Alegra omits `associations` entirely, every payment
-    // classifies as 'unknown', and the standalone-expense figure silently
-    // collapses to zero. It is not optional for anything doing arithmetic.
-    expect(urlOf(fetchMock).searchParams.get('fields')).toBe('associations')
+    // `bills` is the one the expense side depends on: without it every
+    // outgoing payment classifies as 'unknown', the standalone-expense
+    // figure collapses to zero, and the month looks cheaper than it was.
+    const fields = urlOf(fetchMock).searchParams.get('fields')
+    expect(fields).toContain('bills')
+    expect(fields).toContain('categories')
+    expect(fields).toContain('associations')
   })
 
-  it('/payments pide associations también en el detalle', async () => {
+  it('/payments pide los mismos campos en el detalle que en el listado', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       buildResponse({
         json: {
@@ -358,7 +361,11 @@ describe('AlegraClient — /bills y /payments', () => {
 
     await settle(new AlegraClient().getPayment('1'))
 
-    expect(urlOf(fetchMock).searchParams.get('fields')).toBe('associations')
+    // Same constant as the list call — a detail page that classifies a payment
+    // differently from the row you clicked would be its own bug.
+    const fields = urlOf(fetchMock).searchParams.get('fields')
+    expect(fields).toContain('bills')
+    expect(fields).toContain('categories')
   })
 
   it('/payments pasa el filtro type al servidor', async () => {

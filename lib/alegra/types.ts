@@ -572,14 +572,31 @@ export interface ListBillsParams {
 // These are two LENSES on the same expense, never two expenses. The UI shows
 // them as separate, explicitly-labelled figures and NEVER sums them.
 //
-// The one asymmetry worth knowing: a payment whose `associations` point only
-// at a category — with no bill — IS an expense that appears nowhere in
-// /bills (a taxi, a bank fee). That is the only case where cash-side data
-// contains something the accrual side does not.
+// The one asymmetry worth knowing: a payment linked to no document at all IS
+// an expense that appears nowhere in /bills (a taxi, a bank fee). That is the
+// only case where cash-side data contains something the accrual side does not.
 //
-// ⚠️ `associations` is NOT returned by default. The client must request
-// `fields=associations` explicitly, otherwise every payment looks standalone
-// and the distinction above silently collapses.
+// ⚠️⚠️ THE DOCS ARE WRONG ABOUT `associations` — verified against live data.
+//
+// The published reference describes `associations` as an object keyed by
+// document type. It is NOT. Against a real account it comes back as a HUMAN
+// -READABLE STRING:
+//
+//     "associations": "Facturas: FEAD9073"
+//
+// The machine-readable links are SIBLING ARRAYS at the top level of the
+// payment object:
+//
+//     "invoices": [ { id, number, date, amount, total, balance } ]
+//     "bills":    [ ... ]   (same idea, for type: "out")
+//
+// So `associations` is a display label and must never be parsed for logic —
+// its format is a sentence, in Spanish, and nothing stops Alegra rewording
+// it. `classifyPaymentAssociation` reads the arrays instead.
+//
+// Two more corrections from the same live payload:
+//   - the bank account key is `bankAccount`, not `account`
+//   - `currency` is absent entirely on payments in single-currency accounts
 // =============================================================================
 
 export const PAYMENT_TYPE = {
@@ -592,21 +609,36 @@ export const PaymentTypeSchema = z.enum([PAYMENT_TYPE.IN, PAYMENT_TYPE.OUT])
 export type PaymentType = z.infer<typeof PaymentTypeSchema>
 
 /**
- * What a payment settles.
+ * A document a payment is applied to.
  *
- * Alegra keys these by document kind. We keep all three optional because a
- * payment carries only the one that applies — and carries NONE of them when
- * the client forgot to request `fields=associations`, which is exactly why
- * `hasBillAssociation()` in transformers.ts treats "absent" as unknown
- * rather than as "standalone".
+ * Same shape for the `invoices` and `bills` arrays. Only `id` is relied on;
+ * everything else (number, amount, total, balance) passes through for display.
  */
-export const PaymentAssociationsSchema = z.object({
-  invoices: z.array(z.object({ id: z.string() }).passthrough()).optional(),
-  bills: z.array(z.object({ id: z.string() }).passthrough()).optional(),
-  categories: z.array(z.object({ id: z.string() }).passthrough()).optional(),
-}).passthrough().nullable().optional()
+export const PaymentDocumentLinkSchema = z.object({
+  id: z.string(),
+  number: z.union([z.string(), z.number()]).nullable().optional(),
+  amount: safeNumber.optional(),
+}).passthrough()
 
-export type PaymentAssociations = z.infer<typeof PaymentAssociationsSchema>
+export type PaymentDocumentLink = z.infer<typeof PaymentDocumentLinkSchema>
+
+/**
+ * Counterparty on a payment.
+ *
+ * Deliberately NOT `InvoiceClientSchema`: that one requires `identification`
+ * (nullable but present) and names the phone field `phonePrimary`. Live
+ * payment payloads use `phone` and don't guarantee `identification`. Reusing
+ * the invoice schema here is what would make a perfectly valid payment fail
+ * to parse.
+ */
+export const PaymentClientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  identification: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+}).passthrough()
+
+export type PaymentClient = z.infer<typeof PaymentClientSchema>
 
 export const PaymentListItemSchema = z.object({
   id: z.string(),
@@ -618,14 +650,35 @@ export const PaymentListItemSchema = z.object({
   number: safeNumber.nullable().optional(),
   observations: z.string().nullable().optional(),
   anotation: z.string().nullable().optional(),
+  // Absent on payments in single-currency accounts — `.nullish()` already
+  // allows that, and the UI falls back to the company currency.
   currency: InvoiceCurrencySchema,
   /** Counterparty — a client for `in`, a provider for `out`. */
-  client: InvoiceClientSchema.nullable().optional(),
+  client: PaymentClientSchema.nullable().optional(),
+  /** Live payloads use `bankAccount`; the docs say `account`. Accept both. */
+  bankAccount: z.object({
+    id: z.string(),
+    name: z.string(),
+  }).passthrough().nullable().optional(),
   account: z.object({
     id: z.string(),
     name: z.string(),
   }).passthrough().nullable().optional(),
-  associations: PaymentAssociationsSchema,
+
+  // --- What the payment settles -----------------------------------------
+  // These sibling arrays are the machine-readable truth. See the section
+  // header: `associations` is a display string, NOT a structure.
+  invoices: z.array(PaymentDocumentLinkSchema).optional(),
+  bills: z.array(PaymentDocumentLinkSchema).optional(),
+  categories: z.array(PaymentDocumentLinkSchema).optional(),
+
+  /**
+   * Human-readable summary Alegra builds for the UI, e.g.
+   * "Facturas: FEAD9073". Display only — never parse it for logic.
+   * Typed loosely because the docs claim it's an object and live data says
+   * string; accepting both means an API correction won't take the page down.
+   */
+  associations: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
 }).passthrough()
 
 export type PaymentListItem = z.infer<typeof PaymentListItemSchema>

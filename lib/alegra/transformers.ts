@@ -681,31 +681,38 @@ export function sumPayments(payments: PaymentListItem[]): number {
  *   'bill'       → cancels a purchase invoice. ALREADY counted in /bills.
  *                  Adding it to a bills total double-counts.
  *   'invoice'    → collects a sales invoice. Income side, not an expense.
- *   'standalone' → associated only with a category. An expense that exists
- *                  NOWHERE in /bills — the one thing the cash view has that
- *                  the accrual view doesn't.
- *   'unknown'    → `associations` was absent from the response. This is NOT
- *                  the same as 'standalone': it usually means the caller
- *                  forgot `fields=associations`. Treating unknown as
- *                  standalone would invent expenses out of a missing field,
- *                  so callers doing arithmetic must exclude it explicitly.
+ *   'standalone' → tied to no document (or only to a category). An expense
+ *                  that exists NOWHERE in /bills — the one thing the cash
+ *                  view has that the accrual view doesn't.
+ *   'unknown'    → the link arrays were absent from the response entirely.
+ *                  NOT the same as 'standalone': it means we weren't told,
+ *                  not that there's nothing. Treating unknown as standalone
+ *                  would invent expenses out of a missing field, so callers
+ *                  doing arithmetic must exclude it explicitly.
+ *
+ * ⚠️ Reads the SIBLING ARRAYS (`invoices` / `bills` / `categories`), not the
+ * `associations` field. Verified against live data: `associations` is a
+ * display string like "Facturas: FEAD9073", despite what the docs describe.
+ * Parsing that sentence for logic would break the first time Alegra reworded
+ * it — or the first time an account ran in another language.
  */
 export type PaymentAssociationKind = 'bill' | 'invoice' | 'standalone' | 'unknown'
 
-export function classifyPaymentAssociation(
-  payment: Pick<PaymentListItem, 'associations'>,
-): PaymentAssociationKind {
-  const assoc = payment.associations
+type PaymentLinks = Pick<PaymentListItem, 'invoices' | 'bills' | 'categories'>
 
-  // Absent entirely → we simply don't know. See the doc comment above.
-  if (assoc === null || assoc === undefined) return 'unknown'
+export function classifyPaymentAssociation(payment: PaymentLinks): PaymentAssociationKind {
+  const { invoices, bills, categories } = payment
 
-  if (Array.isArray(assoc.bills) && assoc.bills.length > 0) return 'bill'
-  if (Array.isArray(assoc.invoices) && assoc.invoices.length > 0) return 'invoice'
-  if (Array.isArray(assoc.categories) && assoc.categories.length > 0) return 'standalone'
+  // Not one link array present → we weren't told. See the doc comment above.
+  if (invoices === undefined && bills === undefined && categories === undefined) {
+    return 'unknown'
+  }
 
-  // An associations object with no populated arrays means the payment really
-  // isn't tied to a document — treat it as standalone, not unknown.
+  if (Array.isArray(bills) && bills.length > 0) return 'bill'
+  if (Array.isArray(invoices) && invoices.length > 0) return 'invoice'
+
+  // Arrays present but empty (with or without a category) means the payment
+  // genuinely isn't applied to a document — that IS knowing something.
   return 'standalone'
 }
 
@@ -742,10 +749,21 @@ export function getPaymentTypeBadgeClass(type: PaymentType): string {
   return PAYMENT_TYPE_BADGE_CLASS[type] ?? 'bg-slate-100 text-slate-700'
 }
 
-/** Short Spanish description of what a payment settles, for the table. */
+/**
+ * Short Spanish description of what a payment settles, for the table.
+ *
+ * When Alegra's own `associations` label is present it wins — it names the
+ * actual document ("Facturas: FEAD9073"), which is more useful to an operator
+ * than a category. The classification is the fallback, and the only thing
+ * arithmetic is allowed to depend on.
+ */
 export function describePaymentAssociation(
-  payment: Pick<PaymentListItem, 'associations'>,
+  payment: PaymentLinks & Pick<PaymentListItem, 'associations'>,
 ): string {
+  if (typeof payment.associations === 'string' && payment.associations.trim() !== '') {
+    return payment.associations
+  }
+
   switch (classifyPaymentAssociation(payment)) {
     case 'bill':
       return 'Factura de compra'
