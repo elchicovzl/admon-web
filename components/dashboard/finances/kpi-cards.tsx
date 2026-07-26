@@ -32,6 +32,7 @@ import {
   FileText,
   ScrollText,
   Layers,
+  type LucideIcon,
 } from 'lucide-react'
 
 // -----------------------------------------------------------------------------
@@ -46,6 +47,15 @@ export interface FinancesKpis {
   openCount: number
   // V2 — estimates
   estimatesMtd: string
+  /**
+   * True when the estimates walk hit its page cap before covering the month,
+   * i.e. `estimatesMtd` is a FLOOR rather than the real total.
+   *
+   * Surfaced in the UI on purpose: the bug this replaced was a silently short
+   * sum presented as the month's total, and an operator has no way to catch
+   * that by looking at it.
+   */
+  estimatesMtdTruncated?: boolean
   estimatesActive: number
   currencyCode: string
 }
@@ -54,8 +64,19 @@ export interface FinancesKpis {
 // Display component
 // -----------------------------------------------------------------------------
 
+interface KpiItem {
+  label: string
+  value: string
+  description: string
+  icon: LucideIcon
+  accent: string
+  accentBg: string
+  /** Renders the value as a lower bound instead of an exact figure. */
+  warn?: boolean
+}
+
 export function KpiCards({ kpis }: { kpis: FinancesKpis }) {
-  const items = [
+  const items: KpiItem[] = [
     {
       label: 'Facturado mes actual',
       value: kpis.mtdBilled,
@@ -88,17 +109,21 @@ export function KpiCards({ kpis }: { kpis: FinancesKpis }) {
       accent: 'text-violet-600',
       accentBg: 'bg-violet-50 dark:bg-violet-950',
     },
-    // V2 — estimates. estimatesActive is the exact total (from metadata),
-    // not just the first 30. estimatesMtd may underreport on accounts with
-    // >30 cotizaciones/mes — same limitation as the date-range filter on the
-    // /estimates page (see `filterEstimatesByDateRange` for the rationale).
+    // V2 — estimates. Both figures are now exact in the normal case:
+    // estimatesActive comes from the metadata envelope, and estimatesMtd is
+    // summed over a full paginated walk of the month. The only inexact case
+    // is an account busy enough to hit the page cap — and that one announces
+    // itself rather than rounding down in silence.
     {
       label: 'Cotizado mes actual',
       value: kpis.estimatesMtd,
-      description: 'Cotizaciones creadas este mes',
+      description: kpis.estimatesMtdTruncated
+        ? 'Mínimo — hay más cotizaciones este mes de las que se pudieron sumar'
+        : 'Cotizaciones creadas este mes',
       icon: ScrollText,
       accent: 'text-teal-600',
       accentBg: 'bg-teal-50 dark:bg-teal-950',
+      warn: kpis.estimatesMtdTruncated ?? false,
     },
     {
       label: 'Cotizaciones activas',
@@ -112,7 +137,7 @@ export function KpiCards({ kpis }: { kpis: FinancesKpis }) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {items.map(({ label, value, description, icon: Icon, accent, accentBg }) => (
+      {items.map(({ label, value, description, icon: Icon, accent, accentBg, warn }) => (
         <Card key={label}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -123,8 +148,25 @@ export function KpiCards({ kpis }: { kpis: FinancesKpis }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tracking-tight">{value}</div>
-            <CardDescription className="mt-1">{description}</CardDescription>
+            <div className="flex items-baseline gap-1.5">
+              {/* The "≥" is the honest part: it tells the operator at a glance
+                  that the real figure is higher, without them having to read
+                  the description or know about Alegra's pagination limits. */}
+              {warn && (
+                <span
+                  className="text-2xl font-bold tracking-tight text-amber-600"
+                  aria-label="al menos"
+                >
+                  ≥
+                </span>
+              )}
+              <span className="text-2xl font-bold tracking-tight">{value}</span>
+            </div>
+            <CardDescription
+              className={`mt-1 ${warn ? 'text-amber-600 dark:text-amber-500' : ''}`}
+            >
+              {description}
+            </CardDescription>
           </CardContent>
         </Card>
       ))}

@@ -3,15 +3,28 @@
  *
  * Singleton server-only HTTP client that wraps `fetch` with:
  *   - HTTP Basic auth from env (ALEGRA_EMAIL + ALEGRA_TOKEN)
- *   - Rate limit awareness via X-Rate-Limit-* response headers
+ *   - Rate limit awareness via X-Rate-Limit-* response headers, with an
+ *     OPTIMISTIC reservation so concurrent callers don't all sail past the
+ *     same stale `remaining` value (see `acquireSlot`)
+ *   - Automatic retry with backoff on 429 / 5xx / transient network errors
+ *   - Single-flight de-duplication: N concurrent callers asking for the same
+ *     URL produce ONE upstream request (see `inFlight`)
  *   - Typed errors (Auth / RateLimit / Validation / Generic)
  *   - Zod validation on every response (catches upstream API drift)
- *   - 10s timeout per request (no hanging)
- *   - `cache: 'no-store'` (always fresh data, never Next.js-cached)
+ *   - 10s timeout per attempt (no hanging)
+ *   - `cache: 'no-store'` — this layer NEVER caches. Caching is a separate
+ *     concern handled by `lib/alegra/cache.ts` (unstable_cache + tags), so
+ *     the transport stays dumb and the TTL policy lives in one place.
  *
  * MUST only be imported from Server Components or Server Actions.
  * Importing from a Client Component will fail at build time because of
  * the server-only env var dependency.
+ *
+ * ⚠️ Single-replica assumption: the rate-limit state lives in process memory.
+ * That is correct for the current Dokploy deploy (one container, one Node
+ * process). If this ever scales horizontally, each replica will believe it
+ * owns the full 150 req/min budget and the real limit will be exceeded —
+ * at that point the state must move to a shared store (Postgres/Redis).
  */
 
 import { z } from 'zod'
@@ -40,6 +53,20 @@ const BASE_URL = 'https://api.alegra.com/api/v1'
 const DEFAULT_TIMEOUT_MS = 10_000
 const RATE_LIMIT_SAFETY_THRESHOLD = 5
 const RATE_LIMIT_MAX_WAIT_MS = 60_000
+
+/**
+ * Alegra's documented quota is 150 requests/minute/user. Used as the
+ * optimistic starting budget and as the fallback wait window when we need
+ * to back off before ever having seen an `X-Rate-Limit-Reset` header.
+ */
+const RATE_LIMIT_BUDGET = 150
+const RATE_LIMIT_WINDOW_MS = 60_000
+
+/** Retry policy — applies to 429, 5xx and transient network failures. */
+const MAX_RETRIES = 2
+const RETRY_BASE_DELAY_MS = 500
+const RETRY_MAX_DELAY_MS = 8_000
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504])
 
 interface RateLimitState {
   remaining: number
@@ -71,7 +98,24 @@ export function getAlegraClient(): AlegraClient {
 
 export class AlegraClient {
   private readonly authHeader: string
-  private rateLimit: RateLimitState = { remaining: 150, resetAt: 0 }
+  private rateLimit: RateLimitState = { remaining: RATE_LIMIT_BUDGET, resetAt: 0 }
+
+  /**
+   * In-flight request de-duplication ("single flight").
+   *
+   * Keyed by the fully-built URL. When two Server Components render
+   * concurrently and both ask for `/company`, the second one awaits the
+   * first one's promise instead of opening a second socket to Alegra.
+   *
+   * This matters most on a COLD cache: without it, the six parallel calls
+   * on the finances home page could each trigger their own `/company`
+   * fetch. With it, that collapses to one.
+   *
+   * ⚠️ Callers share the SAME resolved object reference. Nothing in this
+   * codebase mutates Alegra responses (they flow straight into render), so
+   * this is safe — but if you ever need to mutate one, clone it first.
+   */
+  private readonly inFlight = new Map<string, Promise<unknown>>()
 
   constructor() {
     const email = process.env.ALEGRA_EMAIL
@@ -119,16 +163,37 @@ export class AlegraClient {
   // Differences vs /invoices (see mem: finances/v2-estimates-api-shape):
   //   - No `status` parameter — estimates don't have a status field
   //   - No date_after/date_before — only exact `date` filter; range filtering
-  //     is done client-side in `parseEstimateFilters`
+  //     is done by walking pages in `lib/alegra/estimates-range.ts`
   //   - Default order_direction on the API is ASC; we force DESC for UI parity
   //     with the invoices list (newest first)
+  //   - Default order_field on the API is `id` (creation order) — we force
+  //     `date`. See the note on `listEstimates` below; this one has teeth.
   // ---------------------------------------------------------------------------
 
-  /** List estimates with optional filters. */
+  /**
+   * List estimates with optional filters.
+   *
+   * Both ordering defaults are forced here rather than left to the API:
+   *
+   *   order_direction: 'DESC'  — newest first, matching the invoices list.
+   *   order_field:     'date'  — sort by the DOCUMENT date, not by id.
+   *
+   * That second one is not cosmetic. The API defaults to ordering by `id`,
+   * i.e. creation order, and a cotización can be created today carrying last
+   * month's date. Every caller that reasons about "the most recent N" or
+   * stops paginating once it sees an out-of-range date is silently wrong
+   * under an id-ordered list — which is exactly how the "Cotizado mes"
+   * KPI ended up summing the wrong 30 documents.
+   *
+   * Forcing it at the transport closes the whole class of bug instead of
+   * patching each call site. `...params` still spreads last, so a caller
+   * with a genuine reason to sort differently can override.
+   */
   async listEstimates(params: ListEstimatesParams = {}): Promise<EstimateListResponse> {
     const normalized: ListEstimatesParams = {
       metadata: true,
-      order_direction: 'DESC', // override API default (ASC) for UI parity with invoices
+      order_field: 'date',
+      order_direction: 'DESC',
       ...params,
     }
     return this.request('/estimates', normalized, EstimateListResponseSchema)
@@ -160,30 +225,107 @@ export class AlegraClient {
     // declared return type at every call site.
     schema: S,
   ): Promise<z.infer<S>> {
-    await this.waitForRateLimit()
-
     const url = this.buildUrl(path, params)
-    const init: RequestInit = {
-      headers: { Authorization: this.authHeader },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-    }
+    const key = url.toString()
 
-    let res: Response
-    try {
-      res = await fetch(url.toString(), init)
-    } catch (err) {
-      // Network error, DNS failure, timeout, etc.
-      const message = err instanceof Error ? err.message : 'fetch failed'
-      throw new AlegraError('NETWORK_ERROR', `Alegra request failed: ${message}`, { url: url.toString() })
-    }
+    // ---- Single flight -------------------------------------------------
+    // If an identical request is already running, ride along with it.
+    const existing = this.inFlight.get(key)
+    if (existing) return existing as Promise<z.infer<S>>
 
-    this.updateRateLimitFromHeaders(res.headers)
+    const promise = this.executeWithRetry(path, key, schema)
+      // Always evict, success or failure — a failed request must not
+      // poison the key for subsequent callers.
+      .finally(() => {
+        this.inFlight.delete(key)
+      })
 
-    if (!res.ok) {
+    this.inFlight.set(key, promise)
+    return promise
+  }
+
+  /**
+   * Perform the request, retrying on 429 / 5xx / transient network errors.
+   *
+   * Non-retryable failures (401, 404, other 4xx, Zod validation, non-JSON
+   * bodies) throw on the first attempt — retrying them just burns quota
+   * against a deterministic failure.
+   */
+  private async executeWithRetry<S extends z.ZodTypeAny>(
+    path: string,
+    key: string,
+    schema: S,
+  ): Promise<z.infer<S>> {
+    let lastError: unknown
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      await this.acquireSlot()
+
+      let res: Response
+      try {
+        res = await fetch(key, {
+          headers: { Authorization: this.authHeader },
+          cache: 'no-store',
+          // A fresh signal PER ATTEMPT — an AbortSignal is one-shot, reusing
+          // one across retries would abort every attempt after the first.
+          signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+        })
+      } catch (err) {
+        const isTimeout = err instanceof Error && err.name === 'TimeoutError'
+        const message = err instanceof Error ? err.message : 'fetch failed'
+        lastError = new AlegraError(
+          isTimeout ? 'TIMEOUT' : 'NETWORK_ERROR',
+          `Alegra request failed: ${message}`,
+          { url: key },
+        )
+
+        // Timeouts are NOT retried: each attempt already burned the full 10s
+        // budget, and three of them would leave the user staring at a
+        // skeleton for 30 seconds. Fail fast and let the boundary show.
+        if (isTimeout || attempt === MAX_RETRIES) throw lastError
+
+        await sleep(backoffDelay(attempt))
+        continue
+      }
+
+      this.updateRateLimitFromHeaders(res.headers)
+
+      if (res.ok) {
+        return this.parseResponse(path, res, schema)
+      }
+
+      // ---- Error path ----------------------------------------------------
+      if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_RETRIES) {
+        const waitMs =
+          res.status === 429
+            ? this.retryAfterMs(res.headers)
+            : backoffDelay(attempt)
+
+        // Only retry a 429 if the wait is bounded — otherwise surface it so
+        // the user gets a real message instead of a request hanging for
+        // minutes behind a skeleton.
+        if (waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
+          console.warn(
+            `[Alegra] ${res.status} en ${path} — reintento ${attempt + 1}/${MAX_RETRIES} en ${Math.ceil(waitMs / 1000)}s`,
+          )
+          await sleep(waitMs)
+          continue
+        }
+      }
+
       await this.handleHttpError(res)
     }
 
+    // Unreachable: the loop either returns or throws. Kept for exhaustiveness.
+    throw lastError ?? new AlegraError('UNKNOWN', 'Alegra request failed')
+  }
+
+  /** Parse + Zod-validate a successful response body. */
+  private async parseResponse<S extends z.ZodTypeAny>(
+    path: string,
+    res: Response,
+    schema: S,
+  ): Promise<z.infer<S>> {
     let json: unknown
     try {
       json = await res.json()
@@ -247,29 +389,75 @@ export class AlegraClient {
     }
   }
 
-  private async waitForRateLimit(): Promise<void> {
-    if (this.rateLimit.remaining > RATE_LIMIT_SAFETY_THRESHOLD) return
+  /**
+   * Gate a request on the local rate-limit budget, then OPTIMISTICALLY
+   * reserve a slot.
+   *
+   * Why the reservation matters: `remaining` is only refreshed when a
+   * response comes back. Without decrementing up-front, twenty concurrent
+   * callers all read the same pre-flight value, all conclude they have
+   * budget, and all fire — the gate never engages under exactly the load
+   * it exists to protect against. Decrementing here means the Nth
+   * concurrent caller sees the budget the first N-1 already committed to
+   * spending. `updateRateLimitFromHeaders` then corrects the estimate with
+   * the server's real number.
+   */
+  private async acquireSlot(): Promise<void> {
+    if (this.rateLimit.remaining <= RATE_LIMIT_SAFETY_THRESHOLD) {
+      // If we've never seen a reset header, fall back to a full window —
+      // the previous behaviour (don't block at all) meant the very burst
+      // that exhausted the budget sailed straight through.
+      const untilReset = this.rateLimit.resetAt - Date.now()
+      const sleepMs = untilReset > 0 ? untilReset : RATE_LIMIT_WINDOW_MS
 
-    const sleepMs = Math.max(0, this.rateLimit.resetAt - Date.now())
-    if (sleepMs === 0) {
-      // resetAt hasn't been set yet (first request). Don't block.
-      return
-    }
-    if (sleepMs > RATE_LIMIT_MAX_WAIT_MS) {
-      // Would wait too long. Let the request go and surface a 429 if it hits.
-      return
+      if (sleepMs <= RATE_LIMIT_MAX_WAIT_MS) {
+        console.warn(
+          `[Alegra] rate limit bajo (${this.rateLimit.remaining} restantes), esperando ${Math.ceil(sleepMs / 1000)}s`,
+        )
+        await sleep(sleepMs)
+        // Window elapsed — assume the budget refilled. The next response's
+        // headers will correct us if Alegra disagrees.
+        this.rateLimit.remaining = RATE_LIMIT_BUDGET
+        this.rateLimit.resetAt = 0
+      }
+      // If the wait would exceed the cap we fall through deliberately: let
+      // the request go and surface a real 429 rather than stall for minutes.
     }
 
-    console.warn(
-      `[Alegra] rate limit bajo (${this.rateLimit.remaining} restantes), esperando ${Math.ceil(sleepMs / 1000)}s`,
-    )
-    await new Promise<void>((resolve) => setTimeout(resolve, sleepMs))
+    this.rateLimit.remaining -= 1
+  }
+
+  /**
+   * How long to wait before retrying a 429.
+   *
+   * Prefers the standard `Retry-After` header (seconds), falls back to
+   * Alegra's `X-Rate-Limit-Reset`, and finally to a full window. Always
+   * returns at least 1s so we never hot-loop against a throttling server.
+   */
+  private retryAfterMs(headers: Headers): number {
+    const retryAfter = Number(headers.get('Retry-After'))
+    if (Number.isFinite(retryAfter) && retryAfter > 0) {
+      return Math.max(1_000, retryAfter * 1_000)
+    }
+
+    const untilReset = this.rateLimit.resetAt - Date.now()
+    if (untilReset > 0) return Math.max(1_000, untilReset)
+
+    return RATE_LIMIT_WINDOW_MS
   }
 
   private async handleHttpError(res: Response): Promise<never> {
+    // The `catch` below only fires when res.json() REJECTS. A body that is
+    // empty or the literal JSON `null` RESOLVES — to null — and reading
+    // `.error` off it throws a TypeError that replaces the AlegraError we
+    // were about to build. The boundary then classifies a clean 404 as a
+    // generic "error de conexión". Hence the explicit shape guard.
     let body: { code?: number; error?: string } = {}
     try {
-      body = await res.json()
+      const parsed: unknown = await res.json()
+      if (parsed !== null && typeof parsed === 'object') {
+        body = parsed as { code?: number; error?: string }
+      }
     } catch {
       // body might not be JSON; ignore
     }
@@ -298,6 +486,28 @@ export class AlegraClient {
   getRateLimitState(): Readonly<RateLimitState> {
     return { ...this.rateLimit }
   }
+}
+
+// -----------------------------------------------------------------------------
+// Retry helpers (exported for unit testing)
+// -----------------------------------------------------------------------------
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Exponential backoff with full jitter: `random(0, base * 2^attempt)`,
+ * capped at RETRY_MAX_DELAY_MS.
+ *
+ * The jitter is not decoration. Without it, N callers that hit the same 5xx
+ * at the same moment all sleep the same duration and retry in the same
+ * instant — a thundering herd that reproduces the overload it was meant to
+ * relieve. Randomizing spreads the retries across the window.
+ */
+export function backoffDelay(attempt: number): number {
+  const ceiling = Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS)
+  return Math.random() * ceiling
 }
 
 // -----------------------------------------------------------------------------

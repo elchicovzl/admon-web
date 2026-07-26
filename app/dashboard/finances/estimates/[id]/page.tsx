@@ -22,7 +22,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { getAlegraClient } from '@/lib/alegra/client'
+import { getCachedCompany, getCachedEstimate } from '@/lib/alegra/cache'
 import { EstimateDetailHeader } from '@/components/dashboard/finances/estimate-detail/header'
 import { ClientCard } from '@/components/dashboard/finances/shared/client-card'
 import { EstimateTotalsCard } from '@/components/dashboard/finances/estimate-detail/totals-card'
@@ -62,11 +62,9 @@ export default async function EstimateDetailPage({ params }: PageProps) {
 }
 
 async function EstimateDetailAsync({ id }: { id: string }) {
-  const client = getAlegraClient()
-
   const [estimate, company] = await Promise.all([
-    client.getEstimate(id),
-    client.getCompany(),
+    getCachedEstimate(id),
+    getCachedCompany(),
   ])
 
   // Defensive: should never happen (empty id is rejected by the client).

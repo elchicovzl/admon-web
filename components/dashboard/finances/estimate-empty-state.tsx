@@ -1,14 +1,14 @@
 /**
  * Empty state shown when the estimate list has zero results — either the
- * Alegra company genuinely has no estimates, the active date-range filter
- * excluded everything from the fetched page, or the client name search
- * didn't match.
+ * Alegra company genuinely has no estimates, the active date range matched
+ * nothing, or the client name search didn't match.
  *
- * Note: estimates can be empty both because the company never issued one
- * and because the client-side date-range filter (see `filterEstimatesByDateRange`)
- * excluded everything from the fetched page. We distinguish by checking
- * `hasActiveFilters`: if no filters, the company has no estimates yet; if
- * filters are set, the filters are too restrictive.
+ * We distinguish by checking `hasActiveFilters`: if no filters, the company
+ * has no estimates yet; if filters are set, the filters are too restrictive.
+ * With a date filter active the range is now walked in full
+ * (`lib/alegra/estimates-range.ts`), so "zero results" means the range really
+ * is empty — not that the matches fell outside the one page we happened to
+ * fetch, which is what it used to mean.
  */
 
 import Link from 'next/link'

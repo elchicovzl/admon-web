@@ -8,8 +8,11 @@
  *
  * IMPORTANT — NO status checkboxes here. Estimates don't have a status field
  * on the Alegra API (see `EstimateListItemSchema`). Only date range + client
- * name filters, which is what `/estimates` supports natively (date range is
- * applied client-side after fetch — see `filterEstimatesByDateRange`).
+ * name filters.
+ *
+ * `client_name` is a native `/estimates` filter. The date range is NOT —
+ * activating it switches the page to a paginated walk of the range
+ * (`lib/alegra/estimates-range.ts`) instead of one server-paginated page.
  *
  * State is held in form fields (uncontrolled inputs). The submit handler
  * builds a URLSearchParams from FormData and navigates.
