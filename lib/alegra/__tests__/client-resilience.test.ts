@@ -307,6 +307,89 @@ describe('AlegraClient — orden de /estimates', () => {
 })
 
 // -----------------------------------------------------------------------------
+// Bills & payments request shape
+// -----------------------------------------------------------------------------
+
+describe('AlegraClient — /bills y /payments', () => {
+  function urlOf(fetchMock: ReturnType<typeof vi.fn>): URL {
+    return new URL(fetchMock.mock.calls[0]![0] as string)
+  }
+
+  function emptyList() {
+    return buildResponse({ json: { metadata: { total: 0 }, data: [] } })
+  }
+
+  it('/bills fuerza order_field=date y DESC', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyList())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await settle(new AlegraClient().listBills())
+
+    const params = urlOf(fetchMock).searchParams
+    expect(params.get('order_field')).toBe('date')
+    expect(params.get('order_direction')).toBe('DESC')
+  })
+
+  it('/payments SIEMPRE pide los campos de asociación', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyList())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await settle(new AlegraClient().listPayments())
+
+    // `bills` is the one the expense side depends on: without it every
+    // outgoing payment classifies as 'unknown', the standalone-expense
+    // figure collapses to zero, and the month looks cheaper than it was.
+    const fields = urlOf(fetchMock).searchParams.get('fields')
+    expect(fields).toContain('bills')
+    expect(fields).toContain('categories')
+    expect(fields).toContain('associations')
+  })
+
+  it('/payments pide los mismos campos en el detalle que en el listado', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      buildResponse({
+        json: {
+          id: '1',
+          date: '2026-07-10',
+          amount: 100,
+          type: 'out',
+          currency: { code: 'COP', symbol: '$' },
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await settle(new AlegraClient().getPayment('1'))
+
+    // Same constant as the list call — a detail page that classifies a payment
+    // differently from the row you clicked would be its own bug.
+    const fields = urlOf(fetchMock).searchParams.get('fields')
+    expect(fields).toContain('bills')
+    expect(fields).toContain('categories')
+  })
+
+  it('/payments pasa el filtro type al servidor', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(emptyList())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await settle(new AlegraClient().listPayments({ type: 'out' }))
+
+    expect(urlOf(fetchMock).searchParams.get('type')).toBe('out')
+  })
+
+  it('rechaza ids vacíos sin pegarle a la API', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = new AlegraClient()
+    await expect(client.getBill('')).rejects.toThrow(/bill id/)
+    await expect(client.getPayment('')).rejects.toThrow(/payment id/)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+// -----------------------------------------------------------------------------
 // Rate limit
 // -----------------------------------------------------------------------------
 

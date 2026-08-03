@@ -35,18 +35,28 @@ import {
   ValidationError,
 } from './errors'
 import {
+  BillDetailSchema,
+  BillListResponseSchema,
   CompanySchema,
   EstimateDetailSchema,
   EstimateListResponseSchema,
   InvoiceDetailSchema,
   InvoiceListResponseSchema,
+  PaymentDetailSchema,
+  PaymentListResponseSchema,
+  type BillDetail,
+  type BillListResponse,
   type Company,
   type EstimateDetail,
   type EstimateListResponse,
   type InvoiceDetail,
   type InvoiceListResponse,
+  type ListBillsParams,
   type ListEstimatesParams,
   type ListInvoicesParams,
+  type ListPaymentsParams,
+  type PaymentDetail,
+  type PaymentListResponse,
 } from './types'
 
 const BASE_URL = 'https://api.alegra.com/api/v1'
@@ -205,6 +215,82 @@ export class AlegraClient {
       throw new ValidationError('estimate id is required', { id })
     }
     return this.request(`/estimates/${encodeURIComponent(id)}`, undefined, EstimateDetailSchema)
+  }
+
+  // ---------------------------------------------------------------------------
+  // V3 — Bills (facturas de compra) — EGRESOS
+  //
+  // Same ordering discipline as /estimates: `order_field: 'date'` is forced
+  // because the API defaults to id (creation order) and the date-range walk
+  // stops early on the first out-of-range date.
+  //
+  // Like /estimates, /bills has NO date_after / date_before — only an exact
+  // `date`. Range queries go through `lib/alegra/date-range-walk.ts`.
+  // ---------------------------------------------------------------------------
+
+  /** List purchase invoices (bills) with optional filters. */
+  async listBills(params: ListBillsParams = {}): Promise<BillListResponse> {
+    const normalized: ListBillsParams = {
+      metadata: true,
+      order_field: 'date',
+      order_direction: 'DESC',
+      ...params,
+    }
+    return this.request('/bills', normalized, BillListResponseSchema)
+  }
+
+  /** Get full bill detail by id. */
+  async getBill(id: string): Promise<BillDetail> {
+    if (!id || typeof id !== 'string') {
+      throw new ValidationError('bill id is required', { id })
+    }
+    return this.request(`/bills/${encodeURIComponent(id)}`, undefined, BillDetailSchema)
+  }
+
+  // ---------------------------------------------------------------------------
+  // V3 — Payments (pagos)
+  //
+  // Two non-obvious defaults are forced here:
+  //
+  //   order_field: 'date'  — same rationale as bills/estimates.
+  //
+  //   fields: 'associations,bills,categories' — the link arrays are what
+  //     `classifyPaymentAssociation` reads to tell "this settles a bill we
+  //     already counted in /bills" from "this is an expense that exists
+  //     nowhere else". Get that wrong and the month's expenses either double
+  //     or lose their uninvoiced half. `invoices` comes back by default;
+  //     `bills` and `categories` are opt-in fields, and `bills` is precisely
+  //     the one the expense side depends on.
+  //
+  // ⚠️ /payments has NO date filter at all — not even exact `date`. It is the
+  // most restricted list endpoint of the four; every date-scoped read walks.
+  // ---------------------------------------------------------------------------
+
+  /** Extra fields required for expense classification. See the note above. */
+  private static readonly PAYMENT_FIELDS = 'associations,bills,categories'
+
+  /** List payments (both directions unless `type` narrows it). */
+  async listPayments(params: ListPaymentsParams = {}): Promise<PaymentListResponse> {
+    const normalized: ListPaymentsParams = {
+      metadata: true,
+      order_field: 'date',
+      order_direction: 'DESC',
+      fields: AlegraClient.PAYMENT_FIELDS,
+      ...params,
+    }
+    return this.request('/payments', normalized, PaymentListResponseSchema)
+  }
+
+  /** Get a single payment by id. */
+  async getPayment(id: string): Promise<PaymentDetail> {
+    if (!id || typeof id !== 'string') {
+      throw new ValidationError('payment id is required', { id })
+    }
+    return this.request(
+      `/payments/${encodeURIComponent(id)}`,
+      { fields: AlegraClient.PAYMENT_FIELDS },
+      PaymentDetailSchema,
+    )
   }
 
   // ---------------------------------------------------------------------------

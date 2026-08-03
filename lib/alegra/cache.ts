@@ -35,17 +35,27 @@
 import { unstable_cache } from 'next/cache'
 import { getAlegraClient } from './client'
 import {
-  collectEstimatesInRange,
-  type EstimatesRangeResult,
-} from './estimates-range'
+  collectByDateRange,
+  type DateRangeResult,
+} from './date-range-walk'
 import type {
+  BillDetail,
+  BillListItem,
+  BillListResponse,
   Company,
   EstimateDetail,
+  EstimateListItem,
   EstimateListResponse,
   InvoiceDetail,
   InvoiceListResponse,
+  ListBillsParams,
   ListEstimatesParams,
   ListInvoicesParams,
+  ListPaymentsParams,
+  PaymentDetail,
+  PaymentListItem,
+  PaymentListResponse,
+  PaymentType,
 } from './types'
 
 // -----------------------------------------------------------------------------
@@ -63,6 +73,8 @@ export const ALEGRA_TAGS = {
   company: 'alegra:company',
   invoices: 'alegra:invoices',
   estimates: 'alegra:estimates',
+  bills: 'alegra:bills',
+  payments: 'alegra:payments',
 } as const
 
 /** Revalidation windows in SECONDS (the unit `unstable_cache` expects). */
@@ -196,19 +208,19 @@ export interface EstimatesRangeQuery {
 export function getCachedEstimatesInRange(
   { dateFrom, dateTo, clientName = null }: EstimatesRangeQuery,
   ttl: number = ALEGRA_TTL.kpis,
-): Promise<EstimatesRangeResult> {
+): Promise<DateRangeResult<EstimateListItem>> {
   const key = stableKey({ from: dateFrom, to: dateTo, client: clientName })
 
   return unstable_cache(
     async () =>
-      collectEstimatesInRange(
+      collectByDateRange(
         (start, limit) =>
           getAlegraClient().listEstimates({
             start,
             limit,
             client_name: clientName ?? undefined,
           }),
-        { dateFrom, dateTo },
+        { dateFrom, dateTo, label: 'cotizaciones' },
       ),
     ['alegra', 'estimates', 'range', key, String(ttl)],
     {
@@ -226,6 +238,155 @@ export function getCachedEstimate(id: string): Promise<EstimateDetail> {
     {
       revalidate: ALEGRA_TTL.detail,
       tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.estimates],
+    },
+  )()
+}
+
+// -----------------------------------------------------------------------------
+// Bills (facturas de compra) — EGRESOS
+// -----------------------------------------------------------------------------
+
+/** Bill list, server-paginated. Use when NO date range is active. */
+export function getCachedBills(
+  params: ListBillsParams,
+  ttl: number = ALEGRA_TTL.list,
+): Promise<BillListResponse> {
+  const key = stableKey(params)
+
+  return unstable_cache(
+    async () => getAlegraClient().listBills(params),
+    ['alegra', 'bills', 'list', key, String(ttl)],
+    {
+      revalidate: ttl,
+      tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.bills],
+    },
+  )()
+}
+
+/** Query accepted by `getCachedBillsInRange`. */
+export interface BillsRangeQuery {
+  dateFrom: string | null
+  dateTo: string | null
+  /** Substring match handed to Alegra's `provider_name` (server-side). */
+  providerName?: string | null
+  status?: string | null
+}
+
+/**
+ * Every bill whose `date` falls in [dateFrom, dateTo].
+ *
+ * /bills supports only an exact `date`, so a range needs the walk — same
+ * situation as /estimates. `provider_name` and `status` ARE real server-side
+ * filters, so passing them narrows the walk rather than widening it.
+ */
+export function getCachedBillsInRange(
+  { dateFrom, dateTo, providerName = null, status = null }: BillsRangeQuery,
+  ttl: number = ALEGRA_TTL.kpis,
+): Promise<DateRangeResult<BillListItem>> {
+  const key = stableKey({ from: dateFrom, to: dateTo, provider: providerName, status })
+
+  return unstable_cache(
+    async () =>
+      collectByDateRange(
+        (start, limit) =>
+          getAlegraClient().listBills({
+            start,
+            limit,
+            provider_name: providerName ?? undefined,
+            status: status ?? undefined,
+          }),
+        { dateFrom, dateTo, label: 'facturas de compra' },
+      ),
+    ['alegra', 'bills', 'range', key, String(ttl)],
+    {
+      revalidate: ttl,
+      tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.bills],
+    },
+  )()
+}
+
+/** Single bill detail. */
+export function getCachedBill(id: string): Promise<BillDetail> {
+  return unstable_cache(
+    async () => getAlegraClient().getBill(id),
+    ['alegra', 'bills', 'detail', id],
+    {
+      revalidate: ALEGRA_TTL.detail,
+      tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.bills],
+    },
+  )()
+}
+
+// -----------------------------------------------------------------------------
+// Payments (pagos)
+// -----------------------------------------------------------------------------
+
+/** Payment list, server-paginated. Use when NO date range is active. */
+export function getCachedPayments(
+  params: ListPaymentsParams,
+  ttl: number = ALEGRA_TTL.list,
+): Promise<PaymentListResponse> {
+  const key = stableKey(params)
+
+  return unstable_cache(
+    async () => getAlegraClient().listPayments(params),
+    ['alegra', 'payments', 'list', key, String(ttl)],
+    {
+      revalidate: ttl,
+      tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.payments],
+    },
+  )()
+}
+
+/** Query accepted by `getCachedPaymentsInRange`. */
+export interface PaymentsRangeQuery {
+  dateFrom: string | null
+  dateTo: string | null
+  /** `in` (cobros) or `out` (pagos). Omit for both. */
+  type?: PaymentType | null
+}
+
+/**
+ * Every payment whose `date` falls in [dateFrom, dateTo].
+ *
+ * /payments has NO date filter whatsoever, so the walk is the ONLY way to
+ * scope by date here — there is no single-page shortcut to fall back on.
+ * `type` is a real server-side filter and narrows the walk substantially,
+ * which is why the expense KPI always passes `type: 'out'`.
+ */
+export function getCachedPaymentsInRange(
+  { dateFrom, dateTo, type = null }: PaymentsRangeQuery,
+  ttl: number = ALEGRA_TTL.kpis,
+): Promise<DateRangeResult<PaymentListItem>> {
+  const key = stableKey({ from: dateFrom, to: dateTo, type })
+
+  return unstable_cache(
+    async () =>
+      collectByDateRange(
+        (start, limit) =>
+          getAlegraClient().listPayments({
+            start,
+            limit,
+            type: type ?? undefined,
+          }),
+        { dateFrom, dateTo, label: 'pagos' },
+      ),
+    ['alegra', 'payments', 'range', key, String(ttl)],
+    {
+      revalidate: ttl,
+      tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.payments],
+    },
+  )()
+}
+
+/** Single payment detail. */
+export function getCachedPayment(id: string): Promise<PaymentDetail> {
+  return unstable_cache(
+    async () => getAlegraClient().getPayment(id),
+    ['alegra', 'payments', 'detail', id],
+    {
+      revalidate: ALEGRA_TTL.detail,
+      tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.payments],
     },
   )()
 }

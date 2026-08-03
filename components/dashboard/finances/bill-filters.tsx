@@ -1,21 +1,14 @@
 'use client'
 
 /**
- * Filters for the estimates list page.
+ * Filters for the purchase invoices list.
  *
- * URL-driven: changes are pushed to the URL via `router.push()`, which triggers
- * a re-render of the Server Component that re-fetches estimates from Alegra.
+ * URL-driven: changes are pushed to the URL, which re-renders the Server
+ * Component that re-reads from Alegra.
  *
- * IMPORTANT — NO status checkboxes here. Estimates don't have a status field
- * on the Alegra API (see `EstimateListItemSchema`). Only date range + client
- * name filters.
- *
- * `client_name` is a native `/estimates` filter. The date range is NOT —
- * activating it switches the page to a paginated walk of the range
- * (`lib/alegra/estimates-range.ts`) instead of one server-paginated page.
- *
- * State is held in form fields (uncontrolled inputs). The submit handler
- * builds a URLSearchParams from FormData and navigates.
+ * `status` and `provider_name` are native /bills filters. The date range is
+ * NOT — activating it switches the page to a paginated walk of the range
+ * (`lib/alegra/date-range-walk.ts`) instead of one server-paginated page.
  */
 
 import { useTransition } from 'react'
@@ -24,14 +17,19 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Search, X, Loader2 } from 'lucide-react'
-import type { EstimateFilters } from '@/lib/alegra/transformers'
+import type { BillFilters } from '@/lib/alegra/transformers'
+import { BILL_STATUS_LABELS } from '@/lib/alegra/transformers'
+import type { BillStatus } from '@/lib/alegra/types'
 
-interface EstimateFiltersBarProps {
-  initial: EstimateFilters
+const STATUSES: BillStatus[] = ['open', 'closed', 'void']
+
+interface BillFiltersBarProps {
+  initial: BillFilters
 }
 
-export function EstimateFiltersBar({ initial }: EstimateFiltersBarProps) {
+export function BillFiltersBar({ initial }: BillFiltersBarProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -39,23 +37,28 @@ export function EstimateFiltersBar({ initial }: EstimateFiltersBarProps) {
     const fd = new FormData(form)
     const params = new URLSearchParams()
 
+    for (const status of fd.getAll('status')) {
+      const s = status.toString().trim()
+      if (s) params.append('status', s)
+    }
+
     const dateFrom = fd.get('date_from')?.toString().trim()
     if (dateFrom) params.set('date_from', dateFrom)
 
     const dateTo = fd.get('date_to')?.toString().trim()
     if (dateTo) params.set('date_to', dateTo)
 
-    const clientName = fd.get('client_name')?.toString().trim()
-    if (clientName) params.set('client_name', clientName)
+    const providerName = fd.get('provider_name')?.toString().trim()
+    if (providerName) params.set('provider_name', providerName)
 
-    // page is reset on every filter change
+    // page intentionally omitted — any filter change resets to page 1.
     const s = params.toString()
     return s.length > 0 ? `?${s}` : ''
   }
 
   function navigate(search: string) {
     startTransition(() => {
-      router.push(`/dashboard/finances/estimates${search}`)
+      router.push(`/dashboard/finances/bills${search}`)
     })
   }
 
@@ -65,23 +68,23 @@ export function EstimateFiltersBar({ initial }: EstimateFiltersBarProps) {
   }
 
   function onAutoSubmitChange(e: React.FormEvent<HTMLFormElement>) {
-    // Auto-submit when the change comes from a date input (instant feedback).
-    // Search input keeps explicit submit so users can type the full name first.
+    // Dates and checkboxes apply instantly; the free-text search waits for
+    // an explicit submit so the user can finish typing a provider name.
     const target = e.target as HTMLElement
-    if (target instanceof HTMLInputElement && target.type === 'date') {
+    const isDate = target instanceof HTMLInputElement && target.type === 'date'
+    const isCheckbox = target.getAttribute('role') === 'checkbox'
+
+    if (isDate || isCheckbox) {
       e.preventDefault()
       navigate(buildSearchString(e.currentTarget))
     }
   }
 
-  function clearFilters() {
-    navigate('')
-  }
-
   const activeCount =
+    initial.status.length +
     (initial.dateFrom ? 1 : 0) +
     (initial.dateTo ? 1 : 0) +
-    (initial.clientName ? 1 : 0)
+    (initial.providerName ? 1 : 0)
 
   return (
     <form
@@ -89,22 +92,41 @@ export function EstimateFiltersBar({ initial }: EstimateFiltersBarProps) {
       onChange={onAutoSubmitChange}
       className="space-y-4 rounded-lg border bg-card p-4"
     >
-      {/* Row 1: client search (no status checkboxes — estimates have no status) */}
+      {/* Row 1: provider search + status */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2 sm:w-72">
-          <Label htmlFor="client_name" className="text-xs uppercase tracking-wide text-muted-foreground">
-            Cliente
+          <Label
+            htmlFor="provider_name"
+            className="text-xs uppercase tracking-wide text-muted-foreground"
+          >
+            Proveedor
           </Label>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              id="client_name"
-              name="client_name"
+              id="provider_name"
+              name="provider_name"
               type="search"
               placeholder="Buscar por nombre…"
-              defaultValue={initial.clientName ?? ''}
+              defaultValue={initial.providerName ?? ''}
               className="pl-8"
             />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Estado</Label>
+          <div className="flex flex-wrap gap-3">
+            {STATUSES.map((status) => (
+              <label key={status} className="flex items-center gap-1.5 text-sm">
+                <Checkbox
+                  name="status"
+                  value={status}
+                  defaultChecked={initial.status.includes(status)}
+                />
+                <span>{BILL_STATUS_LABELS[status]}</span>
+              </label>
+            ))}
           </div>
         </div>
 
@@ -113,7 +135,7 @@ export function EstimateFiltersBar({ initial }: EstimateFiltersBarProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={clearFilters}
+            onClick={() => navigate('')}
             className="h-7 gap-1 text-muted-foreground hover:text-foreground"
           >
             <X className="h-3 w-3" />

@@ -3,12 +3,13 @@
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ArrowLeft, ClipboardList, FileText, Download } from 'lucide-react'
+import { ArrowLeft, ClipboardList, FileText, Download, StickyNote } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SubProcessTypeLabels } from '@/lib/types/affiliation.types'
+import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-section'
 import { ClientSummaryCard } from '@/components/dashboard/client-history/client-summary-card'
 import { ClientHistoryProcessesTable } from '@/components/dashboard/client-history/client-history-processes-table'
 import { ClientTimeline } from '@/components/dashboard/client-history/client-timeline'
@@ -104,6 +105,10 @@ export function ClientHistoryDetailClient({ detail }: ClientHistoryDetailClientP
             <FileText className="mr-2 h-4 w-4" />
             Archivos ({allFiles.length})
           </TabsTrigger>
+          <TabsTrigger value="notes">
+            <StickyNote className="mr-2 h-4 w-4" />
+            Notas ({client.notes?.length ?? 0})
+          </TabsTrigger>
           <TabsTrigger value="activity">Actividad ({timeline.length})</TabsTrigger>
         </TabsList>
 
@@ -145,6 +150,11 @@ export function ClientHistoryDetailClient({ detail }: ClientHistoryDetailClientP
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* Notas */}
+        <TabsContent value="notes">
+          <ClientNotesSection clientId={client.id} initialNotes={client.notes || []} />
         </TabsContent>
 
         {/* Actividad */}

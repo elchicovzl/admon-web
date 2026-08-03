@@ -144,9 +144,11 @@ async function EstimatesTableAsync({
         <Alert variant="default" className="border-amber-500/50 text-amber-700 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            El rango de fechas tiene más cotizaciones de las que se pueden
-            listar de una vez. Estás viendo las más recientes — acotá el rango
-            para verlas todas.
+            <p>
+              El rango de fechas tiene más cotizaciones de las que se pueden
+              listar de una vez. Estás viendo las más recientes — acotá el rango
+              para verlas todas.
+            </p>
           </AlertDescription>
         </Alert>
       )}
@@ -219,8 +221,8 @@ async function fetchRangedPage(
   const start = (filters.page - 1) * perPage
 
   return {
-    rows: result.estimates.slice(start, start + perPage),
-    total: result.estimates.length,
+    rows: result.items.slice(start, start + perPage),
+    total: result.items.length,
     truncated: result.truncated,
   }
 }

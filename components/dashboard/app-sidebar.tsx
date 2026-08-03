@@ -2,7 +2,42 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { containsActiveHref, findActiveHref } from '@/lib/nav/active-link'
+import { cn } from '@/lib/utils'
+
+/**
+ * Styling for the ONE link matching the current page.
+ *
+ * The shadcn default is `bg-sidebar-accent`, which in this theme is
+ * oklch(0.97) against a oklch(0.985) sidebar — a 1.5% luminance difference,
+ * i.e. invisible. Worse, ancestors of the active item used the SAME class, so
+ * "Finanzas", "Egresos" and "Pagos" all looked equally selected and none read
+ * as the answer to "where am I?".
+ *
+ * Solid primary matches the language already used elsewhere in the app for a
+ * chosen option (see the Movimiento toggle on the payments filter). The
+ * `data-[active=true]:` prefix is required so tailwind-merge treats it as a
+ * conflict with the component's own default and actually replaces it.
+ */
+const ACTIVE_LINK_CLASS =
+  'data-[active=true]:bg-primary data-[active=true]:text-primary-foreground ' +
+  'data-[active=true]:font-medium data-[active=true]:hover:bg-primary/90 ' +
+  'data-[active=true]:hover:text-primary-foreground ' +
+  // The icon needs its own override: SidebarMenuSubButton hard-codes
+  // `[&>svg]:text-sidebar-accent-foreground` (oklch 0.205), which on a
+  // primary background — also near-black in this theme — would render the
+  // icon invisible. Text inherits the button colour; the icon does not.
+  'data-[active=true]:[&>svg]:text-primary-foreground'
+
+/**
+ * Styling for a branch that CONTAINS the active link (Finanzas, Egresos).
+ *
+ * Deliberately no background: these are context, not destination. Weight and
+ * full-strength foreground are enough to show the open path while leaving
+ * exactly one element looking selected.
+ */
+const ACTIVE_BRANCH_CLASS = 'font-medium text-sidebar-foreground'
 import {
   LayoutDashboard,
   Users,
@@ -23,6 +58,11 @@ import {
   Wallet,
   Receipt,
   ScrollText,
+  ReceiptText,
+  TrendingUp,
+  TrendingDown,
+  Banknote,
+  ArrowDownCircle,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -54,11 +94,44 @@ import { logout } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
-interface NavSubItem {
+/**
+ * A sub-item is either a link (`href` set, no children) or a pure grouping
+ * header (`href` omitted, `subItems` set). Finanzas needs the second kind:
+ * "Ingresos" and "Egresos" organise the menu but have no page of their own.
+ */
+interface NavSubItemBase {
   title: string
-  href: string
   icon: React.ComponentType<{ className?: string }>
 }
+
+/** A navigable leaf. */
+interface NavSubLink extends NavSubItemBase {
+  href: string
+  /**
+   * Query param that distinguishes this entry from a sibling pointing at the
+   * SAME path. "Cobros" and "Pagos" are both /finances/payments differing only
+   * by `?type=`; without this they'd both highlight at once, because
+   * `usePathname()` doesn't include the query string.
+   */
+  matchParam?: { key: string; value: string }
+  /**
+   * Wins the highlight when the path matches but the `matchParam` key is
+   * ABSENT from the URL. Landing on /finances/payments with no `?type=`
+   * (the "Movimientos de caja" view) has to light SOMETHING up, and without
+   * this neither sibling matched — which left the whole Finanzas tree
+   * collapsed with nothing selected.
+   */
+  matchFallback?: boolean
+  subItems?: never
+}
+
+/** A grouping header with children and no page of its own. */
+interface NavSubGroup extends NavSubItemBase {
+  href?: undefined
+  subItems: NavSubLink[]
+}
+
+type NavSubItem = NavSubLink | NavSubGroup
 
 interface NavItem {
   title: string
@@ -67,6 +140,71 @@ interface NavItem {
   badge?: string
   roles?: UserRole[]
   subItems?: NavSubItem[]
+}
+
+/**
+ * Renders one sub-item: a link, or a nested collapsible group.
+ *
+ * Split into its own component so the two levels share exactly one code
+ * path — the alternative was duplicating the link markup inside the group
+ * branch, and the two copies would drift.
+ */
+function SubItemNode({
+  item,
+  activeHref,
+}: {
+  item: NavSubItem
+  activeHref: string | null
+}) {
+  const ItemIcon = item.icon
+
+  // Grouping header (Ingresos / Egresos) — collapsible, not navigable.
+  if (item.subItems) {
+    const hasActiveChild = containsActiveHref(item.subItems, activeHref)
+
+    return (
+      <Collapsible defaultOpen={hasActiveChild}>
+        <SidebarMenuSubItem>
+          <CollapsibleTrigger asChild>
+            {/* isActive stays FALSE on purpose — a branch is not a
+                destination. Marking it active gave it the same treatment as
+                the real page and diluted the selection. */}
+            <SidebarMenuSubButton
+              className={cn('cursor-pointer', hasActiveChild && ACTIVE_BRANCH_CLASS)}
+            >
+              <ItemIcon className="h-4 w-4" />
+              <span>{item.title}</span>
+              <ChevronDown className="ml-auto h-4 w-4 transition-transform ui-expanded:rotate-180" />
+            </SidebarMenuSubButton>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            {/* Indented one more step so the hierarchy is readable at a glance. */}
+            <SidebarMenuSub className="ml-2">
+              {item.subItems.map((child) => (
+                <SubItemNode key={child.href} item={child} activeHref={activeHref} />
+              ))}
+            </SidebarMenuSub>
+          </CollapsibleContent>
+        </SidebarMenuSubItem>
+      </Collapsible>
+    )
+  }
+
+  // Leaf link — the only element that gets the full active treatment.
+  return (
+    <SidebarMenuSubItem>
+      <SidebarMenuSubButton
+        asChild
+        isActive={item.href === activeHref}
+        className={ACTIVE_LINK_CLASS}
+      >
+        <Link href={item.href}>
+          <ItemIcon className="h-4 w-4" />
+          <span>{item.title}</span>
+        </Link>
+      </SidebarMenuSubButton>
+    </SidebarMenuSubItem>
+  )
 }
 
 interface AppSidebarProps {
@@ -80,6 +218,9 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const pathname = usePathname()
+  // Needed to tell "Cobros" from "Pagos" — both are /finances/payments and
+  // differ only by `?type=`, which usePathname() drops.
+  const searchParams = useSearchParams()
   const router = useRouter()
 
   const navItems: NavItem[] = [
@@ -145,15 +286,54 @@ export function AppSidebar({ user }: AppSidebarProps) {
           href: '/dashboard/finances',
           icon: LayoutDashboard,
         },
+        // Grouped by direction of money. "Facturas" alone was ambiguous —
+        // it read as sales to some people and purchases to others, which is
+        // exactly the confusion this split removes.
         {
-          title: 'Facturas',
-          href: '/dashboard/finances/invoices',
-          icon: Receipt,
+          title: 'Ingresos',
+          icon: TrendingUp,
+          subItems: [
+            {
+              title: 'Facturas de venta',
+              href: '/dashboard/finances/invoices',
+              icon: Receipt,
+            },
+            {
+              title: 'Cotizaciones',
+              href: '/dashboard/finances/estimates',
+              icon: ScrollText,
+            },
+            // Same page as "Pagos" below, pre-filtered by direction. A
+            // collection is money coming IN, so it belongs here — landing on
+            // it from Egresos and seeing incoming money was the bug.
+            {
+              title: 'Cobros',
+              href: '/dashboard/finances/payments?type=in',
+              matchParam: { key: 'type', value: 'in' },
+              icon: ArrowDownCircle,
+            },
+          ],
         },
         {
-          title: 'Cotizaciones',
-          href: '/dashboard/finances/estimates',
-          icon: ScrollText,
+          title: 'Egresos',
+          icon: TrendingDown,
+          subItems: [
+            {
+              title: 'Facturas de compra',
+              href: '/dashboard/finances/bills',
+              icon: ReceiptText,
+            },
+            // Also the fallback for /finances/payments with NO `?type=` (the
+            // combined "Movimientos de caja" view). Something has to be
+            // highlighted there, and Egresos is where this page was asked for.
+            {
+              title: 'Pagos',
+              href: '/dashboard/finances/payments?type=out',
+              matchParam: { key: 'type', value: 'out' },
+              matchFallback: true,
+              icon: Banknote,
+            },
+          ],
         },
       ],
     },
@@ -209,6 +389,19 @@ export function AppSidebar({ user }: AppSidebarProps) {
     return item.roles.includes(user.role)
   })
 
+  /**
+   * The single sub-item to highlight, resolved across the WHOLE menu.
+   *
+   * Computed once at the top rather than per-node so the "most specific link
+   * wins" rule is decided globally — a node can't know whether a deeper link
+   * elsewhere is a better match for the current URL.
+   */
+  const activeHref = findActiveHref(
+    filteredNavItems.flatMap((item) => item.subItems ?? []),
+    pathname,
+    searchParams,
+  )
+
   const getUserInitials = (name: string | null, email: string) => {
     if (name) {
       return name
@@ -259,15 +452,24 @@ export function AppSidebar({ user }: AppSidebarProps) {
 
                 // If item has sub-items, render as Collapsible
                 if (item.subItems && item.subItems.length > 0) {
-                  const isAnySubItemActive = item.subItems.some(
-                    (subItem) => pathname === subItem.href
-                  )
+                  // Recursive so a match on a GRANDCHILD (e.g. /finances/bills
+                  // under Egresos) still opens the top-level group.
+                  const isAnySubItemActive = containsActiveHref(item.subItems, activeHref)
 
                   return (
                     <Collapsible key={item.href} defaultOpen={isActive || isAnySubItemActive}>
                       <SidebarMenuItem>
                         <CollapsibleTrigger asChild>
-                          <SidebarMenuButton isActive={isActive || isAnySubItemActive}>
+                          {/* Never `isActive` — an item with children is a
+                              branch, never the destination. "Finanzas" also
+                              matches /finances/payments by prefix, so marking
+                              it active would put a solid background on it AND
+                              on "Pagos" at the same time. Weight only. */}
+                          <SidebarMenuButton
+                            className={cn(
+                              (isActive || isAnySubItemActive) && ACTIVE_BRANCH_CLASS,
+                            )}
+                          >
                             <Icon className="h-4 w-4" />
                             <span>{item.title}</span>
                             <ChevronDown className="ml-auto h-4 w-4 transition-transform ui-expanded:rotate-180" />
@@ -275,21 +477,13 @@ export function AppSidebar({ user }: AppSidebarProps) {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                           <SidebarMenuSub>
-                            {item.subItems.map((subItem) => {
-                              const SubIcon = subItem.icon
-                              const isSubItemActive = pathname === subItem.href
-
-                              return (
-                                <SidebarMenuSubItem key={subItem.href}>
-                                  <SidebarMenuSubButton asChild isActive={isSubItemActive}>
-                                    <Link href={subItem.href}>
-                                      <SubIcon className="h-4 w-4" />
-                                      <span>{subItem.title}</span>
-                                    </Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              )
-                            })}
+                            {item.subItems.map((subItem) => (
+                              <SubItemNode
+                                key={subItem.href ?? subItem.title}
+                                item={subItem}
+                                activeHref={activeHref}
+                              />
+                            ))}
                           </SidebarMenuSub>
                         </CollapsibleContent>
                       </SidebarMenuItem>
@@ -300,7 +494,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
                 // Regular item without sub-items
                 return (
                   <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton asChild isActive={isActive} className={ACTIVE_LINK_CLASS}>
                       <Link href={item.href}>
                         <Icon className="h-4 w-4" />
                         <span>{item.title}</span>

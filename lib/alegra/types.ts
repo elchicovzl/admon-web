@@ -411,7 +411,7 @@ export type EstimateDetail = z.infer<typeof EstimateDetailSchema>
  *
  * NOTE: /estimates does NOT support `date_after` / `date_before` /
  * `dueDate_after` / `dueDate_before` — only exact `date` and `dueDate`.
- * Date-range filtering is handled client-side in `parseEstimateFilters`.
+ * Date-range filtering goes through `lib/alegra/date-range-walk.ts`.
  */
 export interface ListEstimatesParams {
   start?: number
@@ -426,5 +426,301 @@ export interface ListEstimatesParams {
   date?: string
   // Index signature required because `AlegraClient.request()` accepts
   // `Record<string, unknown>`. See ListInvoicesParams for the same rationale.
+  [key: string]: unknown
+}
+
+// =============================================================================
+// Bills (facturas de compra / proveedor) — EGRESOS
+//
+// ⚠️ VOCABULARY — the whole point of this module split:
+//   /invoices = facturas de VENTA    → INGRESO (a client owes us)
+//   /bills    = facturas de COMPRA   → EGRESO  (we owe a provider)
+//
+// The shape is close to invoices — same status enum, same total/totalPaid/
+// balance triple — but the counterparty is a `provider`, not a `client`, and
+// the document number is a flat `billNumber` string rather than a
+// numberTemplate object.
+//
+// Like /estimates, /bills supports only an EXACT `date` filter — no
+// date_after / date_before. Range queries go through the date-range walk.
+// =============================================================================
+
+export const BILL_STATUS = {
+  OPEN: 'open',
+  CLOSED: 'closed',
+  VOID: 'void',
+} as const
+
+/**
+ * Bills have no `draft` state (unlike invoices) — a purchase invoice is
+ * recorded once it exists. Kept as its own enum rather than reusing
+ * InvoiceStatusSchema so a future divergence doesn't silently widen both.
+ */
+export const BillStatusSchema = z.enum([
+  BILL_STATUS.OPEN,
+  BILL_STATUS.CLOSED,
+  BILL_STATUS.VOID,
+])
+
+export type BillStatus = z.infer<typeof BillStatusSchema>
+
+/**
+ * The counterparty on a bill. Alegra returns the same underlying contact
+ * shape as `client`, just under a different key — `passthrough()` absorbs
+ * whatever extra fields the account has configured.
+ */
+export const BillProviderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  identification: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  phonePrimary: z.string().nullable().optional(),
+}).passthrough()
+
+export type BillProvider = z.infer<typeof BillProviderSchema>
+
+/**
+ * List shape for the bills table.
+ *
+ * `billNumber` is a flat string (NOT a numberTemplate object) and may be
+ * absent on bills captured without a supplier document number.
+ * Every numeric field uses `safeNumber` — see the file header.
+ */
+export const BillListItemSchema = z.object({
+  id: z.string(),
+  billNumber: z.string().nullable().optional(),
+  date: z.string(),
+  dueDate: z.string().nullable(),
+  status: BillStatusSchema,
+  provider: BillProviderSchema.nullable().optional(),
+  total: safeNumber,
+  totalPaid: safeNumber,
+  balance: safeNumber,
+  currency: InvoiceCurrencySchema,
+  observations: z.string().nullable().optional(),
+  anotation: z.string().nullable().optional(),
+}).passthrough()
+
+export type BillListItem = z.infer<typeof BillListItemSchema>
+
+const BillListResponseBaseSchema = z.union([
+  z.object({
+    metadata: z.object({ total: z.number() }),
+    data: z.array(BillListItemSchema),
+  }),
+  z.array(BillListItemSchema),
+])
+
+export const BillListResponseSchema = BillListResponseBaseSchema.transform((v) => {
+  if (Array.isArray(v)) {
+    return { data: v, total: v.length }
+  }
+  return { data: v.data, total: v.metadata.total }
+})
+
+export interface BillListResponse {
+  data: BillListItem[]
+  total: number
+}
+
+/**
+ * Detail shape. `purchases.items` is Alegra's nesting for bill line items;
+ * some accounts return a flat `items` array instead, so both are optional
+ * and the UI falls back between them.
+ */
+export const BillDetailSchema = BillListItemSchema.extend({
+  items: z.array(InvoiceItemSchema).optional(),
+  purchases: z.object({
+    items: z.array(InvoiceItemSchema).optional(),
+  }).passthrough().nullable().optional(),
+  payments: z.array(InvoicePaymentSchema).optional(),
+  termsConditions: z.string().nullable().optional(),
+})
+
+export type BillDetail = z.infer<typeof BillDetailSchema>
+
+export interface ListBillsParams {
+  start?: number
+  limit?: number
+  status?: BillStatus | string
+  /** EXACT date only — /bills has no date_after / date_before. */
+  date?: string
+  dueDate?: string
+  provider_name?: string
+  client_id?: string
+  billNumber?: string
+  metadata?: boolean
+  order_field?: 'date' | 'name' | 'dueDate'
+  order_direction?: 'ASC' | 'DESC'
+  /** bill | supportDocument | all — defaults to `bill` on the API side. */
+  type?: 'bill' | 'supportDocument' | 'all'
+  [key: string]: unknown
+}
+
+// =============================================================================
+// Payments (pagos) — BOTH DIRECTIONS
+//
+// ⚠️⚠️ DOUBLE-COUNTING WARNING — read before using this in any total.
+//
+// A payment is the SETTLEMENT of an obligation, not a new one. Alegra's own
+// docs are explicit: do not add bill amounts to their associated payment
+// amounts, because they are the same money at two different moments.
+//
+//   /bills                 → accrual view  ("what we owe")
+//   /payments (type: out)  → cash view     ("what actually left")
+//
+// These are two LENSES on the same expense, never two expenses. The UI shows
+// them as separate, explicitly-labelled figures and NEVER sums them.
+//
+// The one asymmetry worth knowing: a payment linked to no document at all IS
+// an expense that appears nowhere in /bills (a taxi, a bank fee). That is the
+// only case where cash-side data contains something the accrual side does not.
+//
+// ⚠️⚠️ THE DOCS ARE WRONG ABOUT `associations` — verified against live data.
+//
+// The published reference describes `associations` as an object keyed by
+// document type. It is NOT. Against a real account it comes back as a HUMAN
+// -READABLE STRING:
+//
+//     "associations": "Facturas: FEAD9073"
+//
+// The machine-readable links are SIBLING ARRAYS at the top level of the
+// payment object:
+//
+//     "invoices": [ { id, number, date, amount, total, balance } ]
+//     "bills":    [ ... ]   (same idea, for type: "out")
+//
+// So `associations` is a display label and must never be parsed for logic —
+// its format is a sentence, in Spanish, and nothing stops Alegra rewording
+// it. `classifyPaymentAssociation` reads the arrays instead.
+//
+// Two more corrections from the same live payload:
+//   - the bank account key is `bankAccount`, not `account`
+//   - `currency` is absent entirely on payments in single-currency accounts
+// =============================================================================
+
+export const PAYMENT_TYPE = {
+  IN: 'in',
+  OUT: 'out',
+} as const
+
+export const PaymentTypeSchema = z.enum([PAYMENT_TYPE.IN, PAYMENT_TYPE.OUT])
+
+export type PaymentType = z.infer<typeof PaymentTypeSchema>
+
+/**
+ * A document a payment is applied to.
+ *
+ * Same shape for the `invoices` and `bills` arrays. Only `id` is relied on;
+ * everything else (number, amount, total, balance) passes through for display.
+ */
+export const PaymentDocumentLinkSchema = z.object({
+  id: z.string(),
+  number: z.union([z.string(), z.number()]).nullable().optional(),
+  amount: safeNumber.optional(),
+}).passthrough()
+
+export type PaymentDocumentLink = z.infer<typeof PaymentDocumentLinkSchema>
+
+/**
+ * Counterparty on a payment.
+ *
+ * Deliberately NOT `InvoiceClientSchema`: that one requires `identification`
+ * (nullable but present) and names the phone field `phonePrimary`. Live
+ * payment payloads use `phone` and don't guarantee `identification`. Reusing
+ * the invoice schema here is what would make a perfectly valid payment fail
+ * to parse.
+ */
+export const PaymentClientSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  identification: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+}).passthrough()
+
+export type PaymentClient = z.infer<typeof PaymentClientSchema>
+
+export const PaymentListItemSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  amount: safeNumber,
+  type: PaymentTypeSchema,
+  status: z.string().nullable().optional(),
+  paymentMethod: z.string().nullable().optional(),
+  number: safeNumber.nullable().optional(),
+  observations: z.string().nullable().optional(),
+  anotation: z.string().nullable().optional(),
+  // Absent on payments in single-currency accounts — `.nullish()` already
+  // allows that, and the UI falls back to the company currency.
+  currency: InvoiceCurrencySchema,
+  /** Counterparty — a client for `in`, a provider for `out`. */
+  client: PaymentClientSchema.nullable().optional(),
+  /** Live payloads use `bankAccount`; the docs say `account`. Accept both. */
+  bankAccount: z.object({
+    id: z.string(),
+    name: z.string(),
+  }).passthrough().nullable().optional(),
+  account: z.object({
+    id: z.string(),
+    name: z.string(),
+  }).passthrough().nullable().optional(),
+
+  // --- What the payment settles -----------------------------------------
+  // These sibling arrays are the machine-readable truth. See the section
+  // header: `associations` is a display string, NOT a structure.
+  invoices: z.array(PaymentDocumentLinkSchema).optional(),
+  bills: z.array(PaymentDocumentLinkSchema).optional(),
+  categories: z.array(PaymentDocumentLinkSchema).optional(),
+
+  /**
+   * Human-readable summary Alegra builds for the UI, e.g.
+   * "Facturas: FEAD9073". Display only — never parse it for logic.
+   * Typed loosely because the docs claim it's an object and live data says
+   * string; accepting both means an API correction won't take the page down.
+   */
+  associations: z.union([z.string(), z.record(z.unknown()), z.null()]).optional(),
+}).passthrough()
+
+export type PaymentListItem = z.infer<typeof PaymentListItemSchema>
+
+const PaymentListResponseBaseSchema = z.union([
+  z.object({
+    metadata: z.object({ total: z.number() }),
+    data: z.array(PaymentListItemSchema),
+  }),
+  z.array(PaymentListItemSchema),
+])
+
+export const PaymentListResponseSchema = PaymentListResponseBaseSchema.transform((v) => {
+  if (Array.isArray(v)) {
+    return { data: v, total: v.length }
+  }
+  return { data: v.data, total: v.metadata.total }
+})
+
+export interface PaymentListResponse {
+  data: PaymentListItem[]
+  total: number
+}
+
+export const PaymentDetailSchema = PaymentListItemSchema
+
+export type PaymentDetail = z.infer<typeof PaymentDetailSchema>
+
+/**
+ * ⚠️ /payments has NO date filter of any kind — not even an exact `date`.
+ * It is the most restricted of the four list endpoints. Any date-scoped
+ * query MUST go through the date-range walk.
+ */
+export interface ListPaymentsParams {
+  start?: number
+  limit?: number
+  type?: PaymentType
+  client_id?: string
+  metadata?: boolean
+  order_field?: 'id' | 'number' | 'date' | 'type'
+  order_direction?: 'ASC' | 'DESC'
+  /** Comma-separated extras. `associations` is required for expense math. */
+  fields?: string
   [key: string]: unknown
 }
