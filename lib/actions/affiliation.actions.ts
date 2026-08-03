@@ -2753,7 +2753,29 @@ function buildAffiliationEmailBody(
   lines.push('')
 
   const isEmpresa = client.clientType === ClientType.EMPRESA
-  const clientIsCompany = isEmpresa && !client.company // client itself IS the empresa
+
+  const employees = affiliation.subProcesses
+    .map((sp) => sp.employee)
+    .filter((e): e is NonNullable<typeof e> => Boolean(e))
+  const uniqueEmployees = new Map<string, EmployeeLike>()
+  for (const emp of employees) {
+    if (!uniqueEmployees.has(emp.identificationNumber)) {
+      uniqueEmployees.set(emp.identificationNumber, emp)
+    }
+  }
+
+  // An EMPRESA client can itself be employed by another company (Employment /
+  // legacy companyId), so having `client.company` set no longer means the
+  // client is an empleado. The client is the employer of its own process
+  // unless it appears as one of the subprocess employees; with no subprocess
+  // employees at all, fall back to the legacy `!client.company` heuristic.
+  const clientIsSubProcessEmployee = employees.some(
+    (emp) => emp.identificationNumber === client.identificationNumber
+  )
+  const clientIsCompany =
+    isEmpresa &&
+    !clientIsSubProcessEmployee &&
+    (uniqueEmployees.size > 0 || !client.company)
 
   // --- EMPLOYER SECTION ---
   if (clientIsCompany) {
@@ -2770,17 +2792,6 @@ function buildAffiliationEmailBody(
   } else if (isEmpresa && client.company) {
     // The affiliation client is an empleado with a company (legacy path)
     appendEmployerSection(lines, client.company)
-  }
-
-  // --- EMPLOYEES / MAIN SUBJECT ---
-  const employees = affiliation.subProcesses
-    .map((sp) => sp.employee)
-    .filter((e): e is NonNullable<typeof e> => Boolean(e))
-  const uniqueEmployees = new Map<string, EmployeeLike>()
-  for (const emp of employees) {
-    if (!uniqueEmployees.has(emp.identificationNumber)) {
-      uniqueEmployees.set(emp.identificationNumber, emp)
-    }
   }
 
   if (isEmpresa) {
