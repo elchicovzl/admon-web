@@ -220,7 +220,9 @@ export function getCachedEstimatesInRange(
             limit,
             client_name: clientName ?? undefined,
           }),
-        { dateFrom, dateTo, label: 'cotizaciones' },
+        // 'id': /estimates se pide ordenado por id, que es único y hace la
+        // paginación determinista. Ver la nota en AlegraClient.listEstimates.
+        { dateFrom, dateTo, label: 'cotizaciones', orden: 'id' },
       ),
     ['alegra', 'estimates', 'range', key, String(ttl)],
     {
@@ -295,7 +297,9 @@ export function getCachedBillsInRange(
             provider_name: providerName ?? undefined,
             status: status ?? undefined,
           }),
-        { dateFrom, dateTo, label: 'facturas de compra' },
+        // 'fecha': /bills no acepta order_field: 'id', así que acá el corte
+        // temprano sigue siendo válido y la paginación sigue siendo inestable.
+        { dateFrom, dateTo, label: 'facturas de compra', orden: 'fecha' },
       ),
     ['alegra', 'bills', 'range', key, String(ttl)],
     {
@@ -369,7 +373,9 @@ export function getCachedPaymentsInRange(
             limit,
             type: type ?? undefined,
           }),
-        { dateFrom, dateTo, label: 'pagos' },
+        // 'id': /payments también acepta orden por id. Misma razón que
+        // cotizaciones — paginación determinista sobre una clave única.
+        { dateFrom, dateTo, label: 'pagos', orden: 'id' },
       ),
     ['alegra', 'payments', 'range', key, String(ttl)],
     {

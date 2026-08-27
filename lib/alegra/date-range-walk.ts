@@ -96,6 +96,26 @@ export interface DateRangeResult<T> {
 /** Fetches one page. Injected so this module is testable without network. */
 export type PageFetcher<T> = (start: number, limit: number) => Promise<ListPage<T>>
 
+/**
+ * Cómo viene ordenada la lista, que decide cuándo se puede dejar de leer.
+ *
+ * `'fecha'` — el orden es por `date` DESC. Permite cortar apenas aparece un
+ *   documento más viejo que el rango, pero la paginación NO es estable: entre
+ *   documentos del mismo día el desempate cambia de una petición a otra, así
+ *   que en los bordes de página se repiten y se pierden filas.
+ *
+ * `'id'` — el orden es por `id` DESC. La clave es única, así que la paginación
+ *   es estable y no hay repetidos ni faltantes. A cambio se pierde el corte por
+ *   fecha: el id ordena por creación, no por la fecha del documento, y una
+ *   cotización puede crearse hoy llevando fecha del mes pasado. Se compensa
+ *   siguiendo unas páginas de más — ver `margenPaginas`.
+ *
+ * Se usa `'id'` donde el endpoint lo permite. `/bills` solo acepta
+ * date/name/dueDate, así que se queda en `'fecha'` y depende del descarte de
+ * repetidos para el caso más visible.
+ */
+export type OrdenDeLista = 'fecha' | 'id'
+
 export interface DateRangeOptions {
   dateFrom: string | null
   dateTo: string | null
@@ -103,6 +123,17 @@ export interface DateRangeOptions {
   pageSize?: number
   /** Noun used in the truncation warning, e.g. "cotizaciones". */
   label?: string
+  /** Cómo viene ordenada la lista. Por defecto 'fecha', el comportamiento viejo. */
+  orden?: OrdenDeLista
+  /**
+   * Con `orden: 'id'`, cuántas páginas seguidas sin nada del rango hay que ver
+   * antes de dar el recorrido por terminado.
+   *
+   * Dos es suficiente: un documento del rango creado mucho después aparece
+   * temprano en un orden por id descendente, y el caso contrario —creado mucho
+   * antes de su propia fecha— exige haber fechado un documento hacia adelante.
+   */
+  margenPaginas?: number
 }
 
 /**
@@ -121,9 +152,17 @@ export async function collectByDateRange<T extends DatedDocument>(
   {
     dateFrom,
     dateTo,
-    maxPages = ALEGRA_WALK_MAX_PAGES,
     pageSize = ALEGRA_WALK_PAGE_SIZE,
     label = 'documentos',
+    orden = 'fecha',
+    margenPaginas = 2,
+    /**
+     * Con orden por id hace falta más recorrido: no se puede cortar al ver una
+     * fecha vieja, así que llegar a un mes de hace medio año exige pasar por
+     * todo lo posterior. Diez páginas alcanzaban para el corte por fecha; para
+     * el orden estable se duplican.
+     */
+    maxPages = orden === 'id' ? ALEGRA_WALK_MAX_PAGES * 2 : ALEGRA_WALK_MAX_PAGES,
   }: DateRangeOptions,
 ): Promise<DateRangeResult<T>> {
   const items: T[] = []
@@ -135,6 +174,9 @@ export async function collectByDateRange<T extends DatedDocument>(
   // "Covered" means we proved there is nothing left to read — either we saw a
   // document older than the range, or the API ran out of rows.
   let rangeCovered = false
+
+  // Solo para orden 'id': páginas seguidas sin nada del rango.
+  let paginasEnBlanco = 0
 
   for (let page = 0; page < maxPages; page++) {
     const response = await fetchPage(page * pageSize, pageSize)
@@ -152,16 +194,21 @@ export async function collectByDateRange<T extends DatedDocument>(
     }
 
     let hitOlderThanRange = false
+    let agregadosEnLaPagina = 0
 
     for (const row of rows) {
       // Undated documents can't be positioned in a date-sorted walk.
       if (!row.date) continue
 
-      // Sorted DESC: the first item below the floor proves the rest are too.
-      if (dateFrom && row.date < dateFrom) {
+      // Con orden por fecha, el primero por debajo del piso prueba que los que
+      // siguen también lo están. Con orden por id eso no vale: el id ordena por
+      // creación, no por la fecha del documento.
+      if (orden === 'fecha' && dateFrom && row.date < dateFrom) {
         hitOlderThanRange = true
         break
       }
+
+      if (dateFrom && row.date < dateFrom) continue
 
       // Newer than the ceiling — skip it, but keep walking. These sit at the
       // head of a DESC list and are not evidence that we're done.
@@ -176,6 +223,7 @@ export async function collectByDateRange<T extends DatedDocument>(
       }
 
       items.push(row)
+      agregadosEnLaPagina++
     }
 
     if (hitOlderThanRange) {
@@ -187,6 +235,27 @@ export async function collectByDateRange<T extends DatedDocument>(
     if (rows.length < pageSize) {
       rangeCovered = true
       break
+    }
+
+    if (orden === 'id') {
+      /**
+       * El margen solo corre DESPUÉS de haber entrado al rango.
+       *
+       * Con orden por id se arranca por los documentos más nuevos, así que un
+       * rango viejo tiene por delante varias páginas que no le pertenecen. Si
+       * el margen contara desde el principio, cortaría antes de llegar — y así
+       * fue: abril-2026 devolvía cero mientras agosto devolvía bien.
+       */
+      if (agregadosEnLaPagina > 0) {
+        paginasEnBlanco = 0
+      } else if (items.length > 0) {
+        paginasEnBlanco++
+      }
+
+      if (items.length > 0 && paginasEnBlanco >= margenPaginas) {
+        rangeCovered = true
+        break
+      }
     }
   }
 

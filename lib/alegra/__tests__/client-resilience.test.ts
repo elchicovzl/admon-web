@@ -273,16 +273,26 @@ describe('AlegraClient — orden de /estimates', () => {
     return new URL(fetchMock.mock.calls[0]![0] as string)
   }
 
-  it('fuerza order_field=date — el default de la API es id (orden de creación)', async () => {
+  it('fuerza order_field=id — la paginación por fecha no es estable', async () => {
     const fetchMock = vi.fn().mockResolvedValue(buildResponse({ json: { metadata: { total: 0 }, data: [] } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await settle(new AlegraClient().listEstimates())
 
-    // A cotización can be created today carrying last month's date. Every
-    // caller that walks pages until it sees an out-of-range date depends on
-    // this being `date` and not `id`.
-    expect(urlOf(fetchMock).searchParams.get('order_field')).toBe('date')
+    // Este test afirmaba `date`, apoyado en que quien recorre páginas puede
+    // cortar apenas ve una fecha fuera de rango. Ese razonamiento era correcto
+    // pero incompleto: Alegra no desempata de forma estable entre documentos
+    // del mismo día, así que paginar sobre un orden por fecha REPITE y PIERDE
+    // filas en los bordes de página.
+    //
+    // Medido contra la cuenta real: abril-2026 devolvía 81 filas para 73
+    // cotizaciones distintas, y dos corridas de la misma consulta daban 73 y
+    // 63. Con orden por `id` —clave única— la paginación se vuelve
+    // determinista y aparecen las 81 reales.
+    //
+    // El corte temprano se pierde y lo reemplaza el margen de páginas de
+    // collectByDateRange (ver `orden: 'id'` ahí).
+    expect(urlOf(fetchMock).searchParams.get('order_field')).toBe('id')
   })
 
   it('fuerza order_direction=DESC', async () => {

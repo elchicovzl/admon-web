@@ -202,7 +202,16 @@ export class AlegraClient {
   async listEstimates(params: ListEstimatesParams = {}): Promise<EstimateListResponse> {
     const normalized: ListEstimatesParams = {
       metadata: true,
-      order_field: 'date',
+      // Se ordena por `id` y no por `date` a propósito. Alegra no desempata de
+      // forma estable entre documentos del mismo día, así que paginar sobre un
+      // orden por fecha repite y pierde filas en los bordes de página — medido
+      // contra la cuenta real: 81 filas para 73 cotizaciones distintas. El `id`
+      // es único, así que la paginación se vuelve determinista.
+      //
+      // El costo es perder el corte temprano por fecha: el id ordena por
+      // creación, no por la fecha del documento. Lo compensa el margen de
+      // páginas de collectByDateRange (ver `orden: 'id'` ahí).
+      order_field: 'id',
       order_direction: 'DESC',
       ...params,
     }
@@ -232,6 +241,10 @@ export class AlegraClient {
   async listBills(params: ListBillsParams = {}): Promise<BillListResponse> {
     const normalized: ListBillsParams = {
       metadata: true,
+
+      // /bills NO acepta order_field: 'id' — solo date/name/dueDate. Se queda
+      // en 'date' y depende del descarte de repetidos de collectByDateRange,
+      // que cubre el síntoma más visible aunque no la inestabilidad de fondo.
       order_field: 'date',
       order_direction: 'DESC',
       ...params,
@@ -273,7 +286,16 @@ export class AlegraClient {
   async listPayments(params: ListPaymentsParams = {}): Promise<PaymentListResponse> {
     const normalized: ListPaymentsParams = {
       metadata: true,
-      order_field: 'date',
+      // Se ordena por `id` y no por `date` a propósito. Alegra no desempata de
+      // forma estable entre documentos del mismo día, así que paginar sobre un
+      // orden por fecha repite y pierde filas en los bordes de página — medido
+      // contra la cuenta real: 81 filas para 73 cotizaciones distintas. El `id`
+      // es único, así que la paginación se vuelve determinista.
+      //
+      // El costo es perder el corte temprano por fecha: el id ordena por
+      // creación, no por la fecha del documento. Lo compensa el margen de
+      // páginas de collectByDateRange (ver `orden: 'id'` ahí).
+      order_field: 'id',
       order_direction: 'DESC',
       fields: AlegraClient.PAYMENT_FIELDS,
       ...params,

@@ -367,3 +367,151 @@ describe('collectByDateRange — paginación inestable de Alegra', () => {
     expect(result.truncated).toBe(false)
   })
 })
+
+describe('collectByDateRange — orden por id (paginación estable)', () => {
+  /**
+   * Con orden por id NO se puede cortar al ver una fecha vieja: el id ordena
+   * por creación, no por la fecha del documento. Un documento del rango puede
+   * aparecer después de otros más viejos.
+   */
+  it('NO corta al ver un documento más viejo que el rango', async () => {
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: [{ id: 9, date: '2026-04-20' }, { id: 8, date: '2026-01-05' }], total: 4 }
+        : start === 2
+          ? { data: [{ id: 7, date: '2026-04-02' }, { id: 6, date: '2026-04-01' }], total: 4 }
+          : { data: [], total: 4 },
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 2,
+      orden: 'id',
+    })
+
+    // Con orden por fecha, el id 8 habría cortado el recorrido y se habrían
+    // perdido el 7 y el 6.
+    expect(result.items.map((i) => i.id)).toEqual([9, 7, 6])
+  })
+
+  it('CON orden por fecha sí corta, que es el comportamiento viejo', async () => {
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: [{ id: 9, date: '2026-04-20' }, { id: 8, date: '2026-01-05' }], total: 4 }
+        : { data: [{ id: 7, date: '2026-04-02' }], total: 4 },
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 2,
+      orden: 'fecha',
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual([9])
+  })
+
+  it('se detiene tras el margen de páginas sin nada del rango', async () => {
+    // Sin este freno, con orden por id habría que leer la cuenta entera.
+    const vacia = { data: [{ id: 1, date: '2020-01-01' }, { id: 2, date: '2020-01-02' }], total: 99 }
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: [{ id: 9, date: '2026-04-20' }, { id: 8, date: '2026-04-19' }], total: 99 }
+        : vacia,
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 2,
+      orden: 'id',
+      margenPaginas: 2,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual([9, 8])
+    // 1 con datos + 2 de margen
+    expect(fetchPage).toHaveBeenCalledTimes(3)
+    expect(result.truncated).toBe(false)
+  })
+
+  it('el margen se reinicia si vuelve a aparecer algo del rango', async () => {
+    // Un hueco de una página no puede dar por terminado el recorrido.
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: [{ id: 9, date: '2026-04-20' }], total: 99 }
+        : start === 1
+          ? { data: [{ id: 8, date: '2020-01-01' }], total: 99 }
+          : start === 2
+            ? { data: [{ id: 7, date: '2026-04-05' }], total: 99 }
+            : { data: [], total: 99 },
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 1,
+      orden: 'id',
+      margenPaginas: 2,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual([9, 7])
+  })
+})
+
+describe('collectByDateRange — el margen no puede cortar antes de llegar', () => {
+  /**
+   * Regresión concreta: con orden por id se arranca por lo más nuevo, así que
+   * un rango viejo tiene por delante páginas que no le pertenecen. Con el
+   * margen contando desde el principio, abril-2026 devolvía CERO mientras
+   * agosto devolvía bien.
+   */
+  it('sigue leyendo aunque las primeras páginas no traigan nada del rango', async () => {
+    const paginas = [
+      [{ id: 20, date: '2026-08-10' }], // fuera del rango
+      [{ id: 19, date: '2026-07-10' }], // fuera
+      [{ id: 18, date: '2026-06-10' }], // fuera
+      [{ id: 17, date: '2026-04-20' }], // ¡adentro!
+      [{ id: 16, date: '2026-04-05' }], // adentro
+      [{ id: 15, date: '2026-03-10' }], // fuera
+      [{ id: 14, date: '2026-03-09' }], // fuera → acá sí corta
+      [{ id: 13, date: '2026-03-08' }],
+    ]
+    const fetchPage = vi.fn(async (start: number) => ({
+      data: paginas[start] ?? [],
+      total: 99,
+    }))
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 1,
+      orden: 'id',
+      margenPaginas: 2,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual([17, 16])
+    // 3 de arranque + 2 con datos + 2 de margen = 7. La página 8 no se pide.
+    expect(fetchPage).toHaveBeenCalledTimes(7)
+  })
+
+  it('si el rango no aparece nunca, recorre hasta el tope y avisa', async () => {
+    const fetchPage = vi.fn(async () => ({
+      data: [{ id: 1, date: '2020-01-01' }],
+      total: 999,
+    }))
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 1,
+      orden: 'id',
+      maxPages: 4,
+    })
+
+    expect(result.items).toHaveLength(0)
+    // Cero resultados sin aviso sería indistinguible de "no hay nada".
+    expect(result.truncated).toBe(true)
+    expect(fetchPage).toHaveBeenCalledTimes(4)
+  })
+})
