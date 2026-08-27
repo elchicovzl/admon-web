@@ -64,6 +64,9 @@ const CATEGORIAS = [
   // El grupo que cobra el mismo monto todos los meses (IVEC, BRANDON,
   // MARLENY, JOSE Q, ANDREA, ALBERTO, YESSIKA, LUISA…). El valor pasó de
   // 100.000 a 110.000 en enero-2026 para casi todos.
+  //
+  // OJO: ELIANA SIMPLE y ANA SIMPLE NO van acá aunque aparezcan mes a mes.
+  // Su pago depende de cuántos clientes refieran → 'Comisión por referidos'.
   { nombre: 'Pago mensual fijo', grupo: GrupoCategoria.NOMINA_FIJA },
 
   // COMISION CARLOS SANITAS, COMISION COLPENSIONES, COMISION ANDREY,
@@ -71,6 +74,12 @@ const CATEGORIAS = [
   { nombre: 'Comisión de afiliación', grupo: GrupoCategoria.COMISION },
   { nombre: 'Comisión por incapacidad', grupo: GrupoCategoria.COMISION },
   { nombre: 'Comisión de asesoría', grupo: GrupoCategoria.COMISION },
+
+  // ELIANA SIMPLE, ANA SIMPLE. Son dos personas que trabajan en Simple
+  // (empresa de seguridad social) y refieren clientes a Admon. Se les paga
+  // comisión según cuántos clientes manden, así que el monto VARÍA y no es
+  // nómina: en el Excel va 40.000 una vez y 60.000 las demás.
+  { nombre: 'Comisión por referidos', grupo: GrupoCategoria.COMISION },
 
   // Las dos patas de un ServicioReferenciado. El tipo de movimiento
   // (INGRESO / EGRESO) ya distingue el cobro de la entrega, así que no hacen
@@ -90,8 +99,12 @@ const CATEGORIAS = [
   { nombre: 'Telefonía y conectividad', grupo: GrupoCategoria.GASTO_OPERATIVO },
   // VUELTA FAWER, VUELTA FAWER NUEVA EPS, MENSAJERO CRISTIAN TOBON
   { nombre: 'Diligencias y trámites', grupo: GrupoCategoria.GASTO_OPERATIVO },
-  // VENENOS, CAFE DON EZEQUIEL
-  { nombre: 'Aseo y cafetería', grupo: GrupoCategoria.GASTO_OPERATIVO },
+  // BURBUJA / ANDRES BURBUJA (la misma: es una TIENDA, no una persona —
+  // gaseosas y consumos de oficina), CAFE DON EZEQUIEL. Va aparte de aseo
+  // porque es el concepto más frecuente del Excel: 15 apariciones.
+  { nombre: 'Cafetería y bebidas', grupo: GrupoCategoria.GASTO_OPERATIVO },
+  // VENENOS (fumigación)
+  { nombre: 'Aseo y fumigación', grupo: GrupoCategoria.GASTO_OPERATIVO },
 
   // MICHELADAS, ALMUERZO ADMON, ALMUERZO CUMPLEAÑOS, PIÑATERIA, YUDY PAN
   { nombre: 'Alimentación y celebraciones', grupo: GrupoCategoria.GASTO_BIENESTAR },
@@ -150,6 +163,14 @@ const CONTRAPARTES_SIN_DOCUMENTO = [
     nombre: 'Fawer',
     tipo: TipoContraparte.PROVEEDOR,
     notas: 'Mensajero independiente. Recibe el 100% de lo cotizado por mensajería.',
+  },
+  {
+    nombre: 'Burbuja',
+    tipo: TipoContraparte.PROVEEDOR,
+    notas:
+      'Tienda donde se compran gaseosas y consumos de oficina. En el Excel ' +
+      'aparece como "BURBUJA" y como "ANDRES BURBUJA" — es la misma, y es un ' +
+      'negocio, no una persona.',
   },
 ] as const
 
