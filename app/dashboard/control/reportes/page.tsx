@@ -207,11 +207,13 @@ async function Reporte({ anio }: { anio: number }) {
         <Alert>
           <AlertTitle>El corte por servicio no cubre todo el año</AlertTitle>
           <AlertDescription>
-            {formatearMonto(r.ingresoNeto.sinDesglose)} de{' '}
-            {formatearMonto(r.totalIngresos)} entraron sin desglose por servicio
-            {r.ingresoNeto.conDesglose === 0
-              ? '. Todavía no se importó ningún cobro con detalle.'
-              : `, así que "ingreso real" descontó solo lo que pudo mirar.`}
+            <p>
+              {formatearMonto(r.ingresoNeto.sinDesglose)} de{' '}
+              {formatearMonto(r.totalIngresos)} entraron sin desglose por servicio
+              {r.ingresoNeto.conDesglose === 0
+                ? '. Todavía no se importó ningún cobro con detalle.'
+                : `, así que "ingreso real" descontó solo lo que pudo mirar.`}
+            </p>
           </AlertDescription>
         </Alert>
       )}

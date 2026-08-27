@@ -114,9 +114,11 @@ async function Kpis({ periodo }: { periodo: string }) {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Hay descuadres sin justificar</AlertTitle>
           <AlertDescription>
-            Uno o más bolsillos tienen una diferencia entre lo contado y lo
-            calculado, y nadie explicó a qué se debe. El periodo no se puede
-            cerrar así.
+            <p>
+              Uno o más bolsillos tienen una diferencia entre lo contado y lo
+              calculado, y nadie explicó a qué se debe. El periodo no se puede
+              cerrar así.
+            </p>
           </AlertDescription>
         </Alert>
       )}

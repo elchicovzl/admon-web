@@ -64,10 +64,12 @@ async function Cotizaciones({ periodo }: { periodo: string }) {
         <Info className="h-4 w-4" />
         <AlertTitle>Ingresos &quot;por debajo&quot;</AlertTitle>
         <AlertDescription>
-          Alegra <strong>no guarda si una cotización se cobró</strong> — no tiene
-          estado ni saldo. Acá &quot;registrada&quot; significa que ya existe el
-          ingreso en el libro. Entran a <strong>IVONE</strong> con la fecha de la
-          cotización, que es lo más cercano que hay a la fecha de cobro.
+          <p>
+            Alegra <strong>no guarda si una cotización se cobró</strong> — no tiene
+            estado ni saldo. Acá &quot;registrada&quot; significa que ya existe el
+            ingreso en el libro. Entran a <strong>IVONE</strong> con la fecha de la
+            cotización, que es lo más cercano que hay a la fecha de cobro.
+          </p>
         </AlertDescription>
       </Alert>
 
@@ -76,18 +78,20 @@ async function Cotizaciones({ periodo }: { periodo: string }) {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>La búsqueda en Alegra quedó corta</AlertTitle>
           <AlertDescription>
-            {d.cotizaciones.length === 0 ? (
-              <>
-                No apareció ninguna cotización. Los ingresos se empezaron a
-                manejar con cotizaciones en <strong>abril de 2026</strong>, así
-                que antes de esa fecha esto es lo esperado.
-              </>
-            ) : (
-              <>
-                Lo que ves es un piso, no el total: la consulta llegó al tope de
-                páginas antes de cubrir el mes.
-              </>
-            )}
+            <p>
+              {d.cotizaciones.length === 0 ? (
+                <>
+                  No apareció ninguna cotización. Los ingresos se empezaron a
+                  manejar con cotizaciones en <strong>abril de 2026</strong>, así
+                  que antes de esa fecha esto es lo esperado.
+                </>
+              ) : (
+                <>
+                  Lo que ves es un piso, no el total: la consulta llegó al tope de
+                  páginas antes de cubrir el mes.
+                </>
+              )}
+            </p>
           </AlertDescription>
         </Alert>
       )}
@@ -132,10 +136,12 @@ async function Facturas({ periodo }: { periodo: string }) {
         <Info className="h-4 w-4" />
         <AlertTitle>Ingresos &quot;por arriba&quot;</AlertTitle>
         <AlertDescription>
-          La factura <strong>sí sabe cuánto se cobró</strong>: trae estado y
-          saldo. Por eso el ingreso se registra por lo <strong>cobrado</strong>,
-          no por lo facturado — una factura a medio pagar solo metió en caja lo
-          que se pagó. Las que no cobraron nada no se pueden registrar.
+          <p>
+            La factura <strong>sí sabe cuánto se cobró</strong>: trae estado y
+            saldo. Por eso el ingreso se registra por lo <strong>cobrado</strong>,
+            no por lo facturado — una factura a medio pagar solo metió en caja lo
+            que se pagó. Las que no cobraron nada no se pueden registrar.
+          </p>
         </AlertDescription>
       </Alert>
 

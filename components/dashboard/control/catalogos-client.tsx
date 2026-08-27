@@ -380,9 +380,11 @@ export function CatalogosClient({
           <Alert>
             <AlertTitle>Falta una categoría</AlertTitle>
             <AlertDescription>
-              Para crear un servicio hace falta al menos una categoría activa del
-              grupo &quot;Servicios referenciados&quot;. Creala en la pestaña de
-              Categorías.
+              <p>
+                Para crear un servicio hace falta al menos una categoría activa del
+                grupo &quot;Servicios referenciados&quot;. Creala en la pestaña de
+                Categorías.
+              </p>
             </AlertDescription>
           </Alert>
         )}
@@ -473,9 +475,11 @@ export function CatalogosClient({
         <Alert>
           <AlertTitle>Este catálogo no se edita a mano</AlertTitle>
           <AlertDescription>
-            Los servicios se dan de alta en Alegra y desde acá solo se
-            sincronizan. Lo único que se decide en Control es cuáles son plata
-            en tránsito.
+            <p>
+              Los servicios se dan de alta en Alegra y desde acá solo se
+              sincronizan. Lo único que se decide en Control es cuáles son plata
+              en tránsito.
+            </p>
           </AlertDescription>
         </Alert>
 
@@ -714,12 +718,14 @@ export function CatalogosClient({
           <Lock className="h-4 w-4" />
           <AlertTitle>Los grupos no se editan, y es a propósito</AlertTitle>
           <AlertDescription>
-            No son datos: son parte del código. El sistema se ramifica sobre
-            varios de ellos — el saldo de un préstamo, por ejemplo, se calcula
-            sumando los movimientos del grupo &quot;Préstamos — abono&quot;. Si se
-            pudiera borrar desde acá, los saldos quedarían en cero sin que nada
-            avisara. Agregar un grupo nuevo es una migración, no una operación del
-            día a día.
+            <p>
+              No son datos: son parte del código. El sistema se ramifica sobre
+              varios de ellos — el saldo de un préstamo, por ejemplo, se calcula
+              sumando los movimientos del grupo &quot;Préstamos — abono&quot;. Si se
+              pudiera borrar desde acá, los saldos quedarían en cero sin que nada
+              avisara. Agregar un grupo nuevo es una migración, no una operación del
+              día a día.
+            </p>
           </AlertDescription>
         </Alert>
 

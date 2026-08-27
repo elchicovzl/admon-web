@@ -33,10 +33,12 @@ async function Listado() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Hay plata de terceros en la caja</AlertTitle>
           <AlertDescription>
-            {cobradosSinEntregar.length} servicio
-            {cobradosSinEntregar.length === 1 ? ' está cobrado' : 's están cobrados'} y
-            todavía sin entregar. Con margen cero eso no es ganancia: es plata que
-            hay que pasar.
+            <p>
+              {cobradosSinEntregar.length} servicio
+              {cobradosSinEntregar.length === 1 ? ' está cobrado' : 's están cobrados'} y
+              todavía sin entregar. Con margen cero eso no es ganancia: es plata que
+              hay que pasar.
+            </p>
           </AlertDescription>
         </Alert>
       )}
