@@ -235,3 +235,21 @@ export interface ReporteAnual {
   /** Años que tienen al menos un movimiento, para el selector. */
   aniosConDatos: number[]
 }
+
+/**
+ * Página de movimientos.
+ *
+ * Trae dos totales distintos a propósito: `sumaPagina` es lo que el operador
+ * ve en pantalla y `sumaFiltrada` es todo lo que cumple el filtro. Mostrar solo
+ * el primero haría que "total" cambiara al pasar de página, que es la forma más
+ * rápida de que nadie vuelva a confiar en el número.
+ */
+export interface MovimientosPaginados {
+  items: MovimientoListItem[]
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+  sumaPagina: number
+  sumaFiltrada: number
+}

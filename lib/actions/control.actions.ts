@@ -43,6 +43,7 @@ import {
   type CierreMensualView,
   type ResumenPeriodo,
   type ReporteAnual,
+  type MovimientosPaginados,
   type FilaAgrupada,
 } from '@/lib/types/control.types'
 import {
@@ -559,32 +560,77 @@ export const getMovimientos = cache(
   async (filtros?: {
     periodo?: string
     bolsilloId?: string
+    categoriaId?: string
     contraparteId?: string
-  }): Promise<ActionResponse<MovimientoListItem[]>> => {
+    /** Busca en el concepto y en las notas, sin distinguir mayúsculas. */
+    buscar?: string
+    page?: number
+    pageSize?: number
+  }): Promise<ActionResponse<MovimientosPaginados>> => {
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
-    const movimientos = await prisma.movimiento.findMany({
-      where: {
-        periodo: filtros?.periodo,
-        contraparteId: filtros?.contraparteId,
-        // Un traslado toca dos bolsillos, así que filtrar por bolsillo tiene
-        // que mirar los dos extremos o el movimiento desaparece de la vista
-        // del bolsillo destino.
-        ...(filtros?.bolsilloId
-          ? {
-              OR: [
-                { bolsilloId: filtros.bolsilloId },
-                { bolsilloDestinoId: filtros.bolsilloId },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
-      select: movimientoSelect,
-    })
+    const page = Math.max(1, filtros?.page ?? 1)
+    const pageSize = Math.min(200, Math.max(10, filtros?.pageSize ?? 25))
+    const buscar = filtros?.buscar?.trim()
 
-    return { success: true, data: movimientos.map(aMovimientoListItem) }
+    const where: Prisma.MovimientoWhereInput = {
+      periodo: filtros?.periodo,
+      categoriaId: filtros?.categoriaId,
+      contraparteId: filtros?.contraparteId,
+      // Un traslado toca dos bolsillos, así que filtrar por bolsillo tiene
+      // que mirar los dos extremos o el movimiento desaparece de la vista
+      // del bolsillo destino.
+      ...(filtros?.bolsilloId
+        ? {
+            OR: [
+              { bolsilloId: filtros.bolsilloId },
+              { bolsilloDestinoId: filtros.bolsilloId },
+            ],
+          }
+        : {}),
+      ...(buscar
+        ? {
+            AND: [
+              {
+                OR: [
+                  { concepto: { contains: buscar, mode: 'insensitive' } },
+                  { notas: { contains: buscar, mode: 'insensitive' } },
+                ],
+              },
+            ],
+          }
+        : {}),
+    }
+
+    const [movimientos, totalCount, agregado] = await Promise.all([
+      prisma.movimiento.findMany({
+        where,
+        orderBy: [{ fecha: 'desc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: movimientoSelect,
+      }),
+      prisma.movimiento.count({ where }),
+      // Suma de TODO lo filtrado, no solo de la página. Si el total cambiara
+      // al pasar de página, nadie volvería a confiar en el número.
+      prisma.movimiento.aggregate({ where, _sum: { monto: true } }),
+    ])
+
+    const items = movimientos.map(aMovimientoListItem)
+
+    return {
+      success: true,
+      data: {
+        items,
+        page,
+        pageSize,
+        totalCount,
+        totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+        sumaPagina: sumarMontos(items.map((m) => m.monto)),
+        sumaFiltrada: agregado._sum.monto ? decimalANumero(agregado._sum.monto) : 0,
+      },
+    }
   }
 )
 

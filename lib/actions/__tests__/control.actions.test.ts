@@ -23,7 +23,7 @@ function dec(n: number) {
 
 const { prismaMock, authMock, hasControlAccessMock } = vi.hoisted(() => ({
   prismaMock: {
-    movimiento: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
+    movimiento: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
     cierreMensual: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
     categoriaMovimiento: { findFirst: vi.fn(), create: vi.fn() },
     prestamo: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -54,6 +54,7 @@ import {
   createBolsillo,
   setBolsilloActivo,
   getResumenPeriodo,
+  getMovimientos,
 } from '../control.actions'
 
 const SESSION = {
@@ -858,5 +859,95 @@ describe('getResumenPeriodo — saldo inicial acumulado', () => {
     const res = await getResumenPeriodo('2026-08')
 
     expect(res.data!.cierres[0].saldoInicial).toBe(400_000)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('getMovimientos — paginación, filtros y totales', () => {
+  beforeEach(() => {
+    prismaMock.movimiento.findMany.mockResolvedValue([filaMovimiento()])
+    prismaMock.movimiento.count.mockResolvedValue(137)
+    prismaMock.movimiento.aggregate.mockResolvedValue({ _sum: { monto: dec(9_500_000) } })
+  })
+
+  it('pagina desde 1 y calcula el total de páginas', async () => {
+    const res = await getMovimientos({ periodo: '2026-06', pageSize: 25 })
+
+    expect(res.data).toMatchObject({ page: 1, pageSize: 25, totalCount: 137, totalPages: 6 })
+    expect(prismaMock.movimiento.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 0, take: 25 })
+    )
+  })
+
+  it('salta los registros correctos en una página posterior', async () => {
+    await getMovimientos({ periodo: '2026-06', page: 3, pageSize: 25 })
+
+    expect(prismaMock.movimiento.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 50, take: 25 })
+    )
+  })
+
+  it('acota el tamaño de página para que nadie pida 10.000 de una', async () => {
+    await getMovimientos({ periodo: '2026-06', pageSize: 10_000 })
+
+    expect(prismaMock.movimiento.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 200 })
+    )
+  })
+
+  it('trata una página menor a 1 como la primera', async () => {
+    const res = await getMovimientos({ periodo: '2026-06', page: -5 })
+
+    expect(res.data!.page).toBe(1)
+    expect(prismaMock.movimiento.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 0 })
+    )
+  })
+
+  it('la suma es la de TODO lo filtrado, no la de la página', async () => {
+    // Si el total cambiara al pasar de página, nadie volvería a confiar en él.
+    const res = await getMovimientos({ periodo: '2026-06' })
+
+    expect(res.data!.sumaFiltrada).toBe(9_500_000)
+    expect(res.data!.sumaPagina).toBe(40_000) // la única fila de la página
+  })
+
+  it('filtrar por bolsillo mira los DOS extremos de un traslado', async () => {
+    // Un traslado toca dos bolsillos; mirando solo el origen, desaparecería de
+    // la vista del bolsillo destino.
+    await getMovimientos({ periodo: '2026-06', bolsilloId: EFECTIVO })
+
+    const [args] = prismaMock.movimiento.findMany.mock.calls[0] as [any]
+    expect(args.where.OR).toEqual([
+      { bolsilloId: EFECTIVO },
+      { bolsilloDestinoId: EFECTIVO },
+    ])
+  })
+
+  it('busca en concepto y en notas, sin distinguir mayúsculas', async () => {
+    await getMovimientos({ periodo: '2026-06', buscar: 'burbuja' })
+
+    const [args] = prismaMock.movimiento.findMany.mock.calls[0] as [any]
+    expect(args.where.AND[0].OR).toEqual([
+      { concepto: { contains: 'burbuja', mode: 'insensitive' } },
+      { notas: { contains: 'burbuja', mode: 'insensitive' } },
+    ])
+  })
+
+  it('ignora una búsqueda que son solo espacios', async () => {
+    await getMovimientos({ periodo: '2026-06', buscar: '   ' })
+
+    const [args] = prismaMock.movimiento.findMany.mock.calls[0] as [any]
+    expect(args.where.AND).toBeUndefined()
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    const res = await getMovimientos({ periodo: '2026-06' })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
   })
 })
