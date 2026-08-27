@@ -116,25 +116,17 @@ function sinAutorizacion(error: string): ActionResponse<never> {
 // ---------------------------------------------------------------------------
 
 /**
- * Busca la categoría que corresponde a un grupo.
+ * Busca la categoría de un grupo que tiene una sola opción razonable.
  *
- * Los movimientos que genera el sistema (desembolso de préstamo, abono, patas
- * de un servicio) no le piden la categoría al operador: se resuelve por grupo.
- * `preferirNombre` permite afinar cuando hay varias — por ejemplo, elegir
- * 'Exámenes médicos' entre las de SERVICIO_REFERENCIADO.
+ * Sirve para el desembolso y el abono de préstamos: son movimientos que
+ * genera el sistema y donde el grupo determina la categoría sin ambigüedad.
+ *
+ * NO se usa para servicios referenciados. Ahí hay varias categorías en el
+ * mismo grupo (mensajería, exámenes médicos…) y elegir "la primera" ponía la
+ * categoría equivocada sin que nada avisara. Cada TipoServicioReferenciado
+ * apunta a la suya con `categoriaId`.
  */
-async function resolverCategoria(
-  grupo: GrupoCategoria,
-  preferirNombre?: string
-): Promise<string | null> {
-  if (preferirNombre) {
-    const exacta = await prisma.categoriaMovimiento.findFirst({
-      where: { grupo, isActive: true, nombre: preferirNombre },
-      select: { id: true },
-    })
-    if (exacta) return exacta.id
-  }
-
+async function resolverCategoria(grupo: GrupoCategoria): Promise<string | null> {
   const primera = await prisma.categoriaMovimiento.findFirst({
     where: { grupo, isActive: true },
     orderBy: { nombre: 'asc' },
@@ -254,7 +246,12 @@ export const getTiposServicio = cache(
     const tipos = await prisma.tipoServicioReferenciado.findMany({
       where: { isActive: true },
       orderBy: { nombre: 'asc' },
-      select: { id: true, nombre: true, isActive: true },
+      select: {
+        id: true,
+        nombre: true,
+        isActive: true,
+        categoria: { select: { id: true, nombre: true } },
+      },
     })
 
     return { success: true, data: tipos }
@@ -881,7 +878,7 @@ export async function registrarPataServicio(
       proveedorId: true,
       movimientoIngresoId: true,
       movimientoEgresoId: true,
-      tipoServicio: { select: { nombre: true } },
+      tipoServicio: { select: { nombre: true, categoriaId: true } },
     },
   })
 
@@ -896,16 +893,8 @@ export async function registrarPataServicio(
     return { success: false, error: 'La entrega de ese servicio ya está registrada' }
   }
 
-  const categoriaId = await resolverCategoria(
-    GrupoCategoria.SERVICIO_REFERENCIADO,
-    servicio.tipoServicio.nombre
-  )
-  if (!categoriaId) {
-    return {
-      success: false,
-      error: 'Falta una categoría de grupo SERVICIO_REFERENCIADO. Creala antes de registrar servicios.',
-    }
-  }
+  // La categoría viene del tipo de servicio, no de adivinar por nombre.
+  const categoriaId = servicio.tipoServicio.categoriaId
 
   const fecha = parseFechaCalendario(entrada.fecha)
   const periodo = periodoDeFecha(fecha)

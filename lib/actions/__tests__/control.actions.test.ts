@@ -49,6 +49,7 @@ import {
   anularMovimiento,
   cerrarPeriodo,
   getBolsillos,
+  registrarPataServicio,
 } from '../control.actions'
 
 const SESSION = {
@@ -441,5 +442,124 @@ describe('cerrarPeriodo', () => {
 
     expect(res.success).toBe(false)
     expect(res.error).toContain('ya estaba cerrado')
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('registrarPataServicio', () => {
+  const CATEGORIA_MENSAJERIA = 'ccatmensajeria'
+  const CLIENTE = 'ccontraaa0001'
+  const PROVEEDOR = 'ccontrafawer1'
+
+  function servicioMock(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'cserv0000001',
+      valorFacturado: dec(520000),
+      valorEntregado: dec(520000),
+      clienteId: CLIENTE,
+      proveedorId: PROVEEDOR,
+      movimientoIngresoId: null,
+      movimientoEgresoId: null,
+      tipoServicio: { nombre: 'Mensajería', categoriaId: CATEGORIA_MENSAJERIA },
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
+      typeof fn === 'function'
+        ? (fn as (tx: unknown) => Promise<unknown>)(prismaMock)
+        : fn
+    )
+    prismaMock.servicioReferenciado.update.mockResolvedValue({})
+  })
+
+  it('toma la categoría del tipo de servicio y NO la adivina por nombre', async () => {
+    // El nombre del tipo ("Mensajería") no coincide con el de la categoría
+    // ("Servicio de mensajería"). Antes eso caía en un fallback que elegía la
+    // primera del grupo y categorizaba mal sin avisar.
+    prismaMock.servicioReferenciado.findUnique.mockResolvedValue(servicioMock())
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+
+    const res = await registrarPataServicio({
+      servicioId: 'cserv0000001',
+      pata: 'INGRESO',
+      fecha: '2026-08-27',
+      bolsilloId: EFECTIVO,
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ categoriaId: CATEGORIA_MENSAJERIA }),
+      })
+    )
+    // Y ya no consulta el catálogo de categorías para resolverla.
+    expect(prismaMock.categoriaMovimiento.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('el cobro entra como INGRESO por el valor facturado, contra el cliente', async () => {
+    prismaMock.servicioReferenciado.findUnique.mockResolvedValue(servicioMock())
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+
+    await registrarPataServicio({
+      servicioId: 'cserv0000001',
+      pata: 'INGRESO',
+      fecha: '2026-08-27',
+      bolsilloId: EFECTIVO,
+    })
+
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.INGRESO,
+          monto: 520000,
+          contraparteId: CLIENTE,
+        }),
+      })
+    )
+  })
+
+  it('la entrega sale como EGRESO por el valor entregado, contra el proveedor', async () => {
+    prismaMock.servicioReferenciado.findUnique.mockResolvedValue(
+      servicioMock({ valorFacturado: dec(45000), valorEntregado: dec(30000) })
+    )
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+
+    await registrarPataServicio({
+      servicioId: 'cserv0000001',
+      pata: 'EGRESO',
+      fecha: '2026-08-27',
+      bolsilloId: EFECTIVO,
+    })
+
+    // 30.000 al consultorio, no los 45.000 que se le cobraron al paciente.
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.EGRESO,
+          monto: 30000,
+          contraparteId: PROVEEDOR,
+        }),
+      })
+    )
+  })
+
+  it('no deja registrar dos veces la misma pata', async () => {
+    prismaMock.servicioReferenciado.findUnique.mockResolvedValue(
+      servicioMock({ movimientoIngresoId: 'cmov0000009' })
+    )
+
+    const res = await registrarPataServicio({
+      servicioId: 'cserv0000001',
+      pata: 'INGRESO',
+      fecha: '2026-08-27',
+      bolsilloId: EFECTIVO,
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('ya está registrado')
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
   })
 })

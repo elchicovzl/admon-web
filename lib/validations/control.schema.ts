@@ -90,6 +90,13 @@ export const createTipoServicioSchema = z.object({
     .min(2, 'El nombre debe tener al menos 2 caracteres')
     .max(60, 'El nombre no puede exceder 60 caracteres')
     .transform((v) => v.trim()),
+  /**
+   * Obligatoria. Antes se resolvía por coincidencia de nombre entre el tipo y
+   * la categoría, y cuando no coincidían — "Mensajería" vs "Servicio de
+   * mensajería" — caía en un fallback que elegía cualquiera del grupo. Los
+   * movimientos quedaban mal categorizados sin que nada avisara.
+   */
+  categoriaId: cuid('Seleccioná la categoría con la que se registra el servicio'),
 })
 
 export type CreateBolsilloInput = z.infer<typeof createBolsilloSchema>

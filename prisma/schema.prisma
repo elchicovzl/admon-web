@@ -1103,7 +1103,8 @@ model CategoriaMovimiento {
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
-  movimientos Movimiento[]
+  movimientos    Movimiento[]
+  tiposServicio  TipoServicioReferenciado[]
 
   @@map("categorias_movimiento")
   @@index([grupo, isActive])
@@ -1117,12 +1118,21 @@ model TipoServicioReferenciado {
   nombre   String  @unique
   isActive Boolean @default(true)
 
+  // Categoría con la que se registran las dos patas de movimiento de este
+  // servicio. Es obligatoria y explícita: antes se resolvía por coincidencia
+  // de nombre entre el tipo y la categoría, lo que fallaba en silencio en
+  // cuanto los nombres no coincidían exactamente ("Mensajería" vs "Servicio
+  // de mensajería") y caía en un fallback que elegía cualquiera del grupo.
+  categoriaId String
+  categoria   CategoriaMovimiento @relation(fields: [categoriaId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   servicios ServicioReferenciado[]
 
   @@map("tipos_servicio_referenciado")
+  @@index([categoriaId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

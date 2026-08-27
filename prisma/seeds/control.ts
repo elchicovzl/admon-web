@@ -132,8 +132,15 @@ const CATEGORIAS = [
 //
 // Es catálogo y no enum porque van a aparecer más servicios con esta misma
 // forma (Admon cobra, entrega a un tercero, y a veces deja margen).
+//
+// Cada tipo apunta explícitamente a la categoría con la que se registran sus
+// movimientos. El vínculo se escribe acá y no se adivina por nombre: fijate
+// que "Mensajería" y "Servicio de mensajería" NO son el mismo string.
 
-const TIPOS_SERVICIO = ['Mensajería', 'Exámenes médicos'] as const
+const TIPOS_SERVICIO = [
+  { nombre: 'Mensajería', categoria: 'Servicio de mensajería' },
+  { nombre: 'Exámenes médicos', categoria: 'Exámenes médicos' },
+] as const
 
 // ---------------------------------------------------------------------------
 // Contrapartes conocidas
@@ -204,11 +211,25 @@ export async function seedControlCatalogs(
   }
   console.log(`✅ ${CATEGORIAS.length} categorías`)
 
-  for (const nombre of TIPOS_SERVICIO) {
+  for (const tipo of TIPOS_SERVICIO) {
+    const categoria = await prisma.categoriaMovimiento.findUnique({
+      where: { nombre: tipo.categoria },
+      select: { id: true },
+    })
+
+    // Las categorías se siembran arriba, así que esto solo puede fallar si
+    // alguien renombró una a mano. Vale la pena reventar acá con un mensaje
+    // claro en vez de dejar el tipo de servicio apuntando a cualquier cosa.
+    if (!categoria) {
+      throw new Error(
+        `El tipo de servicio "${tipo.nombre}" apunta a la categoría "${tipo.categoria}", que no existe.`
+      )
+    }
+
     await prisma.tipoServicioReferenciado.upsert({
-      where: { nombre },
-      update: {},
-      create: { nombre },
+      where: { nombre: tipo.nombre },
+      update: { categoriaId: categoria.id },
+      create: { nombre: tipo.nombre, categoriaId: categoria.id },
     })
   }
   console.log(`✅ ${TIPOS_SERVICIO.length} tipos de servicio referenciado`)

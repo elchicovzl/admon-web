@@ -59,6 +59,12 @@ export interface TipoServicioListItem {
   id: string
   nombre: string
   isActive: boolean
+  /**
+   * Categoría con la que se registran las dos patas de movimiento de este
+   * servicio. Es explícita, no se deduce del nombre: "Mensajería" (tipo) y
+   * "Servicio de mensajería" (categoría) no son el mismo string.
+   */
+  categoria: { id: string; nombre: string }
 }
 
 export interface ContraparteListItem {
