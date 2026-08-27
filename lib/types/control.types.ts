@@ -67,6 +67,41 @@ export interface TipoServicioListItem {
   categoria: { id: string; nombre: string }
 }
 
+export interface ServicioAlegraListItem {
+  id: string
+  /** Id del item en Alegra. Es la identidad real, no el nombre. */
+  alegraItemId: string
+  nombre: string
+  /** "01", "02", "05" — el código corto con el que el negocio los nombra. */
+  referencia: string | null
+  descripcion: string | null
+  /**
+   * El dinero de este servicio no es ingreso: entra y vuelve a salir.
+   * "Recaudo para Terceros" es el caso.
+   */
+  enTransito: boolean
+  isActive: boolean
+  sincronizadoEn: Date | null
+}
+
+/** Resultado de sincronizar el catálogo contra Alegra. */
+export interface SincronizacionServiciosResultado {
+  creados: number
+  actualizados: number
+  desactivados: number
+  /** Items de Alegra descartados por no ser `type: 'service'`. */
+  descartados: number
+  /**
+   * El catálogo ya sincronizado.
+   *
+   * Viaja en la misma respuesta a propósito: `revalidatePath` refresca el
+   * Server Component, pero la pantalla guarda la lista en estado local y
+   * `useState` no se reinicializa con las props nuevas. Devolverla evita un
+   * segundo round trip para ver lo que se acaba de escribir.
+   */
+  servicios: ServicioAlegraListItem[]
+}
+
 export interface ContraparteListItem {
   id: string
   nombre: string

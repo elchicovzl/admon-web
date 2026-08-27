@@ -27,6 +27,7 @@ import {
   contraMovimiento,
   type MovimientoParaSaldo,
   type MovimientoDePrestamo,
+  repartirEntreServicios,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -420,5 +421,134 @@ describe('pago "por debajo" con deducción (escenario real del Excel)', () => {
 
     // Y el préstamo recibe su abono por los mismos 200.000.
     expect(saldoPrestamo(1000000, [abono(200000)])).toBe(800000)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('repartirEntreServicios', () => {
+  /**
+   * Factura FEAD10134, tomada de la cuenta de producción.
+   *
+   *   Administracion         63.025 × 2 = 126.050  (IVA 19%)
+   *   Recaudo para Terceros 429.600 + 149.400 = 579.000  (sin IVA)
+   *   subtotal 705.050 · total 729.000 · totalPaid 729.000
+   */
+  const FACTURA_REAL = [
+    { itemId: '2', precio: 63025, cantidad: 2, impuestos: [19] },
+    { itemId: '4', precio: 429600, cantidad: 1 },
+    { itemId: '4', precio: 149400, cantidad: 1 },
+  ]
+
+  it('imputa el IVA a la línea que lo generó, no a prorrata', () => {
+    // Este es el test que justifica toda la función: repartir el IVA parejo
+    // le adjudicaría al recaudo un impuesto que no generó.
+    //
+    // Se compara con tolerancia de un peso y no al centavo a propósito. Alegra
+    // REDONDEA el IVA: 126.050 × 19% = 23.949,50 y en la factura figura 23.950,
+    // por eso el total es 729.000 y no 728.999,50. Perseguir el redondeo
+    // interno de Alegra sería un test frágil que se rompe cuando ellos cambien
+    // de criterio; lo que tiene que ser exacto es la SUMA, y eso se verifica
+    // en el test de abajo.
+    const partes = repartirEntreServicios(FACTURA_REAL, 729000)
+
+    const porItem = Object.fromEntries(partes.map((p) => [p.itemId, p.monto]))
+    expect(Math.abs(porItem['2']! - 150000)).toBeLessThan(1) // 126.050 × 1,19
+    expect(Math.abs(porItem['4']! - 579000)).toBeLessThan(1) // sin IVA
+  })
+
+  it('fusiona las líneas repetidas del mismo servicio', () => {
+    // "Recaudo para Terceros" viene dos veces en la factura real.
+    const partes = repartirEntreServicios(FACTURA_REAL, 729000)
+
+    expect(partes).toHaveLength(2)
+    expect(partes.filter((p) => p.itemId === '4')).toHaveLength(1)
+  })
+
+  it('la suma da EXACTAMENTE el monto cobrado', () => {
+    const partes = repartirEntreServicios(FACTURA_REAL, 729000)
+
+    expect(sumarMontos(partes.map((p) => p.monto))).toBe(729000)
+  })
+
+  it('reparte a prorrata cuando la factura está a medio pagar', () => {
+    // Al libro entra lo cobrado, no lo facturado: se mantiene la composición
+    // del documento y se reparte el cobro en esa proporción.
+    const partes = repartirEntreServicios(FACTURA_REAL, 364500) // la mitad
+
+    const porItem = Object.fromEntries(partes.map((p) => [p.itemId, p.monto]))
+    expect(Math.abs(porItem['2']! - 75000)).toBeLessThan(1)
+    expect(Math.abs(porItem['4']! - 289500)).toBeLessThan(1)
+    // La suma sí es exacta, siempre.
+    expect(sumarMontos(partes.map((p) => p.monto))).toBe(364500)
+  })
+
+  it('cierra exacto aunque la proporción no sea redonda', () => {
+    // Tres tercios de 100 no dan 33,33 × 3. Alguien tiene que absorber el resto.
+    const partes = repartirEntreServicios(
+      [
+        { itemId: 'a', precio: 100, cantidad: 1 },
+        { itemId: 'b', precio: 100, cantidad: 1 },
+        { itemId: 'c', precio: 100, cantidad: 1 },
+      ],
+      100
+    )
+
+    expect(sumarMontos(partes.map((p) => p.monto))).toBe(100)
+  })
+
+  it('cotización de una sola línea: se lleva todo', () => {
+    const partes = repartirEntreServicios(
+      [{ itemId: '3', precio: 90000, cantidad: 2 }],
+      180000
+    )
+
+    expect(partes).toEqual([{ itemId: '3', monto: 180000 }])
+  })
+
+  it('descuenta el descuento de la línea', () => {
+    const partes = repartirEntreServicios(
+      [{ itemId: 'a', precio: 100000, cantidad: 1, descuento: 20000 }],
+      80000
+    )
+
+    expect(partes).toEqual([{ itemId: 'a', monto: 80000 }])
+  })
+
+  it('descarta las partes que redondean a cero sin descuadrar la suma', () => {
+    // La línea despreciable no merece una fila de desglose, pero su peso no
+    // puede evaporarse: tiene que quedar dentro de otra parte.
+    const partes = repartirEntreServicios(
+      [
+        { itemId: 'grande', precio: 1000000, cantidad: 1 },
+        { itemId: 'polvo', precio: 0.001, cantidad: 1 },
+      ],
+      100
+    )
+
+    expect(partes.every((p) => p.monto > 0)).toBe(true)
+    expect(sumarMontos(partes.map((p) => p.monto))).toBe(100)
+  })
+
+  it('no inventa un reparto cuando no hay nada que repartir', () => {
+    expect(repartirEntreServicios([], 1000)).toEqual([])
+    expect(repartirEntreServicios(FACTURA_REAL, 0)).toEqual([])
+    expect(repartirEntreServicios(FACTURA_REAL, -500)).toEqual([])
+    expect(repartirEntreServicios([{ itemId: 'a', precio: 0, cantidad: 5 }], 1000)).toEqual([])
+  })
+
+  it('ignora líneas de importe negativo en vez de restarlas', () => {
+    // Un importe negativo no es un servicio cobrado; si se colara, el reparto
+    // le daría un monto negativo a un desglose que la base rechaza.
+    const partes = repartirEntreServicios(
+      [
+        { itemId: 'a', precio: 100, cantidad: 1 },
+        { itemId: 'b', precio: -50, cantidad: 1 },
+      ],
+      100
+    )
+
+    expect(partes).toEqual([{ itemId: 'a', monto: 100 }])
   })
 })

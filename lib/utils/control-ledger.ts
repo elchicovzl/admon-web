@@ -282,3 +282,116 @@ export function contraMovimiento(original: MovimientoParaSaldo): MovimientoParaS
     bolsilloDestinoId: null,
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Reparto de un cobro entre los servicios que lo componen
+// ---------------------------------------------------------------------------
+//
+// Un documento de Alegra no es una venta de una cosa: es varias líneas, y esas
+// líneas son el desglose del monto. Medido contra la cuenta de producción, de
+// las 25 facturas más recientes NINGUNA tiene una sola línea — todas son
+// `Administracion` + `Recaudo para Terceros`, y solo la primera es lo que gana
+// la empresa.
+//
+// Hay dos descuadres que resolver, y por eso esto es una función y no una
+// asignación directa:
+//
+//  1. LAS LÍNEAS NO SUMAN EL TOTAL. Suman el SUBTOTAL, sin impuestos. Con
+//     números reales de la factura FEAD10134:
+//
+//       Administracion         63.025 × 2 = 126.050  (IVA 19%)
+//       Recaudo para Terceros            = 579.000  (sin IVA)
+//                                          ───────
+//       subtotal                           705.050
+//       total                              729.000
+//
+//     El IVA se le imputa a la línea que lo generó, no se reparte parejo:
+//     126.050 × 1,19 = 150.000, y 150.000 + 579.000 = 729.000 exacto. Repartir
+//     el IVA a prorrata le adjudicaría al recaudo un impuesto que no generó.
+//
+//  2. AL LIBRO ENTRA LO COBRADO, NO LO FACTURADO. Una factura a medio pagar
+//     metió en caja solo lo que se pagó. La composición del documento se
+//     mantiene y el cobro se reparte en esa proporción.
+
+/** Una línea del documento, tal como llega de Alegra. */
+export interface LineaDeDocumento {
+  /** Id del item en Alegra. Es la identidad; el nombre puede cambiar. */
+  itemId: string
+  precio: number
+  cantidad: number
+  descuento?: number
+  /** Porcentajes de impuesto de ESA línea (19 para un IVA del 19%). */
+  impuestos?: number[]
+}
+
+/** Cuánto del cobro le toca a cada servicio. */
+export interface ParteDeServicio {
+  itemId: string
+  monto: number
+}
+
+/**
+ * Reparte un cobro entre los servicios que componen el documento.
+ *
+ * Las líneas del mismo item se fusionan: la factura FEAD10127 trae "Recaudo
+ * para Terceros" dos veces y la cotización 1191 trae "Liquidacion Planilla"
+ * diez. Para reportar por servicio son una sola cosa.
+ *
+ * El residuo del redondeo lo absorbe la última parte, así que la suma da
+ * EXACTAMENTE `montoCobrado`. Si no cerrara, el desglose contradiría al
+ * movimiento que cuelga de él.
+ *
+ * Devuelve `[]` si no hay nada que repartir — sin líneas, con importes en cero
+ * o con un cobro no positivo. El que llama decide qué hacer con eso; acá no se
+ * inventa una asignación.
+ */
+export function repartirEntreServicios(
+  lineas: LineaDeDocumento[],
+  montoCobrado: number
+): ParteDeServicio[] {
+  if (montoCobrado <= 0) return []
+
+  // Bruto por línea: neto más los impuestos de esa misma línea.
+  const brutoPorItem = new Map<string, number>()
+
+  for (const linea of lineas) {
+    const neto = linea.precio * linea.cantidad - (linea.descuento ?? 0)
+    if (neto <= 0) continue
+
+    const factor = (linea.impuestos ?? []).reduce((acc, pct) => acc + pct / 100, 1)
+    const bruto = neto * factor
+
+    brutoPorItem.set(linea.itemId, (brutoPorItem.get(linea.itemId) ?? 0) + bruto)
+  }
+
+  const totalBruto = [...brutoPorItem.values()].reduce((acc, bruto) => acc + bruto, 0)
+  if (totalBruto <= 0) return []
+
+  // De mayor a menor, y determinista: el residuo del redondeo lo absorbe la
+  // parte más grande, que es donde menos se nota.
+  const items = [...brutoPorItem.entries()].sort((a, b) => b[1] - a[1])
+
+  const partes = items
+    .map(([itemId, bruto]) => ({
+      itemId,
+      monto: redondearMonto((bruto / totalBruto) * montoCobrado),
+    }))
+    // Una parte puede redondear a cero si su peso es despreciable frente al
+    // cobro. Guardar un desglose de cero es ruido: no dice que se cobró ese
+    // servicio. Se descartan ANTES de cuadrar, no después, porque si no el
+    // ajuste se va con ellas y la suma deja de dar el monto del movimiento.
+    .filter((parte) => parte.monto > 0)
+
+  if (partes.length === 0) return []
+
+  const residuo = redondearMonto(
+    montoCobrado - partes.reduce((acc, parte) => redondearMonto(acc + parte.monto), 0)
+  )
+  partes[0]!.monto = redondearMonto(partes[0]!.monto + residuo)
+
+  // El ajuste podría dejar la parte mayor en cero o negativa solo si el cobro
+  // es más chico que el redondeo de las demás. En ese caso el reparto no
+  // significa nada y es más honesto no devolver ninguno.
+  return partes[0]!.monto > 0 ? partes : []
+}

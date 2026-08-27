@@ -21,7 +21,16 @@ function dec(n: number) {
   return { toNumber: () => n } as never
 }
 
-const { prismaMock, authMock, hasControlAccessMock, alegraMock, facturasMock } = vi.hoisted(() => ({
+const {
+  prismaMock,
+  authMock,
+  hasControlAccessMock,
+  alegraMock,
+  facturasMock,
+  itemsMock,
+  estimateDetalleMock,
+  invoiceDetalleMock,
+} = vi.hoisted(() => ({
   prismaMock: {
     movimiento: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
     cierreMensual: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
@@ -30,12 +39,21 @@ const { prismaMock, authMock, hasControlAccessMock, alegraMock, facturasMock } =
     bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     servicioReferenciado: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    servicioAlegra: {
+      findMany: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
   authMock: vi.fn(),
   hasControlAccessMock: vi.fn(),
   alegraMock: vi.fn(),
   facturasMock: vi.fn(),
+  itemsMock: vi.fn(),
+  estimateDetalleMock: vi.fn(),
+  invoiceDetalleMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
@@ -51,6 +69,9 @@ vi.mock('next/cache', () => ({
 vi.mock('@/lib/alegra/cache', () => ({
   getCachedEstimatesInRange: alegraMock,
   getCachedInvoices: facturasMock,
+  getCachedItems: itemsMock,
+  getCachedEstimate: estimateDetalleMock,
+  getCachedInvoice: invoiceDetalleMock,
 }))
 vi.mock('react', () => ({
   cache: <T extends (...args: unknown[]) => unknown>(fn: T): T => fn,
@@ -71,6 +92,7 @@ import {
   importarCotizacionesComoIngresos,
   getFacturasDelPeriodo,
   importarFacturasComoIngresos,
+  sincronizarServiciosAlegra,
 } from '../control.actions'
 
 const SESSION = {
@@ -115,6 +137,9 @@ beforeEach(() => {
   authMock.mockResolvedValue(SESSION)
   hasControlAccessMock.mockResolvedValue(true)
   prismaMock.cierreMensual.findUnique.mockResolvedValue(null)
+  // Catálogo de Alegra vacío por defecto: los tests que necesitan desglose lo
+  // llenan en su propio beforeEach.
+  prismaMock.servicioAlegra.findMany.mockResolvedValue([])
 })
 
 // ---------------------------------------------------------------------------
@@ -271,6 +296,7 @@ describe('anularMovimiento', () => {
       contraparteId: null,
       prestamoId: null,
       anuladoPor: null,
+      detalleServicios: [],
     })
     prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
 
@@ -302,6 +328,7 @@ describe('anularMovimiento', () => {
       contraparteId: null,
       prestamoId: null,
       anuladoPor: null,
+      detalleServicios: [],
     })
     prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
 
@@ -331,6 +358,7 @@ describe('anularMovimiento', () => {
       contraparteId: null,
       prestamoId: null,
       anuladoPor: { id: 'cmovanula001' },
+      detalleServicios: [],
     })
 
     const res = await anularMovimiento(anulacion)
@@ -1239,5 +1267,436 @@ describe('facturas de venta como ingresos ("por arriba")', () => {
 
     expect((await getFacturasDelPeriodo('2026-08')).success).toBe(false)
     expect(facturasMock).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('sincronizarServiciosAlegra', () => {
+  /** Un item de /items tal como llega, con lo mínimo que mira la action. */
+  function item(over: Record<string, unknown> = {}) {
+    return {
+      id: '3',
+      name: 'Independiente 03',
+      description: 'Afilicion de Eps y Pension',
+      reference: '05',
+      status: 'active',
+      type: 'service',
+      ...over,
+    }
+  }
+
+  /** El catálogo entero en una página: menos de 30 corta el bucle. */
+  function unaPagina(items: unknown[]) {
+    itemsMock.mockResolvedValue({ data: items, total: items.length })
+  }
+
+  beforeEach(() => {
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([])
+    prismaMock.servicioAlegra.create.mockResolvedValue({})
+    prismaMock.servicioAlegra.update.mockResolvedValue({})
+    prismaMock.servicioAlegra.updateMany.mockResolvedValue({ count: 0 })
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(res.success).toBe(false)
+    expect(itemsMock).not.toHaveBeenCalled()
+  })
+
+  it('descarta lo que no es servicio', async () => {
+    // La cuenta tiene productos que no son de este negocio y no tienen nada
+    // que hacer en un catálogo de servicios cobrados.
+    unaPagina([item(), item({ id: '25', name: 'CONCOLOR LATEX GRIS', type: 'product' })])
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(res.success).toBe(true)
+    expect(res.data?.creados).toBe(1)
+    expect(res.data?.descartados).toBe(1)
+    expect(prismaMock.servicioAlegra.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('marca "Recaudo para Terceros" como plata en tránsito al crearlo', async () => {
+    unaPagina([item({ id: '4', name: 'Recaudo para Terceros', reference: '02' })])
+
+    await sincronizarServiciosAlegra()
+
+    expect(prismaMock.servicioAlegra.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ alegraItemId: '4', enTransito: true }),
+      })
+    )
+  })
+
+  it('no marca en tránsito a los demás servicios', async () => {
+    unaPagina([item()])
+
+    await sincronizarServiciosAlegra()
+
+    expect(prismaMock.servicioAlegra.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ enTransito: false }) })
+    )
+  })
+
+  it('NO pisa enTransito de un servicio que ya existe', async () => {
+    // Es una decisión del negocio, no un dato de Alegra: si alguien lo cambió
+    // desde la pantalla, la sincronización siguiente tiene que respetarlo.
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'csrvalegra01', alegraItemId: '4', isActive: true },
+    ])
+    unaPagina([item({ id: '4', name: 'Recaudo para Terceros', reference: '02' })])
+
+    await sincronizarServiciosAlegra()
+
+    expect(prismaMock.servicioAlegra.create).not.toHaveBeenCalled()
+    const [args] = prismaMock.servicioAlegra.update.mock.calls[0] as [
+      { data: Record<string, unknown> },
+    ]
+    expect(args.data).not.toHaveProperty('enTransito')
+  })
+
+  it('desactiva lo que ya no está en Alegra, sin borrarlo', async () => {
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'cviejo0000001', alegraItemId: '99', isActive: true },
+    ])
+    unaPagina([item()])
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(res.data?.desactivados).toBe(1)
+    expect(prismaMock.servicioAlegra.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['cviejo0000001'] } },
+      data: { isActive: false },
+    })
+  })
+
+  it('no cuenta como desactivado lo que ya estaba apagado', async () => {
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'cviejo0000001', alegraItemId: '99', isActive: false },
+    ])
+    unaPagina([item()])
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(res.data?.desactivados).toBe(0)
+    expect(prismaMock.servicioAlegra.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('no toca el catálogo si Alegra no devuelve ningún servicio', async () => {
+    // Sin esta guarda, una respuesta vacía o degradada apagaría todo de un saque.
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'csrvalegra01', alegraItemId: '3', isActive: true },
+    ])
+    unaPagina([])
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.servicioAlegra.updateMany).not.toHaveBeenCalled()
+    expect(prismaMock.servicioAlegra.update).not.toHaveBeenCalled()
+  })
+
+  it('pagina: una página llena obliga a pedir la siguiente', async () => {
+    const llena = Array.from({ length: 30 }, (_, i) => item({ id: String(i + 1) }))
+    itemsMock
+      .mockResolvedValueOnce({ data: llena, total: 31 })
+      .mockResolvedValueOnce({ data: [item({ id: '31' })], total: 31 })
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(itemsMock).toHaveBeenCalledTimes(2)
+    expect(itemsMock).toHaveBeenNthCalledWith(2, { start: 30, limit: 30 })
+    expect(res.data?.creados).toBe(31)
+  })
+
+  it('si Alegra falla, avisa y no escribe nada', async () => {
+    itemsMock.mockRejectedValue(new Error('502'))
+
+    const res = await sincronizarServiciosAlegra()
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('Alegra')
+    expect(prismaMock.servicioAlegra.create).not.toHaveBeenCalled()
+    expect(prismaMock.servicioAlegra.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('desglose por servicio de Alegra', () => {
+  /**
+   * Los dos ítems de una factura real (FEAD10134). El nombre no importa acá:
+   * el emparejamiento con el catálogo local es por `id`.
+   */
+  const ITEMS_FACTURA = [
+    { id: '2', price: 63025, quantity: 2, discount: 0, tax: [{ percentage: 19 }] },
+    { id: '4', price: 429600, quantity: 1, discount: 0 },
+    { id: '4', price: 149400, quantity: 1, discount: 0 },
+  ]
+
+  const FACTURA = (
+    id: string,
+    numero: string,
+    total: number,
+    pagado: number,
+    date = '2026-08-26'
+  ) => ({
+    id,
+    date,
+    status: pagado >= total ? 'closed' : 'open',
+    client: { name: 'Cliente SAS' },
+    numberTemplate: { fullNumber: numero },
+    total,
+    totalPaid: pagado,
+    balance: total - pagado,
+  })
+
+  const COT = (id: string, numero: number, total: number, date = '2026-08-21') => ({
+    id,
+    number: numero,
+    date,
+    client: { name: 'Cliente SAS' },
+    total,
+  })
+
+  /** El catálogo local ya sincronizado, con los dos servicios. */
+  function catalogoCompleto() {
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'csrvadmin001', alegraItemId: '2' },
+      { id: 'csrvrecaudo1', alegraItemId: '4' },
+    ])
+  }
+
+  beforeEach(() => {
+    prismaMock.bolsillo.findUnique.mockResolvedValue({ id: 'cbolivone0001', nombre: 'IVONE' })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatcobro0001' })
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+    catalogoCompleto()
+  })
+
+  /** El desglose que quedó en el `create` del movimiento. */
+  function desgloseGuardado() {
+    const [args] = prismaMock.movimiento.create.mock.calls[0] as [
+      { data: { detalleServicios?: { create: Array<{ servicioAlegraId: string; monto: number }> } } },
+    ]
+    return args.data.detalleServicios?.create
+  }
+
+  it('guarda una fila por servicio, con el IVA en la línea que lo generó', async () => {
+    facturasMock.mockResolvedValue({
+      data: [FACTURA('i1', 'FE1', 729_000, 729_000, '2026-08-26')],
+      total: 1,
+    })
+    invoiceDetalleMock.mockResolvedValue({ items: ITEMS_FACTURA })
+
+    const res = await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['i1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    expect(res.success).toBe(true)
+    const desglose = desgloseGuardado()!
+    expect(desglose).toHaveLength(2)
+    const porServicio = Object.fromEntries(
+      desglose.map((d) => [d.servicioAlegraId, d.monto])
+    )
+    expect(Math.abs(porServicio['csrvadmin001']! - 150_000)).toBeLessThan(1)
+    expect(Math.abs(porServicio['csrvrecaudo1']! - 579_000)).toBeLessThan(1)
+  })
+
+  it('el desglose suma exactamente el monto del movimiento', async () => {
+    facturasMock.mockResolvedValue({
+      data: [FACTURA('i1', 'FE1', 729_000, 729_000, '2026-08-26')],
+      total: 1,
+    })
+    invoiceDetalleMock.mockResolvedValue({ items: ITEMS_FACTURA })
+
+    await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['i1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    const total = desgloseGuardado()!.reduce((a, d) => a + d.monto, 0)
+    expect(Math.round(total * 100) / 100).toBe(729_000)
+  })
+
+  it('reparte sobre lo COBRADO, no sobre lo facturado', async () => {
+    // Una factura a medio pagar metió en caja solo una parte; el desglose
+    // tiene que hablar de esa parte, no del documento entero.
+    facturasMock.mockResolvedValue({
+      data: [FACTURA('i1', 'FE1', 729_000, 364_500, '2026-08-26')],
+      total: 1,
+    })
+    invoiceDetalleMock.mockResolvedValue({ items: ITEMS_FACTURA })
+
+    await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['i1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    const total = desgloseGuardado()!.reduce((a, d) => a + d.monto, 0)
+    expect(Math.round(total * 100) / 100).toBe(364_500)
+  })
+
+  it('NO guarda un desglose parcial si falta un servicio en el catálogo', async () => {
+    // Es la regla central: el reparto es a prorrata, así que un desglose al
+    // que le falta una línea seguiría sumando el monto del movimiento y le
+    // adjudicaría a los servicios conocidos una plata que entró por otro.
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'csrvadmin001', alegraItemId: '2' }, // falta el '4'
+    ])
+    facturasMock.mockResolvedValue({
+      data: [FACTURA('i1', 'FE1', 729_000, 729_000, '2026-08-26')],
+      total: 1,
+    })
+    invoiceDetalleMock.mockResolvedValue({ items: ITEMS_FACTURA })
+
+    const res = await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['i1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    expect(desgloseGuardado()).toBeUndefined()
+    expect(res.data!.creados).toBe(1) // el ingreso se registra igual
+    expect(res.data!.sinDesglose).toBe(1)
+  })
+
+  it('si falla el detalle de Alegra, registra el ingreso igual', async () => {
+    // La plata entró: no poder leer los items no puede impedir asentarla.
+    facturasMock.mockResolvedValue({
+      data: [FACTURA('i1', 'FE1', 729_000, 729_000, '2026-08-26')],
+      total: 1,
+    })
+    invoiceDetalleMock.mockRejectedValue(new Error('504'))
+
+    const res = await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['i1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    expect(res.data!.creados).toBe(1)
+    expect(res.data!.sinDesglose).toBe(1)
+    expect(desgloseGuardado()).toBeUndefined()
+  })
+
+  it('la cotización de diez líneas del mismo servicio guarda UNA fila', async () => {
+    // Cotización 1191: diez líneas de "Liquidacion Planilla". Para reportar
+    // por servicio son una sola cosa.
+    prismaMock.servicioAlegra.findMany.mockResolvedValue([
+      { id: 'csrvplanilla', alegraItemId: '9' },
+    ])
+    alegraMock.mockResolvedValue({
+      items: [COT('e1', 1191, 205_000, '2026-08-21')],
+      truncated: false,
+    })
+    estimateDetalleMock.mockResolvedValue({
+      items: Array.from({ length: 10 }, () => ({ id: '9', price: 20500, quantity: 1 })),
+    })
+
+    await importarCotizacionesComoIngresos({ periodo: '2026-08', estimateIds: ['e1'] })
+
+    const desglose = desgloseGuardado()!
+    expect(desglose).toHaveLength(1)
+    expect(desglose[0]!.monto).toBe(205_000)
+  })
+})
+
+describe('servicio en un movimiento manual', () => {
+  beforeEach(() => {
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+  })
+
+  it('un INGRESO con servicio guarda UNA línea con el monto entero', async () => {
+    // El caso manual es el caso particular del general: escribe en la misma
+    // tabla que el importador, no en un campo paralelo.
+    const res = await createMovimiento({
+      ...MOVIMIENTO_VALIDO,
+      tipo: TipoMovimiento.INGRESO,
+      monto: 80000,
+      servicioAlegraId: 'csrvindep0001',
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          detalleServicios: {
+            create: [{ servicioAlegraId: 'csrvindep0001', monto: 80000 }],
+          },
+        }),
+      })
+    )
+  })
+
+  it('rechaza el servicio en un EGRESO', async () => {
+    // El catálogo de Alegra es de VENTAS: un pago de nómina no vendió nada, y
+    // permitirlo mezclaría egresos con ingresos al sumar por servicio.
+    const res = await createMovimiento({
+      ...MOVIMIENTO_VALIDO,
+      tipo: TipoMovimiento.EGRESO,
+      servicioAlegraId: 'csrvindep0001',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('ingreso')
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('un movimiento sin servicio no escribe desglose', async () => {
+    const res = await createMovimiento(MOVIMIENTO_VALIDO)
+
+    expect(res.success).toBe(true)
+    const [args] = prismaMock.movimiento.create.mock.calls[0] as [
+      { data: Record<string, unknown> },
+    ]
+    expect(args.data).not.toHaveProperty('detalleServicios')
+  })
+
+  it('la anulación espeja el desglose del original', async () => {
+    // Si no, un movimiento anulado seguiría contando entero en el reporte por
+    // servicio y el número mentiría hacia arriba.
+    prismaMock.movimiento.findUnique.mockResolvedValue({
+      id: 'cmov0000001',
+      tipo: TipoMovimiento.INGRESO,
+      monto: dec(729000),
+      concepto: 'Cobro factura FE1',
+      bolsilloId: IVONE,
+      bolsilloDestinoId: null,
+      categoriaId: CATEGORIA,
+      contraparteId: null,
+      prestamoId: null,
+      anuladoPor: null,
+      detalleServicios: [
+        { servicioAlegraId: 'csrvadmin001', monto: dec(150000) },
+        { servicioAlegraId: 'csrvrecaudo1', monto: dec(579000) },
+      ],
+    })
+
+    await anularMovimiento({ movimientoId: 'cmov0000001', motivo: 'se devolvió el pago' })
+
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          detalleServicios: {
+            create: [
+              { servicioAlegraId: 'csrvadmin001', monto: 150000 },
+              { servicioAlegraId: 'csrvrecaudo1', monto: 579000 },
+            ],
+          },
+        }),
+      })
+    )
   })
 })

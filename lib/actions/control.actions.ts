@@ -32,7 +32,13 @@ import { hasControlAccess } from '@/lib/auth/rbac'
  * ingreso de plata que ese documento originó. La referencia queda guardada en
  * `Movimiento.alegraEstimateId`, que es un puntero, no una consolidación.
  */
-import { getCachedEstimatesInRange, getCachedInvoices } from '@/lib/alegra/cache'
+import {
+  getCachedEstimate,
+  getCachedEstimatesInRange,
+  getCachedInvoice,
+  getCachedInvoices,
+  getCachedItems,
+} from '@/lib/alegra/cache'
 import {
   GrupoCategoria,
   TipoMovimiento,
@@ -46,6 +52,8 @@ import {
   type CategoriaListItem,
   type TipoServicioListItem,
   type ContraparteListItem,
+  type ServicioAlegraListItem,
+  type SincronizacionServiciosResultado,
   type MovimientoListItem,
   type PrestamoListItem,
   type ServicioReferenciadoListItem,
@@ -70,7 +78,9 @@ import {
   margenServicio,
   estadoServicio,
   contraMovimiento,
+  repartirEntreServicios,
   sumarMontos,
+  type LineaDeDocumento,
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
 import {
@@ -78,6 +88,7 @@ import {
   createCategoriaSchema,
   createTipoServicioSchema,
   toggleCatalogoSchema,
+  toggleServicioEnTransitoSchema,
   createContraparteSchema,
   createMovimientoSchema,
   anularMovimientoSchema,
@@ -93,6 +104,7 @@ import {
   type CreateCategoriaInput,
   type CreateTipoServicioInput,
   type ToggleCatalogoInput,
+  type ToggleServicioEnTransitoInput,
   type CreateContraparteInput,
   type CreateMovimientoInput,
   type AnularMovimientoInput,
@@ -281,6 +293,235 @@ export const getTiposServicio = cache(
     return { success: true, data: tipos }
   }
 )
+
+// ---------------------------------------------------------------------------
+// Servicios de Alegra — el catálogo de "qué se vendió"
+// ---------------------------------------------------------------------------
+//
+// Dimensión distinta de CategoriaMovimiento, no un reemplazo. La categoría
+// dice qué naturaleza de plata es un movimiento; el servicio dice por qué se
+// cobró. Un mismo documento de Alegra puede tener varias líneas y por lo tanto
+// varios servicios, así que esto NUNCA podría vivir en el FK único de
+// categoría.
+
+const servicioAlegraSelect = {
+  id: true,
+  alegraItemId: true,
+  nombre: true,
+  referencia: true,
+  descripcion: true,
+  enTransito: true,
+  isActive: true,
+  sincronizadoEn: true,
+} satisfies Prisma.ServicioAlegraSelect
+
+export const getServiciosAlegra = cache(
+  async (
+    incluirInactivos = false
+  ): Promise<ActionResponse<ServicioAlegraListItem[]>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const servicios = await prisma.servicioAlegra.findMany({
+      where: incluirInactivos ? undefined : { isActive: true },
+      orderBy: [{ isActive: 'desc' }, { nombre: 'asc' }],
+      select: servicioAlegraSelect,
+    })
+
+    return { success: true, data: servicios }
+  }
+)
+
+/**
+ * Servicios que Alegra marca como plata en tránsito y por lo tanto NO son
+ * ingreso de Admon.
+ *
+ * Se siembra en la primera sincronización a partir de la referencia del item.
+ * Es la única heurística del archivo y está acotada a propósito: solo aplica
+ * al CREAR, nunca al actualizar, así que si alguien lo cambia desde la UI la
+ * sincronización siguiente respeta esa decisión.
+ */
+const REFERENCIAS_EN_TRANSITO = new Set(['02'])
+
+/**
+ * Sincroniza el catálogo local contra /items de Alegra.
+ *
+ * Qué hace y por qué:
+ *
+ * - Descarta todo lo que no sea `type: 'service'`. La cuenta tiene ocho
+ *   productos que no son de este negocio (`PISO PARED PIEMONTE`, `SIKA 100
+ *   MORTERO`, `POLO FEM`) y no tienen nada que hacer en un catálogo de
+ *   servicios cobrados.
+ *
+ * - Empareja por `alegraItemId`, no por nombre. El nombre se corrige desde
+ *   Alegra y el vínculo no debe romperse por una tilde.
+ *
+ * - Lo que ya no está en Alegra se DESACTIVA, no se borra: los movimientos
+ *   históricos van a apuntar acá.
+ *
+ * - Nunca pisa `enTransito` de un registro existente. Eso lo decide el
+ *   negocio, no el catálogo de allá.
+ */
+export async function sincronizarServiciosAlegra(): Promise<
+  ActionResponse<SincronizacionServiciosResultado>
+> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  // El catálogo entero entra en una página (30 items al momento de escribir
+  // esto), pero se pagina igual: que hoy quepa no es una garantía, y quedarse
+  // con la primera página desactivaría en silencio todo lo que quedó afuera.
+  const TAMANO = 30
+  const MAX_PAGINAS = 20
+
+  const crudos: Awaited<ReturnType<typeof getCachedItems>>['data'] = []
+
+  try {
+    for (let pagina = 0; pagina < MAX_PAGINAS; pagina += 1) {
+      const lote = await getCachedItems({
+        start: pagina * TAMANO,
+        limit: TAMANO,
+      })
+      crudos.push(...lote.data)
+      if (lote.data.length < TAMANO) break
+    }
+  } catch (error) {
+    console.error('[control] sincronizarServiciosAlegra:', error)
+    return {
+      success: false,
+      error: 'No se pudo consultar el catálogo de Alegra. Volvé a intentar en un momento.',
+    }
+  }
+
+  const servicios = crudos.filter((item) => item.type === 'service')
+  const descartados = crudos.length - servicios.length
+
+  if (servicios.length === 0) {
+    // Sin esta guarda, una respuesta vacía o degradada de Alegra apagaría el
+    // catálogo entero de un saque.
+    return {
+      success: false,
+      error: 'Alegra no devolvió ningún servicio. No se tocó el catálogo.',
+    }
+  }
+
+  const ahora = new Date()
+  const existentes = await prisma.servicioAlegra.findMany({
+    select: { id: true, alegraItemId: true, isActive: true },
+  })
+  const porItemId = new Map(existentes.map((s) => [s.alegraItemId, s]))
+
+  let creados = 0
+  let actualizados = 0
+
+  for (const item of servicios) {
+    const referencia = item.reference?.trim() || null
+    const comunes = {
+      nombre: item.name,
+      referencia,
+      descripcion: item.description?.trim() || null,
+      isActive: item.status !== 'inactive',
+      sincronizadoEn: ahora,
+    }
+
+    if (porItemId.has(item.id)) {
+      await prisma.servicioAlegra.update({
+        where: { alegraItemId: item.id },
+        data: comunes,
+      })
+      actualizados += 1
+    } else {
+      await prisma.servicioAlegra.create({
+        data: {
+          alegraItemId: item.id,
+          enTransito: referencia !== null && REFERENCIAS_EN_TRANSITO.has(referencia),
+          ...comunes,
+        },
+      })
+      creados += 1
+    }
+  }
+
+  // Lo que desapareció de Alegra se apaga. Solo se cuentan los que estaban
+  // encendidos para no reportar como novedad algo ya apagado.
+  const vistos = new Set(servicios.map((item) => item.id))
+  const aDesactivar = existentes.filter((s) => s.isActive && !vistos.has(s.alegraItemId))
+
+  if (aDesactivar.length > 0) {
+    await prisma.servicioAlegra.updateMany({
+      where: { id: { in: aDesactivar.map((s) => s.id) } },
+      data: { isActive: false },
+    })
+  }
+
+  const catalogo = await prisma.servicioAlegra.findMany({
+    orderBy: [{ isActive: 'desc' }, { nombre: 'asc' }],
+    select: servicioAlegraSelect,
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: `${creados} nuevos, ${actualizados} actualizados`,
+    data: {
+      creados,
+      actualizados,
+      desactivados: aDesactivar.length,
+      descartados,
+      servicios: catalogo,
+    },
+  }
+}
+
+export async function setServicioAlegraActivo(
+  data: ToggleCatalogoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleCatalogoSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.servicioAlegra.update({
+    where: { id: validado.data.id },
+    data: { isActive: validado.data.isActive },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Listo' }
+}
+
+/**
+ * Declara si la plata de un servicio es ingreso o solo pasa.
+ *
+ * Va en action propia y no en el toggle genérico porque no es higiene de
+ * catálogo: cambia lo que el libro considera ganado.
+ */
+export async function setServicioAlegraEnTransito(
+  data: ToggleServicioEnTransitoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleServicioEnTransitoSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.servicioAlegra.update({
+    where: { id: validado.data.id },
+    data: { enTransito: validado.data.enTransito },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: validado.data.enTransito
+      ? 'Marcado como plata en tránsito'
+      : 'Marcado como ingreso',
+  }
+}
 
 export async function createBolsillo(
   data: CreateBolsilloInput
@@ -683,6 +924,18 @@ export async function createMovimiento(
       prestamoId: entrada.prestamoId ?? null,
       notas: entrada.notas ?? null,
       createdById: auth.userId,
+      // Un cobro manual es el caso particular del general: UNA línea de
+      // desglose con el monto entero. Escribe en la misma tabla que el
+      // importador de Alegra, para que haya un solo lugar del que leer.
+      ...(entrada.servicioAlegraId
+        ? {
+            detalleServicios: {
+              create: [
+                { servicioAlegraId: entrada.servicioAlegraId, monto: entrada.monto },
+              ],
+            },
+          }
+        : {}),
     },
     select: movimientoSelect,
   })
@@ -729,6 +982,9 @@ export async function anularMovimiento(
       contraparteId: true,
       prestamoId: true,
       anuladoPor: { select: { id: true } },
+      // El desglose se espeja: si no, un movimiento anulado seguiría contando
+      // entero en el reporte por servicio.
+      detalleServicios: { select: { servicioAlegraId: true, monto: true } },
     },
   })
 
@@ -776,6 +1032,16 @@ export async function anularMovimiento(
       notas: motivo,
       anulaMovimientoId: original.id,
       createdById: auth.userId,
+      ...(original.detalleServicios.length > 0
+        ? {
+            detalleServicios: {
+              create: original.detalleServicios.map((d) => ({
+                servicioAlegraId: d.servicioAlegraId,
+                monto: decimalANumero(d.monto),
+              })),
+            },
+          }
+        : {}),
     },
     select: movimientoSelect,
   })
@@ -1852,10 +2118,73 @@ export const getCotizacionesDelPeriodo = cache(
  * declarada: Alegra no guarda cuándo se cobró, y el día del documento es lo
  * más cercano que hay. Queda dicho en las notas de cada movimiento.
  */
+/**
+ * Traduce las líneas de un documento de Alegra al desglose por servicio.
+ *
+ * Devuelve `null` — y NO un desglose parcial — cuando algún item del documento
+ * no está en el catálogo local. Es deliberado: un desglose al que le falta una
+ * línea sigue sumando el monto del movimiento, porque el reparto es a
+ * prorrata, y entonces le adjudica a los servicios conocidos una plata que
+ * entró por otro. Un dato que miente en silencio es peor que no tenerlo.
+ *
+ * El caso típico de eso es un servicio nuevo dado de alta en Alegra después de
+ * la última sincronización. Se resuelve apretando "Sincronizar" en Catálogos.
+ */
+/**
+ * El catálogo local indexado por id de item de Alegra.
+ *
+ * Se arma UNA vez por importación y se pasa al bucle. Consultarlo por
+ * documento serían ochenta queries idénticas para importar un mes.
+ */
+async function catalogoPorItemId(): Promise<Map<string, string>> {
+  const servicios = await prisma.servicioAlegra.findMany({
+    select: { id: true, alegraItemId: true },
+  })
+  return new Map(servicios.map((s) => [s.alegraItemId, s.id]))
+}
+
+function desgloseDeDocumento(
+  items: Array<Record<string, unknown>> | undefined,
+  montoCobrado: number,
+  porItemId: Map<string, string>
+): Array<{ servicioAlegraId: string; monto: number }> | null {
+  if (!items?.length) return null
+
+  const lineas: LineaDeDocumento[] = items.map((item) => ({
+    itemId: String(item.id),
+    precio: Number(item.price ?? 0),
+    cantidad: Number(item.quantity ?? 0),
+    descuento: Number(item.discount ?? 0),
+    impuestos: Array.isArray(item.tax)
+      ? (item.tax as Array<{ percentage?: unknown }>).map((t) => Number(t.percentage ?? 0))
+      : [],
+  }))
+
+  const partes = repartirEntreServicios(lineas, montoCobrado)
+  if (partes.length === 0) return null
+
+  const desglose: Array<{ servicioAlegraId: string; monto: number }> = []
+  for (const parte of partes) {
+    const servicioAlegraId = porItemId.get(parte.itemId)
+    if (!servicioAlegraId) {
+      console.warn(
+        `[control] item ${parte.itemId} no está en el catálogo local; ` +
+          'el documento se registra sin desglose. Sincronizá Catálogos.'
+      )
+      return null
+    }
+    desglose.push({ servicioAlegraId, monto: parte.monto })
+  }
+
+  return desglose
+}
+
 export async function importarCotizacionesComoIngresos(input: {
   periodo: string
   estimateIds: string[]
-}): Promise<ActionResponse<{ creados: number; salteados: number }>> {
+}): Promise<
+  ActionResponse<{ creados: number; salteados: number; sinDesglose: number }>
+> {
   const auth = await requireControlAuth()
   if (!auth.authorized) return sinAutorizacion(auth.error)
 
@@ -1889,12 +2218,33 @@ export async function importarCotizacionesComoIngresos(input: {
     (c) => input.estimateIds.includes(c.estimateId) && !c.yaRegistrada
   )
 
+  const porItemId = await catalogoPorItemId()
+
   let creados = 0
+  let sinDesglose = 0
   for (const c of seleccionadas) {
     const fecha = parseFechaCalendario(c.fecha.slice(0, 10))
     const periodo = periodoDeFecha(fecha)
 
     if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
+
+    // El servicio cobrado vive en los items, y los items NO vienen en la
+    // lista: hay que pedir el detalle de cada documento. Es un request por
+    // cotización, secuencial, dentro del limitador del cliente de Alegra.
+    let desglose: ReturnType<typeof desgloseDeDocumento> = null
+    try {
+      const detalle = await getCachedEstimate(c.estimateId)
+      desglose = desgloseDeDocumento(
+        detalle.items as Array<Record<string, unknown>> | undefined,
+        c.total,
+        porItemId
+      )
+    } catch (error) {
+      // Que falle el detalle no puede impedir registrar el ingreso: la plata
+      // entró igual. Se guarda sin desglose y se cuenta para avisar.
+      console.warn('[control] sin detalle de cotización', c.estimateId, error)
+    }
+    if (!desglose) sinDesglose++
 
     try {
       await prisma.movimiento.create({
@@ -1903,6 +2253,7 @@ export async function importarCotizacionesComoIngresos(input: {
           periodo,
           tipo: TipoMovimiento.INGRESO,
           monto: c.total,
+          ...(desglose ? { detalleServicios: { create: desglose } } : {}),
           // La descripción manda si existe: dice el servicio, que es más útil
           // que repetir el número del documento.
           concepto: (c.descripcion
@@ -1931,8 +2282,10 @@ export async function importarCotizacionesComoIngresos(input: {
 
   return {
     success: true,
-    message: `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
-    data: { creados, salteados: input.estimateIds.length - creados },
+    message:
+      `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}` +
+      (sinDesglose > 0 ? `, ${sinDesglose} sin desglose por servicio` : ''),
+    data: { creados, salteados: input.estimateIds.length - creados, sinDesglose },
   }
 }
 
@@ -2057,7 +2410,7 @@ export async function importarFacturasComoIngresos(input: {
   periodo: string
   invoiceIds: string[]
   bolsilloId: string
-}): Promise<ActionResponse<{ creados: number }>> {
+}): Promise<ActionResponse<{ creados: number; sinDesglose: number }>> {
   const auth = await requireControlAuth()
   if (!auth.authorized) return sinAutorizacion(auth.error)
 
@@ -2092,12 +2445,32 @@ export async function importarFacturasComoIngresos(input: {
     (f) => input.invoiceIds.includes(f.invoiceId) && !f.yaRegistrada && f.totalPagado > 0
   )
 
+  const porItemId = await catalogoPorItemId()
+
   let creados = 0
+  let sinDesglose = 0
   for (const f of elegidas) {
     const fecha = parseFechaCalendario(f.fecha.slice(0, 10))
     const periodo = periodoDeFecha(fecha)
 
     if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
+
+    // Un request por factura para leer los items. El reparto va sobre lo
+    // COBRADO, no sobre lo facturado: una factura a medio pagar metió en caja
+    // solo una parte, y esa parte se distribuye con la composición del
+    // documento.
+    let desglose: ReturnType<typeof desgloseDeDocumento> = null
+    try {
+      const detalle = await getCachedInvoice(f.invoiceId)
+      desglose = desgloseDeDocumento(
+        detalle.items as Array<Record<string, unknown>> | undefined,
+        f.totalPagado,
+        porItemId
+      )
+    } catch (error) {
+      console.warn('[control] sin detalle de factura', f.invoiceId, error)
+    }
+    if (!desglose) sinDesglose++
 
     try {
       await prisma.movimiento.create({
@@ -2107,6 +2480,7 @@ export async function importarFacturasComoIngresos(input: {
           tipo: TipoMovimiento.INGRESO,
           // Lo cobrado, no lo facturado.
           monto: f.totalPagado,
+          ...(desglose ? { detalleServicios: { create: desglose } } : {}),
           concepto: (f.descripcion
             ? `${f.descripcion} — ${f.cliente}`
             : `Cobro factura ${f.numero} — ${f.cliente}`
@@ -2130,7 +2504,9 @@ export async function importarFacturasComoIngresos(input: {
 
   return {
     success: true,
-    message: `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
-    data: { creados },
+    message:
+      `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}` +
+      (sinDesglose > 0 ? `, ${sinDesglose} sin desglose por servicio` : ''),
+    data: { creados, sinDesglose },
   }
 }

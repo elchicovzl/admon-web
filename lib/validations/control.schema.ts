@@ -114,6 +114,20 @@ export const toggleCatalogoSchema = z.object({
 
 export type ToggleCatalogoInput = z.infer<typeof toggleCatalogoSchema>
 
+/**
+ * Marca un servicio de Alegra como plata en tránsito.
+ *
+ * Va aparte de `toggleCatalogoSchema` porque no es lo mismo apagar un registro
+ * que declarar que su plata no es ingreso: el primero es higiene de catálogo,
+ * el segundo cambia lo que el libro considera ganado.
+ */
+export const toggleServicioEnTransitoSchema = z.object({
+  id: cuid('Servicio inválido'),
+  enTransito: z.boolean(),
+})
+
+export type ToggleServicioEnTransitoInput = z.infer<typeof toggleServicioEnTransitoSchema>
+
 export type CreateBolsilloInput = z.infer<typeof createBolsilloSchema>
 export type CreateCategoriaInput = z.infer<typeof createCategoriaSchema>
 export type CreateTipoServicioInput = z.infer<typeof createTipoServicioSchema>
@@ -167,6 +181,17 @@ const movimientoBaseSchema = z.object({
   categoriaId: cuid('Seleccioná una categoría'),
   contraparteId: cuid('Contraparte inválida').optional().nullable(),
   prestamoId: cuid('Préstamo inválido').optional().nullable(),
+
+  /**
+   * Servicio de Alegra por el que se cobró. Solo tiene sentido en un INGRESO.
+   *
+   * El catálogo de Alegra es un catálogo de VENTAS. Un egreso —nómina,
+   * papelería, un almuerzo— no vendió nada, y colgarle un servicio ensuciaría
+   * el reporte: al sumar por servicio aparecerían egresos mezclados con
+   * ingresos y el número dejaría de querer decir algo.
+   */
+  servicioAlegraId: cuid('Servicio inválido').optional().nullable(),
+
   notas,
 })
 
@@ -178,6 +203,12 @@ const destinoSoloEnTraslado = (data: {
   data.tipo === TipoMovimiento.TRASLADO
     ? Boolean(data.bolsilloDestinoId)
     : !data.bolsilloDestinoId
+
+/** El catálogo de Alegra es de ventas: un egreso no vendió nada. */
+const servicioSoloEnIngreso = (data: {
+  tipo: TipoMovimiento
+  servicioAlegraId?: string | null
+}) => !data.servicioAlegraId || data.tipo === TipoMovimiento.INGRESO
 
 /** Un traslado a sí mismo no mueve plata pero ensucia el saldo del periodo. */
 const bolsillosDistintos = (data: {
@@ -193,6 +224,10 @@ export const createMovimientoSchema = movimientoBaseSchema
   .refine(bolsillosDistintos, {
     message: 'El bolsillo destino debe ser distinto al de origen',
     path: ['bolsilloDestinoId'],
+  })
+  .refine(servicioSoloEnIngreso, {
+    message: 'El servicio de Alegra solo aplica a un ingreso',
+    path: ['servicioAlegraId'],
   })
 
 export type CreateMovimientoInput = z.infer<typeof createMovimientoSchema>

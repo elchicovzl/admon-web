@@ -6,6 +6,7 @@ import {
   getCategorias,
   getTiposServicio,
   getContrapartes,
+  getServiciosAlegra,
 } from '@/lib/actions/control.actions'
 import { CatalogosClient } from '@/components/dashboard/control/catalogos-client'
 import { ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
@@ -18,12 +19,14 @@ export const metadata: Metadata = {
 async function Catalogos() {
   // Se piden CON inactivos: esta es la única pantalla desde donde se puede
   // reactivar algo, así que esconderlos lo volvería un camino de ida.
-  const [bolsillos, categorias, tiposServicio, contrapartes] = await Promise.all([
-    getBolsillos(true),
-    getCategorias(true),
-    getTiposServicio(true),
-    getContrapartes(true),
-  ])
+  const [bolsillos, categorias, tiposServicio, contrapartes, serviciosAlegra] =
+    await Promise.all([
+      getBolsillos(true),
+      getCategorias(true),
+      getTiposServicio(true),
+      getContrapartes(true),
+      getServiciosAlegra(true),
+    ])
 
   return (
     <CatalogosClient
@@ -31,6 +34,7 @@ async function Catalogos() {
       categorias={categorias.data ?? []}
       tiposServicio={tiposServicio.data ?? []}
       contrapartes={contrapartes.data ?? []}
+      serviciosAlegra={serviciosAlegra.data ?? []}
     />
   )
 }

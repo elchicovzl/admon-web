@@ -16,6 +16,7 @@ import type {
   BolsilloListItem,
   CategoriaListItem,
   ContraparteListItem,
+  ServicioAlegraListItem,
 } from '@/lib/types/control.types'
 import { hoyComoFechaCalendario } from '@/lib/utils/control-format'
 
@@ -54,9 +55,19 @@ interface Props {
   bolsillos: BolsilloListItem[]
   categorias: CategoriaListItem[]
   contrapartes: ContraparteListItem[]
+  /**
+   * Catálogo de servicios de Alegra. Solo aplica a los INGRESOS: es un
+   * catálogo de VENTAS, y un egreso no vendió nada.
+   */
+  serviciosAlegra: ServicioAlegraListItem[]
 }
 
-export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Props) {
+export function MovimientoFormDialog({
+  bolsillos,
+  categorias,
+  contrapartes,
+  serviciosAlegra,
+}: Props) {
   const [abierto, setAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
@@ -83,12 +94,14 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
       bolsilloDestinoId: null,
       categoriaId: '',
       contraparteId: null,
+      servicioAlegraId: null,
       notas: null,
     },
   })
 
   const tipo = form.watch('tipo')
   const esTraslado = tipo === TipoMovimiento.TRASLADO
+  const esIngreso = tipo === TipoMovimiento.INGRESO
   const bolsilloOrigen = form.watch('bolsilloId')
 
   /**
@@ -102,6 +115,17 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
       form.setValue('bolsilloDestinoId', null)
     }
   }, [esTraslado, form])
+
+  /**
+   * Mismo problema que el destino del traslado: si se elige un servicio en un
+   * INGRESO y después se cambia a EGRESO, el valor quedaría colgado y el
+   * schema lo rechazaría apuntando a un campo que ya no está en pantalla.
+   */
+  useEffect(() => {
+    if (!esIngreso) {
+      form.setValue('servicioAlegraId', null)
+    }
+  }, [esIngreso, form])
 
   /**
    * El grupo va dentro de la etiqueta, no como encabezado.
@@ -119,6 +143,20 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
   const opcionesContraparte = [
     { value: '__ninguna__', label: 'Sin contraparte' },
     ...contrapartes.map((c) => ({ value: c.id, label: c.nombre })),
+  ]
+
+  /**
+   * La referencia va en la etiqueta porque es como el negocio los nombra:
+   * "el 05" antes que "Independiente 03".
+   */
+  const opcionesServicio = [
+    { value: '__ninguno__', label: 'Sin servicio' },
+    ...serviciosAlegra
+      .filter((s) => s.isActive)
+      .map((s) => ({
+        value: s.id,
+        label: s.referencia ? `${s.referencia} · ${s.nombre}` : s.nombre,
+      })),
   ]
 
   async function crearCategoria() {
@@ -162,6 +200,7 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
           bolsilloDestinoId: null,
           categoriaId: '',
           contraparteId: null,
+          servicioAlegraId: null,
           notas: null,
         })
         setAbierto(false)
@@ -432,6 +471,39 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
                 </FormItem>
               )}
             />
+
+            {/* Solo en ingresos. El catálogo de Alegra es de ventas: colgarle
+                un servicio a un pago de nómina ensuciaría el reporte, porque
+                al sumar por servicio aparecerían egresos mezclados. */}
+            {esIngreso && (
+              <FormField
+                control={form.control}
+                name="servicioAlegraId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Servicio cobrado (opcional)</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={opcionesServicio}
+                        value={field.value ?? '__ninguno__'}
+                        onValueChange={(v) =>
+                          field.onChange(!v || v === '__ninguno__' ? null : v)
+                        }
+                        placeholder="Sin servicio"
+                        searchPlaceholder="Buscar servicio…"
+                        disabled={guardando}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {serviciosAlegra.length === 0
+                        ? 'El catálogo está vacío. Sincronizalo en Catálogos → Servicios Alegra.'
+                        : 'Por qué se cobró. Es lo que después permite preguntar cuánto entró por cada servicio.'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

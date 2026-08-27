@@ -6,6 +6,7 @@ import {
   getBolsillos,
   getCategorias,
   getContrapartes,
+  getServiciosAlegra,
 } from '@/lib/actions/control.actions'
 import {
   formatearPeriodo,
@@ -107,15 +108,17 @@ async function Listado({
  * abrir el formulario sin esperar a que se resuelvan los movimientos.
  */
 async function catalogos() {
-  const [bolsillos, categorias, contrapartes] = await Promise.all([
+  const [bolsillos, categorias, contrapartes, serviciosAlegra] = await Promise.all([
     getBolsillos(),
     getCategorias(),
     getContrapartes(),
+    getServiciosAlegra(),
   ])
   return {
     bolsillos: bolsillos.data ?? [],
     categorias: categorias.data ?? [],
     contrapartes: contrapartes.data ?? [],
+    serviciosAlegra: serviciosAlegra.data ?? [],
   }
 }
 

@@ -1149,6 +1149,60 @@ model TipoServicioReferenciado {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// ServicioAlegra — espejo del catálogo /items de Alegra.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Es el "qué se vendió": el nombre que aparece como línea en una cotización o
+// en una factura de venta — "Independiente 03", "Administracion", "Recaudo
+// para Terceros". Verificado contra la cuenta: 22 servicios, y las mismas
+// filas alimentan tanto las cotizaciones (C) como las facturas (F), así que
+// un solo catálogo sirve para los dos.
+//
+// NO es una CategoriaMovimiento, y la distinción importa. La categoría
+// responde "¿qué naturaleza de plata es esta?" y es un FK único en Movimiento;
+// el servicio responde "¿qué se vendió?" y un mismo documento puede tener
+// varios.
+model ServicioAlegra {
+  id String @id @default(cuid())
+
+  // La identidad real es el id del item en Alegra, no el nombre: el nombre se
+  // corrige desde allá ("Administracion" → "Administración") y el vínculo no
+  // debe romperse por una tilde.
+  alegraItemId String @unique
+
+  nombre      String
+  // "01", "02", "05" — el código corto con el que el negocio los nombra.
+  // Opcional porque no todos los items lo tienen cargado.
+  referencia  String?
+  descripcion String?
+
+  /**
+   * El dinero de este servicio NO es ingreso de Admon: entra y vuelve a salir.
+   *
+   * El caso es "Recaudo para Terceros". Medido contra producción: de las 25
+   * facturas más recientes, NINGUNA tiene una sola línea — todas son
+   * `Administracion` + `Recaudo para Terceros`, y solo la primera es lo que
+   * gana la empresa.
+   */
+  enTransito Boolean @default(false)
+
+  // Se desactiva, nunca se borra: el desglose histórico apunta acá. Si un
+  // servicio desaparece de Alegra, la sincronización lo apaga.
+  isActive Boolean @default(true)
+
+  // Última vez que la sincronización lo confirmó contra Alegra.
+  sincronizadoEn DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  detalles MovimientoDetalleServicio[]
+
+  @@map("servicios_alegra")
+  @@index([isActive, nombre])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Movimiento — la tabla central. Las cuatro hojas de dinero del Excel
 // colapsan acá; todo lo demás es una vista sobre esto.
 // ───────────────────────────────────────────────────────────────────────────
@@ -1228,12 +1282,64 @@ model Movimiento {
   servicioComoIngreso ServicioReferenciado? @relation("ServicioMovimientoIngreso")
   servicioComoEgreso  ServicioReferenciado? @relation("ServicioMovimientoEgreso")
 
+  // Desglose por servicio de Alegra. Ver MovimientoDetalleServicio.
+  detalleServicios MovimientoDetalleServicio[]
+
   @@map("movimientos")
   @@index([periodo, bolsilloId])
   @@index([fecha])
   @@index([contraparteId, fecha])
   @@index([categoriaId])
   @@index([prestamoId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// MovimientoDetalleServicio — de qué servicios se compone un cobro.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Un cobro no es de una sola cosa. La factura FEAD10134 son 729.000 que se
+// descomponen en 150.000 de `Administracion` y 579.000 de `Recaudo para
+// Terceros` — y solo la primera es ingreso de Admon. Sin este desglose la
+// única forma de etiquetar el movimiento es elegir uno de los dos servicios,
+// que es perder justo el corte que interesa.
+//
+// POR QUÉ UNA TABLA HIJA Y NO UN CAMPO EN MOVIMIENTO
+//
+// Un campo `servicioAlegraId` alcanzaría para un cobro manual de una sola
+// cosa, pero no para un documento de Alegra: la cotización 1191 tiene diez
+// líneas. Tener las dos cosas — un FK para lo manual y una tabla para lo
+// importado — dejaría dos caminos que hay que mantener sincronizados, y el día
+// que alguien toque uno solo el reporte miente. Así que hay un solo mecanismo:
+// un cobro manual escribe UNA fila acá, que es el caso particular del general.
+//
+// La suma de los montos de un movimiento da su `monto` exacto. Se garantiza en
+// código (`repartirEntreServicios`, con tests) y no con un CHECK, porque un
+// CHECK no puede mirar la tabla padre.
+model MovimientoDetalleServicio {
+  id String @id @default(cuid())
+
+  movimientoId String
+  // En cascada: el desglose no tiene vida propia. Nunca se borra en la
+  // práctica — los movimientos son inmutables y se anulan con un
+  // contra-movimiento, que trae su propio desglose para que las dos filas se
+  // neteen al reportar.
+  movimiento   Movimiento @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
+
+  servicioAlegraId String
+  servicio         ServicioAlegra @relation(fields: [servicioAlegraId], references: [id])
+
+  // Parte del monto del movimiento que le toca a este servicio. Siempre
+  // positivo: el signo lo pone el `tipo` del movimiento, igual que en el resto
+  // del libro.
+  monto Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  // Un servicio aparece una sola vez por movimiento: las líneas repetidas del
+  // mismo item se fusionan antes de guardar.
+  @@map("movimiento_detalle_servicio")
+  @@unique([movimientoId, servicioAlegraId])
+  @@index([servicioAlegraId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

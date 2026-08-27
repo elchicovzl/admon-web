@@ -7,7 +7,7 @@ import {
   TipoContraparte,
 } from '@prisma/client'
 import { toast } from 'sonner'
-import { Loader2, Plus, Lock } from 'lucide-react'
+import { Loader2, Plus, Lock, RefreshCw } from 'lucide-react'
 
 import {
   createBolsillo,
@@ -18,12 +18,16 @@ import {
   setTipoServicioActivo,
   createContraparte,
   setContraparteActiva,
+  sincronizarServiciosAlegra,
+  setServicioAlegraActivo,
+  setServicioAlegraEnTransito,
 } from '@/lib/actions/control.actions'
 import type {
   BolsilloListItem,
   CategoriaListItem,
   TipoServicioListItem,
   ContraparteListItem,
+  ServicioAlegraListItem,
 } from '@/lib/types/control.types'
 import { formatearFecha } from '@/lib/utils/control-format'
 import {
@@ -63,6 +67,8 @@ interface Props {
   categorias: CategoriaListItem[]
   tiposServicio: TipoServicioListItem[]
   contrapartes: ContraparteListItem[]
+  /** Catálogo de Alegra: qué se vendió. Ver la pestaña "Servicios Alegra". */
+  serviciosAlegra: ServicioAlegraListItem[]
 }
 
 /** Switch de activo/inactivo compartido por las cuatro tablas. */
@@ -137,12 +143,15 @@ export function CatalogosClient({
   categorias,
   tiposServicio,
   contrapartes,
+  serviciosAlegra,
 }: Props) {
   // Estado local para que lo creado aparezca al instante sin recargar.
   const [listaBolsillos, setListaBolsillos] = useState(bolsillos)
   const [listaCategorias, setListaCategorias] = useState(categorias)
   const [listaServicios, setListaServicios] = useState(tiposServicio)
   const [listaContrapartes, setListaContrapartes] = useState(contrapartes)
+  const [listaAlegra, setListaAlegra] = useState(serviciosAlegra)
+  const [sincronizando, setSincronizando] = useState(false)
 
   // Formularios de alta
   const [nuevoBolsillo, setNuevoBolsillo] = useState<{
@@ -170,6 +179,7 @@ export function CatalogosClient({
         <TabsTrigger value="bolsillos">Bolsillos</TabsTrigger>
         <TabsTrigger value="categorias">Categorías</TabsTrigger>
         <TabsTrigger value="servicios">Servicios</TabsTrigger>
+        <TabsTrigger value="servicios-alegra">Servicios Alegra</TabsTrigger>
         <TabsTrigger value="contrapartes">Contrapartes</TabsTrigger>
         <TabsTrigger value="grupos">Grupos</TabsTrigger>
       </TabsList>
@@ -441,6 +451,145 @@ export function CatalogosClient({
                             a.map((x) => (x.id === s.id ? { ...x, isActive: valor } : x))
                           )
                         } else toast.error(r.error ?? 'No se pudo')
+                      }}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </TabsContent>
+
+      {/* ──────────────────────────── Servicios Alegra ─────────────────────── */}
+      <TabsContent value="servicios-alegra" className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Espejo del catálogo de Alegra: lo que aparece como línea en una
+          cotización o en una factura. Responde <em>qué se vendió</em>, que es
+          otra pregunta que <em>qué naturaleza de plata es</em> — eso lo siguen
+          contestando las categorías.
+        </p>
+
+        <Alert>
+          <AlertTitle>Este catálogo no se edita a mano</AlertTitle>
+          <AlertDescription>
+            Los servicios se dan de alta en Alegra y desde acá solo se
+            sincronizan. Lo único que se decide en Control es cuáles son plata
+            en tránsito.
+          </AlertDescription>
+        </Alert>
+
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            disabled={sincronizando}
+            onClick={async () => {
+              setSincronizando(true)
+              try {
+                const r = await sincronizarServiciosAlegra()
+                if (r.success && r.data) {
+                  setListaAlegra(r.data.servicios)
+                  toast.success(r.message ?? 'Catálogo sincronizado')
+                } else {
+                  toast.error(r.error ?? 'No se pudo sincronizar')
+                }
+              } finally {
+                setSincronizando(false)
+              }
+            }}
+          >
+            {sincronizando ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Sincronizar con Alegra
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {listaAlegra.length} servicios
+          </span>
+        </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Servicio</TableHead>
+                <TableHead className="w-24">Ref.</TableHead>
+                <TableHead className="w-40">En tránsito</TableHead>
+                <TableHead className="w-32">Sincronizado</TableHead>
+                <TableHead className="w-24">Activo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {listaAlegra.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    Todavía no se sincronizó el catálogo.
+                  </TableCell>
+                </TableRow>
+              )}
+              {listaAlegra.map((servicio) => (
+                <TableRow key={servicio.id} className={cn(!servicio.isActive && 'opacity-50')}>
+                  <TableCell>
+                    <div className="font-medium">{servicio.nombre}</div>
+                    {servicio.descripcion && (
+                      <div className="text-xs text-muted-foreground">
+                        {servicio.descripcion}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {servicio.referencia ? (
+                      <Badge variant="outline">{servicio.referencia}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <SwitchActivo
+                        activo={servicio.enTransito}
+                        onCambiar={async (valor) => {
+                          const r = await setServicioAlegraEnTransito({
+                            id: servicio.id,
+                            enTransito: valor,
+                          })
+                          if (r.success) {
+                            setListaAlegra((a) =>
+                              a.map((x) =>
+                                x.id === servicio.id ? { ...x, enTransito: valor } : x
+                              )
+                            )
+                            toast.success(r.message ?? 'Listo')
+                          } else {
+                            toast.error(r.error ?? 'No se pudo cambiar')
+                          }
+                        }}
+                      />
+                      {servicio.enTransito && (
+                        <Badge variant="secondary">No es ingreso</Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {servicio.sincronizadoEn ? formatearFecha(servicio.sincronizadoEn) : '—'}
+                  </TableCell>
+                  <TableCell>
+                    <SwitchActivo
+                      activo={servicio.isActive}
+                      onCambiar={async (valor) => {
+                        const r = await setServicioAlegraActivo({
+                          id: servicio.id,
+                          isActive: valor,
+                        })
+                        if (r.success) {
+                          setListaAlegra((a) =>
+                            a.map((x) => (x.id === servicio.id ? { ...x, isActive: valor } : x))
+                          )
+                        } else {
+                          toast.error(r.error ?? 'No se pudo cambiar')
+                        }
                       }}
                     />
                   </TableCell>
