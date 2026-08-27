@@ -6,6 +6,7 @@ import { TrendingUp, TrendingDown, Hash } from 'lucide-react'
 import { getReporteAnual } from '@/lib/actions/control.actions'
 import { formatearMonto, formatearPeriodo } from '@/lib/utils/control-format'
 import { ETIQUETA_GRUPO } from '@/components/dashboard/control/etiquetas'
+import { Monto } from '@/components/dashboard/control/monto'
 import { ControlStatsSkeleton, ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
 import type { FilaAgrupada } from '@/lib/types/control.types'
 
@@ -207,8 +208,8 @@ async function Reporte({ anio }: { anio: number }) {
                     <TableCell className="text-right tabular-nums text-red-600 dark:text-red-400">
                       {m.egresos === 0 ? '—' : formatearMonto(m.egresos)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {formatearMonto(m.neto)}
+                    <TableCell className="text-right font-medium">
+                      <Monto valor={m.neto} />
                     </TableCell>
                   </TableRow>
                 ))}

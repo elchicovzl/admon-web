@@ -6,6 +6,7 @@ import { Loader2, Lock, ClipboardCheck } from 'lucide-react'
 
 import { registrarConteo, cerrarPeriodo } from '@/lib/actions/control.actions'
 import type { CierreMensualView } from '@/lib/types/control.types'
+import { Monto } from './monto'
 import {
   formatearMonto,
   formatearDiferencia,
@@ -137,20 +138,22 @@ export function CierresTable({ periodo, cierres }: Props) {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {formatearMonto(cierre.saldoInicial)}
+                  <TableCell className="text-right">
+                    <Monto valor={cierre.saldoInicial} tenue />
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
                     {cierre.cantidadMovimientos}
                   </TableCell>
                   {/* Nunca se digita: sale de los movimientos. */}
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {formatearMonto(cierre.saldoFinalCalculado)}
+                  <TableCell className="text-right font-medium">
+                    <Monto valor={cierre.saldoFinalCalculado} />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {cierre.saldoFinalReal === null
-                      ? '—'
-                      : formatearMonto(cierre.saldoFinalReal)}
+                  <TableCell className="text-right">
+                    {cierre.saldoFinalReal === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <Monto valor={cierre.saldoFinalReal} tenue />
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {cierre.diferencia === null ? (
@@ -230,9 +233,7 @@ export function CierresTable({ periodo, cierres }: Props) {
             <div className="rounded-md border bg-muted/40 p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Calculado por el sistema</span>
-                <span className="font-medium tabular-nums">
-                  {formatearMonto(contando.saldoFinalCalculado)}
-                </span>
+                <Monto valor={contando.saldoFinalCalculado} className="font-medium" />
               </div>
             </div>
           )}
@@ -311,9 +312,7 @@ export function CierresTable({ periodo, cierres }: Props) {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Saldo de cierre</span>
-                <span className="font-medium tabular-nums">
-                  {formatearMonto(cerrando.saldoFinalCalculado)}
-                </span>
+                <Monto valor={cerrando.saldoFinalCalculado} className="font-medium" />
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Movimientos</span>

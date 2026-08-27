@@ -16,6 +16,8 @@ import {
   formatearPeriodo,
   periodoActual,
 } from '@/lib/utils/control-format'
+import { cn } from '@/lib/utils'
+import { Monto } from '@/components/dashboard/control/monto'
 import { ControlStatsSkeleton, ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
 import { SelectorPeriodo } from '@/components/dashboard/control/selector-periodo'
 
@@ -73,6 +75,8 @@ async function Kpis({ periodo }: { periodo: string }) {
     {
       titulo: 'Saldo consolidado',
       valor: formatearMonto(saldoConsolidado),
+      // Un consolidado negativo es la señal más importante de la pantalla.
+      negativo: saldoConsolidado < 0,
       icono: Wallet,
       nota: 'Suma calculada de todos los bolsillos',
     },
@@ -108,7 +112,14 @@ async function Kpis({ periodo }: { periodo: string }) {
                 <Icono className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold tabular-nums">{tarjeta.valor}</div>
+                <div
+                  className={cn(
+                    'text-2xl font-bold tabular-nums',
+                    tarjeta.negativo && 'text-red-600 dark:text-red-400'
+                  )}
+                >
+                  {tarjeta.valor}
+                </div>
                 <p className="text-xs text-muted-foreground">{tarjeta.nota}</p>
               </CardContent>
             </Card>
@@ -145,17 +156,19 @@ async function SaldosPorBolsillo({ periodo }: { periodo: string }) {
               {resultado.data.cierres.map((cierre) => (
                 <TableRow key={cierre.bolsillo.id}>
                   <TableCell className="font-medium">{cierre.bolsillo.nombre}</TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {formatearMonto(cierre.saldoInicial)}
+                  <TableCell className="text-right">
+                    <Monto valor={cierre.saldoInicial} tenue />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {formatearMonto(cierre.saldoFinalCalculado)}
+                  <TableCell className="text-right font-medium">
+                    <Monto valor={cierre.saldoFinalCalculado} />
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                  <TableCell className="text-right">
                     {/* "no se contó" y "contó cero" no son lo mismo. */}
-                    {cierre.saldoFinalReal === null
-                      ? '—'
-                      : formatearMonto(cierre.saldoFinalReal)}
+                    {cierre.saldoFinalReal === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <Monto valor={cierre.saldoFinalReal} tenue />
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {cierre.diferencia === null ? (
