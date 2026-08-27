@@ -271,6 +271,11 @@ export interface CotizacionParaIngreso {
   numero: number
   fecha: string
   cliente: string
+  /**
+   * El servicio por el que se cobró: "Administración", "Recaudo para
+   * Terceros", "Independiente 03". Sale de las observaciones del documento.
+   */
+  descripcion: string | null
   total: number
   /** True si ya se registró el ingreso correspondiente. */
   yaRegistrada: boolean
@@ -303,6 +308,8 @@ export interface FacturaParaIngreso {
   numero: string
   fecha: string
   cliente: string
+  /** El servicio por el que se facturó. Ver CotizacionParaIngreso.descripcion. */
+  descripcion: string | null
   total: number
   /** Lo efectivamente cobrado según Alegra. Es lo que entra al libro. */
   totalPagado: number

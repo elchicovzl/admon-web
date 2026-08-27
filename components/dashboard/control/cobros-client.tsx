@@ -120,7 +120,7 @@ export function CobrosClient({ datos }: { datos: CotizacionesDelPeriodo }) {
               </TableHead>
               <TableHead className="w-[110px]">Fecha</TableHead>
               <TableHead className="w-[80px]">Nº</TableHead>
-              <TableHead>Cliente</TableHead>
+              <TableHead>Servicio / cliente</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead className="w-[150px]">Estado</TableHead>
             </TableRow>
@@ -151,7 +151,12 @@ export function CobrosClient({ datos }: { datos: CotizacionesDelPeriodo }) {
                     <ExternalLink className="h-3 w-3 opacity-50" />
                   </Link>
                 </TableCell>
-                <TableCell className="font-medium">{c.cliente}</TableCell>
+                <TableCell>
+                  <p className="font-medium">{c.descripcion ?? c.cliente}</p>
+                  {c.descripcion && (
+                    <p className="text-xs text-muted-foreground">{c.cliente}</p>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <Monto valor={c.total} />
                 </TableCell>

@@ -46,7 +46,12 @@ export function FacturasClient({ datos, bolsillos }: Props) {
   const [seleccion, setSeleccion] = useState<Set<string>>(
     () => new Set(registrables.map((f) => f.invoiceId))
   )
-  const [bolsilloId, setBolsilloId] = useState('')
+  // ADMON viene preseleccionado: el negocio confirmó que las facturas entran
+  // ahí. Se sigue pudiendo cambiar — el selector queda, pero deja de ser un
+  // paso obligatorio en el caso normal.
+  const [bolsilloId, setBolsilloId] = useState(
+    () => bolsillos.find((b) => b.nombre === 'ADMON')?.id ?? ''
+  )
   const [enviando, setEnviando] = useState(false)
 
   const elegidas = registrables.filter((f) => seleccion.has(f.invoiceId))
@@ -145,7 +150,7 @@ export function FacturasClient({ datos, bolsillos }: Props) {
               </TableHead>
               <TableHead className="w-[110px]">Fecha</TableHead>
               <TableHead className="w-[110px]">Nº</TableHead>
-              <TableHead>Cliente</TableHead>
+              <TableHead>Servicio / cliente</TableHead>
               <TableHead className="text-right">Facturado</TableHead>
               <TableHead className="text-right">Cobrado</TableHead>
               <TableHead className="text-right">Saldo</TableHead>
@@ -186,7 +191,15 @@ export function FacturasClient({ datos, bolsillos }: Props) {
                       <ExternalLink className="h-3 w-3 opacity-50" />
                     </Link>
                   </TableCell>
-                  <TableCell className="font-medium">{f.cliente}</TableCell>
+                  <TableCell>
+                    {/* El servicio va primero: "Administración", "Recaudo para
+                        Terceros", "Independiente 03". Es lo que después
+                        permite preguntar cuánto se recaudó por cada uno. */}
+                    <p className="font-medium">{f.descripcion ?? f.cliente}</p>
+                    {f.descripcion && (
+                      <p className="text-xs text-muted-foreground">{f.cliente}</p>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Monto valor={f.total} tenue />
                   </TableCell>

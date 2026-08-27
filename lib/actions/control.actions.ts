@@ -1736,6 +1736,25 @@ export const getReporteAnual = cache(
 // Cotizaciones de Alegra como ingresos
 // ---------------------------------------------------------------------------
 
+/**
+ * Descripción del documento: el servicio por el que se cobró.
+ *
+ * Ejemplos del negocio: "Administración", "Recaudo para Terceros",
+ * "Independiente 03". Es lo que va a permitir preguntar cuánto se recaudó por
+ * cada servicio.
+ *
+ * OJO: esto lee `observations` / `anotation`, que son los campos que trae la
+ * LISTA. Si el servicio viniera en los ítems del documento, habría que pedir
+ * el detalle de cada uno — un request por factura— y eso todavía no se hace.
+ */
+function descripcionDelDocumento(doc: {
+  observations?: string | null
+  anotation?: string | null
+}): string | null {
+  const texto = (doc.observations ?? doc.anotation ?? '').trim()
+  return texto || null
+}
+
 /** Primer y último día de un periodo "AAAA-MM", en formato AAAA-MM-DD. */
 function rangoDelPeriodo(periodo: string): { desde: string; hasta: string } {
   const [anio, mes] = periodo.split('-').map(Number)
@@ -1746,8 +1765,14 @@ function rangoDelPeriodo(periodo: string): { desde: string; hasta: string } {
   }
 }
 
-/** Nombre del bolsillo al que entran los cobros. Confirmado con el negocio. */
-const BOLSILLO_DE_COBROS = 'IVONE'
+/**
+ * A qué bolsillo entra cada tipo de cobro. Ambos confirmados con el negocio.
+ *
+ * Las cotizaciones —el dinero "por debajo"— entran a IVONE. Las facturas de
+ * venta —"por arriba"— entran a ADMON, que es la cuenta principal.
+ */
+const BOLSILLO_DE_COTIZACIONES = 'IVONE'
+const BOLSILLO_DE_FACTURAS = 'ADMON'
 
 /**
  * Cotizaciones de Alegra del periodo, marcando cuáles ya se registraron como
@@ -1791,6 +1816,10 @@ export const getCotizacionesDelPeriodo = cache(
         numero: Number(e.number),
         fecha: e.date,
         cliente: e.client?.name ?? 'Sin cliente',
+        // El servicio por el que se cobró: "Administración", "Recaudo para
+        // Terceros", "Independiente 03". Es lo que después permite preguntar
+        // cuánto se recaudó por cada servicio.
+        descripcion: descripcionDelDocumento(e),
         total: Number(e.total),
         yaRegistrada: movimientoId !== null,
         movimientoId,
@@ -1836,7 +1865,7 @@ export async function importarCotizacionesComoIngresos(input: {
 
   const [bolsillo, categoriaId, resumen] = await Promise.all([
     prisma.bolsillo.findFirst({
-      where: { nombre: BOLSILLO_DE_COBROS },
+      where: { nombre: BOLSILLO_DE_COTIZACIONES },
       select: { id: true },
     }),
     resolverCategoria(GrupoCategoria.COBRO_COTIZACION),
@@ -1844,7 +1873,7 @@ export async function importarCotizacionesComoIngresos(input: {
   ])
 
   if (!bolsillo) {
-    return { success: false, error: `No existe el bolsillo "${BOLSILLO_DE_COBROS}"` }
+    return { success: false, error: `No existe el bolsillo "${BOLSILLO_DE_COTIZACIONES}"` }
   }
   if (!categoriaId) {
     return {
@@ -1874,12 +1903,17 @@ export async function importarCotizacionesComoIngresos(input: {
           periodo,
           tipo: TipoMovimiento.INGRESO,
           monto: c.total,
-          concepto: `Cobro cotización #${c.numero} — ${c.cliente}`.slice(0, 200),
+          // La descripción manda si existe: dice el servicio, que es más útil
+          // que repetir el número del documento.
+          concepto: (c.descripcion
+            ? `${c.descripcion} — ${c.cliente}`
+            : `Cobro cotización #${c.numero} — ${c.cliente}`
+          ).slice(0, 200),
           bolsilloId: bolsillo.id,
           categoriaId,
           notas:
-            'Importado desde Alegra. La fecha es la de la cotización: Alegra no ' +
-            'guarda cuándo se cobró.',
+            `Cotización #${c.numero}. Importado desde Alegra: la fecha es la ` +
+            'del documento, porque Alegra no guarda cuándo se cobró.',
           alegraEstimateId: c.estimateId,
           createdById: auth.userId,
         },
@@ -1983,6 +2017,7 @@ export const getFacturasDelPeriodo = cache(
         numero: numero || invoiceId,
         fecha: f.date,
         cliente: f.client?.name ?? 'Sin cliente',
+        descripcion: descripcionDelDocumento(f),
         total: Number(f.total),
         totalPagado: Number(f.totalPaid ?? 0),
         saldo: Number(f.balance ?? 0),
@@ -2072,11 +2107,14 @@ export async function importarFacturasComoIngresos(input: {
           tipo: TipoMovimiento.INGRESO,
           // Lo cobrado, no lo facturado.
           monto: f.totalPagado,
-          concepto: `Cobro factura ${f.numero} — ${f.cliente}`.slice(0, 200),
+          concepto: (f.descripcion
+            ? `${f.descripcion} — ${f.cliente}`
+            : `Cobro factura ${f.numero} — ${f.cliente}`
+          ).slice(0, 200),
           bolsilloId: bolsillo.id,
           categoriaId,
           notas:
-            `Importado desde Alegra. Facturado ${f.total}, cobrado ${f.totalPagado}` +
+            `Factura ${f.numero}. Facturado ${f.total}, cobrado ${f.totalPagado}` +
             (f.saldo > 0 ? `, saldo pendiente ${f.saldo}.` : '.'),
           alegraInvoiceId: f.invoiceId,
           createdById: auth.userId,
