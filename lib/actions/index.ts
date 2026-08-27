@@ -111,3 +111,26 @@ export {
   updateBlogTag,
   deleteBlogTag,
 } from './blog.actions'
+
+// Módulo Control — libro de caja interno
+export {
+  getBolsillos,
+  getCategorias,
+  getTiposServicio,
+  getContrapartes,
+  createContraparte,
+  getMovimientos,
+  createMovimiento,
+  anularMovimiento,
+  getPrestamos,
+  createPrestamo,
+  abonarPrestamo,
+  marcarIncobrable,
+  getServicios,
+  createServicio,
+  registrarPataServicio,
+  getResumenPeriodo,
+  registrarAperturaInicial,
+  registrarConteo,
+  cerrarPeriodo,
+} from './control.actions'
