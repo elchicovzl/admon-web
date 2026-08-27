@@ -290,3 +290,35 @@ export interface CotizacionesDelPeriodo {
    */
   posiblementeIncompleto: boolean
 }
+
+/**
+ * Una factura de venta vista desde Control.
+ *
+ * A diferencia de una cotización, la factura SÍ sabe cuánto se cobró:
+ * `totalPaid` y `balance` son parte del documento. Por eso el ingreso se
+ * registra por lo efectivamente pagado y no por el total facturado.
+ */
+export interface FacturaParaIngreso {
+  invoiceId: string
+  numero: string
+  fecha: string
+  cliente: string
+  total: number
+  /** Lo efectivamente cobrado según Alegra. Es lo que entra al libro. */
+  totalPagado: number
+  saldo: number
+  estado: string
+  yaRegistrada: boolean
+  movimientoId: string | null
+}
+
+export interface FacturasDelPeriodo {
+  periodo: string
+  facturas: FacturaParaIngreso[]
+  /** Suma de `total`: lo facturado, cobrado o no. */
+  totalFacturado: number
+  /** Suma de `totalPaid`: lo que realmente entró. */
+  totalCobrado: number
+  totalPendienteDeRegistrar: number
+  cantidadPendiente: number
+}

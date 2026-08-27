@@ -1008,10 +1008,18 @@ enum TipoMovimiento {
 // editable (CategoriaMovimiento) para no necesitar migración cada vez que
 // aparece un concepto nuevo.
 enum GrupoCategoria {
-  // Lo que ENTRA. El resto del enum se diseñó mirando el Excel, que era todo
-  // egresos; los ingresos del negocio vienen de cobrar cotizaciones de Alegra
-  // y no tenían dónde caer.
-  COBRO_A_CLIENTE
+  // Lo que ENTRA, separado en dos porque para el negocio son cosas distintas:
+  //
+  //   COBRO_COTIZACION — "por debajo". El documento es una cotización de
+  //     Alegra, que es informativa: no tiene estado ni saldo.
+  //   COBRO_FACTURA    — "por arriba". El documento es una factura de venta,
+  //     con estado y `totalPaid`, así que se sabe cuánto se cobró de verdad.
+  //
+  // Poder mirarlos por separado es media razón de ser de este módulo, así que
+  // la distinción va en el grupo y no en la categoría: un reporte por grupo
+  // los mezclaría.
+  COBRO_COTIZACION
+  COBRO_FACTURA
 
   NOMINA_COMPLEMENTARIA  // los pagos "por debajo"
   NOMINA_FIJA            // recurrentes mensuales del equipo
@@ -1202,6 +1210,16 @@ model Movimiento {
    * nivel de base, no solo a nivel de código.
    */
   alegraEstimateId String? @unique
+
+  /**
+   * Factura de venta de Alegra que originó este movimiento.
+   *
+   * Va aparte de `alegraEstimateId` en vez de un campo genérico con tipo:
+   * son dos documentos distintos, con dos ciclos distintos, y un id de
+   * factura no puede confundirse con uno de cotización si viven en columnas
+   * separadas. También único, por la misma razón.
+   */
+  alegraInvoiceId String? @unique
 
   createdAt   DateTime @default(now())
   createdById String

@@ -140,6 +140,8 @@ export {
   getReporteAnual,
   getCotizacionesDelPeriodo,
   importarCotizacionesComoIngresos,
+  getFacturasDelPeriodo,
+  importarFacturasComoIngresos,
   registrarAperturaInicial,
   registrarConteo,
   cerrarPeriodo,

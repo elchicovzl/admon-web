@@ -2,7 +2,8 @@ import { GrupoCategoria, TipoBolsillo, TipoContraparte, TipoMovimiento } from '@
 
 /** Nombre legible de cada grupo de categoría. */
 export const ETIQUETA_GRUPO: Record<GrupoCategoria, string> = {
-  COBRO_A_CLIENTE: 'Cobros a clientes',
+  COBRO_COTIZACION: 'Cobros por cotización (C)',
+  COBRO_FACTURA: 'Cobros por factura (F)',
   NOMINA_COMPLEMENTARIA: 'Nómina complementaria',
   NOMINA_FIJA: 'Nómina fija',
   COMISION: 'Comisiones',
@@ -27,10 +28,15 @@ export const DESCRIPCION_GRUPO: Record<
   GrupoCategoria,
   { que: string; usadoPorElSistema?: string }
 > = {
-  COBRO_A_CLIENTE: {
-    que: 'La plata que entra al cobrar una cotización.',
+  COBRO_COTIZACION: {
+    que: 'La plata que entra al cobrar una cotización — los ingresos "por debajo".',
     usadoPorElSistema:
-      'La importación de cotizaciones de Alegra registra los ingresos con una categoría de este grupo.',
+      'La importación de cotizaciones de Alegra registra los ingresos con una categoría de este grupo. Alegra no dice si una cotización se cobró, así que la fecha es la del documento.',
+  },
+  COBRO_FACTURA: {
+    que: 'La plata que entra al cobrar una factura de venta — los ingresos "por arriba".',
+    usadoPorElSistema:
+      'La importación de facturas usa `totalPaid`, es decir lo efectivamente cobrado, no el total facturado.',
   },
   NOMINA_COMPLEMENTARIA: {
     que: 'Los pagos "por debajo" y sus cesantías e intereses.',

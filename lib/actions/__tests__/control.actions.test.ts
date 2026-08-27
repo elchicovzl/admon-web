@@ -21,13 +21,13 @@ function dec(n: number) {
   return { toNumber: () => n } as never
 }
 
-const { prismaMock, authMock, hasControlAccessMock, alegraMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, hasControlAccessMock, alegraMock, facturasMock } = vi.hoisted(() => ({
   prismaMock: {
     movimiento: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
     cierreMensual: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
     categoriaMovimiento: { findFirst: vi.fn(), create: vi.fn() },
     prestamo: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-    bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     servicioReferenciado: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     $transaction: vi.fn(),
@@ -35,6 +35,7 @@ const { prismaMock, authMock, hasControlAccessMock, alegraMock } = vi.hoisted(()
   authMock: vi.fn(),
   hasControlAccessMock: vi.fn(),
   alegraMock: vi.fn(),
+  facturasMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
@@ -47,7 +48,10 @@ vi.mock('next/cache', () => ({
 }))
 // Control mira a Alegra solo para leer cotizaciones. Acá se mockea para que
 // los tests no salgan a la red.
-vi.mock('@/lib/alegra/cache', () => ({ getCachedEstimatesInRange: alegraMock }))
+vi.mock('@/lib/alegra/cache', () => ({
+  getCachedEstimatesInRange: alegraMock,
+  getCachedInvoices: facturasMock,
+}))
 vi.mock('react', () => ({
   cache: <T extends (...args: unknown[]) => unknown>(fn: T): T => fn,
 }))
@@ -65,6 +69,8 @@ import {
   getMovimientos,
   getCotizacionesDelPeriodo,
   importarCotizacionesComoIngresos,
+  getFacturasDelPeriodo,
+  importarFacturasComoIngresos,
 } from '../control.actions'
 
 const SESSION = {
@@ -1104,5 +1110,134 @@ describe('cotizaciones de Alegra como ingresos', () => {
     expect((await getCotizacionesDelPeriodo('2026-08')).success).toBe(false)
     expect((await importarCotizacionesComoIngresos({ periodo: '2026-08', estimateIds: ['e1'] })).success).toBe(false)
     expect(alegraMock).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('facturas de venta como ingresos ("por arriba")', () => {
+  const FAC = (id: string, total: number, pagado: number) => ({
+    id,
+    date: '2026-08-15',
+    status: pagado >= total ? 'closed' : 'open',
+    client: { name: 'Cliente SAS' },
+    numberTemplate: { fullNumber: `FE-${id}` },
+    total,
+    totalPaid: pagado,
+    balance: total - pagado,
+  })
+
+  beforeEach(() => {
+    facturasMock.mockResolvedValue({ data: [], total: 0 })
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.bolsillo.findUnique.mockResolvedValue({ id: 'cbolivone0001', nombre: 'IVONE' })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatfactura01' })
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+  })
+
+  it('deja que Alegra filtre el rango: no recorre páginas por fecha', async () => {
+    // /invoices SÍ acepta date_after/date_before, así que no hace falta el
+    // walk ni sufrir su paginación inestable.
+    await getFacturasDelPeriodo('2026-02')
+
+    expect(facturasMock).toHaveBeenCalledWith(
+      expect.objectContaining({ date_after: '2026-02-01', date_before: '2026-02-28' })
+    )
+  })
+
+  it('respeta el tope de 30 de Alegra y pagina', async () => {
+    // Pedir más no devuelve más: devuelve Bad Request.
+    facturasMock.mockResolvedValueOnce({
+      data: Array.from({ length: 30 }, (_, i) => FAC(String(i), 1000, 1000)),
+      total: 45,
+    })
+    facturasMock.mockResolvedValueOnce({ data: [FAC('99', 1000, 1000)], total: 45 })
+
+    const res = await getFacturasDelPeriodo('2026-08')
+
+    expect(facturasMock).toHaveBeenCalledWith(expect.objectContaining({ limit: 30, start: 0 }))
+    expect(facturasMock).toHaveBeenCalledWith(expect.objectContaining({ limit: 30, start: 30 }))
+    expect(res.data!.facturas).toHaveLength(31)
+  })
+
+  it('separa lo facturado de lo cobrado', async () => {
+    facturasMock.mockResolvedValueOnce({
+      data: [FAC('1', 1_000_000, 400_000), FAC('2', 500_000, 500_000)],
+      total: 2,
+    })
+
+    const res = await getFacturasDelPeriodo('2026-08')
+
+    expect(res.data!.totalFacturado).toBe(1_500_000)
+    expect(res.data!.totalCobrado).toBe(900_000)
+  })
+
+  it('registra el ingreso por lo COBRADO, no por lo facturado', async () => {
+    // Una factura a medio pagar solo metió en caja lo que se pagó.
+    facturasMock.mockResolvedValueOnce({ data: [FAC('1', 1_000_000, 400_000)], total: 1 })
+
+    await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.INGRESO,
+          monto: 400_000,
+          alegraInvoiceId: '1',
+        }),
+      })
+    )
+  })
+
+  it('NO registra una factura que no cobró nada', async () => {
+    // Existe el documento, pero no movió plata en ninguna caja.
+    facturasMock.mockResolvedValueOnce({ data: [FAC('1', 1_000_000, 0)], total: 1 })
+
+    const res = await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    expect(res.data!.creados).toBe(0)
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('exige el bolsillo: acá no se asume IVONE', async () => {
+    const res = await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['1'],
+      bolsilloId: '',
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('bolsillo')
+  })
+
+  it('usa la categoría del grupo COBRO_FACTURA, no la de cotizaciones', async () => {
+    facturasMock.mockResolvedValueOnce({ data: [FAC('1', 100, 100)], total: 1 })
+
+    await importarFacturasComoIngresos({
+      periodo: '2026-08',
+      invoiceIds: ['1'],
+      bolsilloId: 'cbolivone0001',
+    })
+
+    expect(prismaMock.categoriaMovimiento.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ grupo: GrupoCategoria.COBRO_FACTURA }),
+      })
+    )
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect((await getFacturasDelPeriodo('2026-08')).success).toBe(false)
+    expect(facturasMock).not.toHaveBeenCalled()
   })
 })

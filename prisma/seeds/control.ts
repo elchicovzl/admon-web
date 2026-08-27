@@ -56,9 +56,13 @@ const BOLSILLOS = [
 // ---------------------------------------------------------------------------
 
 const CATEGORIAS = [
-  // Lo que entra. Los ingresos del negocio se cobran contra cotizaciones de
-  // Alegra y aterrizan en IVONE.
-  { nombre: 'Cobro de cotización', grupo: GrupoCategoria.COBRO_A_CLIENTE },
+  // Lo que entra, separado en dos porque para el negocio son cosas distintas.
+  // "Por debajo": el documento es una cotización, que Alegra trata como
+  // informativa — no dice si se cobró. Entran a IVONE.
+  { nombre: 'Cobro de cotización', grupo: GrupoCategoria.COBRO_COTIZACION },
+  // "Por arriba": el documento es una factura de venta, con estado y
+  // `totalPaid`, así que se sabe cuánto entró de verdad.
+  { nombre: 'Cobro de factura', grupo: GrupoCategoria.COBRO_FACTURA },
 
   // Los pagos "por debajo": bruto menos deducción por abono a préstamo.
   { nombre: 'Pago por debajo', grupo: GrupoCategoria.NOMINA_COMPLEMENTARIA },

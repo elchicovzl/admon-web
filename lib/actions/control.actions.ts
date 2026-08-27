@@ -32,7 +32,7 @@ import { hasControlAccess } from '@/lib/auth/rbac'
  * ingreso de plata que ese documento originó. La referencia queda guardada en
  * `Movimiento.alegraEstimateId`, que es un puntero, no una consolidación.
  */
-import { getCachedEstimatesInRange } from '@/lib/alegra/cache'
+import { getCachedEstimatesInRange, getCachedInvoices } from '@/lib/alegra/cache'
 import {
   GrupoCategoria,
   TipoMovimiento,
@@ -56,6 +56,8 @@ import {
   type FilaAgrupada,
   type CotizacionParaIngreso,
   type CotizacionesDelPeriodo,
+  type FacturaParaIngreso,
+  type FacturasDelPeriodo,
 } from '@/lib/types/control.types'
 import {
   parseFechaCalendario,
@@ -1837,7 +1839,7 @@ export async function importarCotizacionesComoIngresos(input: {
       where: { nombre: BOLSILLO_DE_COBROS },
       select: { id: true },
     }),
-    resolverCategoria(GrupoCategoria.COBRO_A_CLIENTE),
+    resolverCategoria(GrupoCategoria.COBRO_COTIZACION),
     getCotizacionesDelPeriodo(input.periodo),
   ])
 
@@ -1847,7 +1849,7 @@ export async function importarCotizacionesComoIngresos(input: {
   if (!categoriaId) {
     return {
       success: false,
-      error: 'Falta una categoría de grupo COBRO_A_CLIENTE. Creala en Catálogos.',
+      error: 'Falta una categoría de grupo COBRO_COTIZACION. Creala en Catálogos.',
     }
   }
   if (!resumen.success || !resumen.data) {
@@ -1897,5 +1899,200 @@ export async function importarCotizacionesComoIngresos(input: {
     success: true,
     message: `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
     data: { creados, salteados: input.estimateIds.length - creados },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Facturas de venta como ingresos ("por arriba")
+// ---------------------------------------------------------------------------
+
+/**
+ * Facturas de venta del periodo, marcando cuáles ya se registraron.
+ *
+ * A diferencia de las cotizaciones, acá NO hace falta recorrer páginas a mano:
+ * /invoices acepta `date_after` y `date_before` como filtros del servidor, así
+ * que el rango lo resuelve Alegra y no hay paginación inestable que esquivar.
+ *
+ * Y tampoco hay que suponer si se cobró: la factura trae `totalPaid`. Lo que
+ * entra al libro es eso, no el total facturado — una factura a medio pagar
+ * solo metió en caja lo que se pagó.
+ */
+export const getFacturasDelPeriodo = cache(
+  async (periodo: string): Promise<ActionResponse<FacturasDelPeriodo>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const { desde, hasta } = rangoDelPeriodo(periodo)
+
+    /**
+     * Se pagina de a 30, que es el tope duro de Alegra para `limit`. Pedir más
+     * no devuelve más: devuelve Bad Request.
+     *
+     * Acá alcanza con paginar de corrido, sin el recorrido por fecha que
+     * necesitan las cotizaciones: /invoices SÍ acepta `date_after` y
+     * `date_before`, así que el rango lo resuelve el servidor y no hay
+     * paginación inestable que esquivar.
+     */
+    const TAMANO = 30
+    const MAX_PAGINAS = 20
+
+    const crudas: Awaited<ReturnType<typeof getCachedInvoices>>['data'] = []
+    try {
+      for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+        const respuesta = await getCachedInvoices({
+          date_after: desde,
+          date_before: hasta,
+          start: pagina * TAMANO,
+          limit: TAMANO,
+          metadata: true,
+        })
+        crudas.push(...respuesta.data)
+        if (respuesta.data.length < TAMANO) break
+      }
+    } catch (error) {
+      console.error('[control] getFacturasDelPeriodo:', error)
+      return {
+        success: false,
+        error: 'No se pudo consultar Alegra. Volvé a intentar en un momento.',
+      }
+    }
+
+    const respuesta = { data: crudas }
+    const ids = respuesta.data.map((f) => String(f.id))
+    const registradas = await prisma.movimiento.findMany({
+      where: { alegraInvoiceId: { in: ids } },
+      select: { id: true, alegraInvoiceId: true },
+    })
+    const porFactura = new Map(registradas.map((m) => [m.alegraInvoiceId!, m.id]))
+
+    const facturas: FacturaParaIngreso[] = respuesta.data.map((f) => {
+      const invoiceId = String(f.id)
+      const movimientoId = porFactura.get(invoiceId) ?? null
+      const numero =
+        typeof f.numberTemplate === 'object' && f.numberTemplate
+          ? String(
+              (f.numberTemplate as { fullNumber?: unknown; number?: unknown })
+                .fullNumber ??
+                (f.numberTemplate as { number?: unknown }).number ??
+                ''
+            )
+          : String(f.numberTemplate ?? '')
+
+      return {
+        invoiceId,
+        numero: numero || invoiceId,
+        fecha: f.date,
+        cliente: f.client?.name ?? 'Sin cliente',
+        total: Number(f.total),
+        totalPagado: Number(f.totalPaid ?? 0),
+        saldo: Number(f.balance ?? 0),
+        estado: String(f.status),
+        yaRegistrada: movimientoId !== null,
+        movimientoId,
+      }
+    })
+
+    // Solo cuentan como pendientes las que efectivamente cobraron algo: una
+    // factura emitida y sin pagar no movió plata en ninguna caja.
+    const pendientes = facturas.filter((f) => !f.yaRegistrada && f.totalPagado > 0)
+
+    return {
+      success: true,
+      data: {
+        periodo,
+        facturas,
+        totalFacturado: sumarMontos(facturas.map((f) => f.total)),
+        totalCobrado: sumarMontos(facturas.map((f) => f.totalPagado)),
+        totalPendienteDeRegistrar: sumarMontos(pendientes.map((f) => f.totalPagado)),
+        cantidadPendiente: pendientes.length,
+      },
+    }
+  }
+)
+
+/**
+ * Registra facturas como ingresos.
+ *
+ * El bolsillo SÍ se pregunta acá, al revés que en las cotizaciones. Para esas
+ * el negocio confirmó que todas entran a IVONE; para las facturas —el dinero
+ * "por arriba"— no hay una respuesta confirmada, y meter plata en la caja
+ * equivocada descuadra dos bolsillos de una vez.
+ */
+export async function importarFacturasComoIngresos(input: {
+  periodo: string
+  invoiceIds: string[]
+  bolsilloId: string
+}): Promise<ActionResponse<{ creados: number }>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  if (!input.invoiceIds?.length) {
+    return { success: false, error: 'No seleccionaste ninguna factura' }
+  }
+  if (!input.bolsilloId) {
+    return { success: false, error: 'Indicá a qué bolsillo entra la plata' }
+  }
+
+  const [bolsillo, categoriaId, resumen] = await Promise.all([
+    prisma.bolsillo.findUnique({
+      where: { id: input.bolsilloId },
+      select: { id: true, nombre: true },
+    }),
+    resolverCategoria(GrupoCategoria.COBRO_FACTURA),
+    getFacturasDelPeriodo(input.periodo),
+  ])
+
+  if (!bolsillo) return { success: false, error: 'El bolsillo no existe' }
+  if (!categoriaId) {
+    return {
+      success: false,
+      error: 'Falta una categoría de grupo COBRO_FACTURA. Creala en Catálogos.',
+    }
+  }
+  if (!resumen.success || !resumen.data) {
+    return { success: false, error: resumen.error ?? 'No se pudo leer Alegra' }
+  }
+
+  const elegidas = resumen.data.facturas.filter(
+    (f) => input.invoiceIds.includes(f.invoiceId) && !f.yaRegistrada && f.totalPagado > 0
+  )
+
+  let creados = 0
+  for (const f of elegidas) {
+    const fecha = parseFechaCalendario(f.fecha.slice(0, 10))
+    const periodo = periodoDeFecha(fecha)
+
+    if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
+
+    try {
+      await prisma.movimiento.create({
+        data: {
+          fecha,
+          periodo,
+          tipo: TipoMovimiento.INGRESO,
+          // Lo cobrado, no lo facturado.
+          monto: f.totalPagado,
+          concepto: `Cobro factura ${f.numero} — ${f.cliente}`.slice(0, 200),
+          bolsilloId: bolsillo.id,
+          categoriaId,
+          notas:
+            `Importado desde Alegra. Facturado ${f.total}, cobrado ${f.totalPagado}` +
+            (f.saldo > 0 ? `, saldo pendiente ${f.saldo}.` : '.'),
+          alegraInvoiceId: f.invoiceId,
+          createdById: auth.userId,
+        },
+      })
+      creados++
+    } catch (error) {
+      console.warn('[control] factura ya registrada:', f.invoiceId, error)
+    }
+  }
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
+    data: { creados },
   }
 }
