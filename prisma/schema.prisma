@@ -1008,6 +1008,11 @@ enum TipoMovimiento {
 // editable (CategoriaMovimiento) para no necesitar migración cada vez que
 // aparece un concepto nuevo.
 enum GrupoCategoria {
+  // Lo que ENTRA. El resto del enum se diseñó mirando el Excel, que era todo
+  // egresos; los ingresos del negocio vienen de cobrar cotizaciones de Alegra
+  // y no tenían dónde caer.
+  COBRO_A_CLIENTE
+
   NOMINA_COMPLEMENTARIA  // los pagos "por debajo"
   NOMINA_FIJA            // recurrentes mensuales del equipo
   COMISION
@@ -1184,6 +1189,19 @@ model Movimiento {
   notas        String? @db.Text
   // Trazabilidad de la migración: "PAGOS POR DEBAJO!K168"
   origenImport String?
+
+  /**
+   * Cotización de Alegra que originó este movimiento.
+   *
+   * Los ingresos del libro vienen de cobrar cotizaciones, y esas viven en
+   * Alegra. Guardar el id acá es una REFERENCIA, no una consolidación: sigue
+   * habiendo dos libros separados, pero se puede saltar de un ingreso al
+   * documento que lo originó.
+   *
+   * Es único para que importar dos veces la misma cotización sea imposible a
+   * nivel de base, no solo a nivel de código.
+   */
+  alegraEstimateId String? @unique
 
   createdAt   DateTime @default(now())
   createdById String

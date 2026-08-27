@@ -371,6 +371,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           icon: ArrowLeftRight,
         },
         {
+          title: 'Cobros',
+          href: '/dashboard/control/cobros',
+          icon: ArrowDownCircle,
+        },
+        {
           title: 'Préstamos',
           href: '/dashboard/control/prestamos',
           icon: HandCoins,

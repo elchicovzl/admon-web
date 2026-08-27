@@ -253,3 +253,40 @@ export interface MovimientosPaginados {
   sumaPagina: number
   sumaFiltrada: number
 }
+
+// ---------------------------------------------------------------------------
+// Cotizaciones de Alegra como ingresos
+// ---------------------------------------------------------------------------
+
+/**
+ * Una cotización de Alegra vista desde Control.
+ *
+ * Alegra NO guarda si una cotización se cobró: no tiene `status`, ni `balance`,
+ * ni `totalPaid` — es un documento informativo. Así que "cobrada" acá significa
+ * una sola cosa: que YA existe un movimiento de ingreso en este libro que la
+ * referencia. La verdad sobre el cobro vive en Control, no en Alegra.
+ */
+export interface CotizacionParaIngreso {
+  estimateId: string
+  numero: number
+  fecha: string
+  cliente: string
+  total: number
+  /** True si ya se registró el ingreso correspondiente. */
+  yaRegistrada: boolean
+  movimientoId: string | null
+}
+
+export interface CotizacionesDelPeriodo {
+  periodo: string
+  cotizaciones: CotizacionParaIngreso[]
+  totalCotizado: number
+  totalPendiente: number
+  cantidadPendiente: number
+  /**
+   * True cuando la búsqueda en Alegra tocó el tope de páginas y puede estar
+   * incompleta. Hay que avisarlo: un total que miente por lo bajo es peor que
+   * no mostrarlo.
+   */
+  posiblementeIncompleto: boolean
+}

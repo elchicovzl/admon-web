@@ -2,6 +2,7 @@ import { GrupoCategoria, TipoBolsillo, TipoContraparte, TipoMovimiento } from '@
 
 /** Nombre legible de cada grupo de categoría. */
 export const ETIQUETA_GRUPO: Record<GrupoCategoria, string> = {
+  COBRO_A_CLIENTE: 'Cobros a clientes',
   NOMINA_COMPLEMENTARIA: 'Nómina complementaria',
   NOMINA_FIJA: 'Nómina fija',
   COMISION: 'Comisiones',
@@ -26,6 +27,11 @@ export const DESCRIPCION_GRUPO: Record<
   GrupoCategoria,
   { que: string; usadoPorElSistema?: string }
 > = {
+  COBRO_A_CLIENTE: {
+    que: 'La plata que entra al cobrar una cotización.',
+    usadoPorElSistema:
+      'La importación de cotizaciones de Alegra registra los ingresos con una categoría de este grupo.',
+  },
   NOMINA_COMPLEMENTARIA: {
     que: 'Los pagos "por debajo" y sus cesantías e intereses.',
   },

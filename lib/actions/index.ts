@@ -138,6 +138,8 @@ export {
   registrarPataServicio,
   getResumenPeriodo,
   getReporteAnual,
+  getCotizacionesDelPeriodo,
+  importarCotizacionesComoIngresos,
   registrarAperturaInicial,
   registrarConteo,
   cerrarPeriodo,

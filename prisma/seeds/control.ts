@@ -56,6 +56,10 @@ const BOLSILLOS = [
 // ---------------------------------------------------------------------------
 
 const CATEGORIAS = [
+  // Lo que entra. Los ingresos del negocio se cobran contra cotizaciones de
+  // Alegra y aterrizan en IVONE.
+  { nombre: 'Cobro de cotización', grupo: GrupoCategoria.COBRO_A_CLIENTE },
+
   // Los pagos "por debajo": bruto menos deducción por abono a préstamo.
   { nombre: 'Pago por debajo', grupo: GrupoCategoria.NOMINA_COMPLEMENTARIA },
   { nombre: 'Cesantías por debajo', grupo: GrupoCategoria.NOMINA_COMPLEMENTARIA },

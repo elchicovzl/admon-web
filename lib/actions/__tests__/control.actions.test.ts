@@ -21,7 +21,7 @@ function dec(n: number) {
   return { toNumber: () => n } as never
 }
 
-const { prismaMock, authMock, hasControlAccessMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, hasControlAccessMock, alegraMock } = vi.hoisted(() => ({
   prismaMock: {
     movimiento: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
     cierreMensual: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
@@ -34,12 +34,20 @@ const { prismaMock, authMock, hasControlAccessMock } = vi.hoisted(() => ({
   },
   authMock: vi.fn(),
   hasControlAccessMock: vi.fn(),
+  alegraMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
 vi.mock('@/lib/auth/auth', () => ({ auth: authMock }))
 vi.mock('@/lib/auth/rbac', () => ({ hasControlAccess: hasControlAccessMock }))
-vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+  // lib/alegra/cache lo usa por debajo; en test se ejecuta la función directo.
+  unstable_cache: <T>(fn: T) => fn,
+}))
+// Control mira a Alegra solo para leer cotizaciones. Acá se mockea para que
+// los tests no salgan a la red.
+vi.mock('@/lib/alegra/cache', () => ({ getCachedEstimatesInRange: alegraMock }))
 vi.mock('react', () => ({
   cache: <T extends (...args: unknown[]) => unknown>(fn: T): T => fn,
 }))
@@ -55,6 +63,8 @@ import {
   setBolsilloActivo,
   getResumenPeriodo,
   getMovimientos,
+  getCotizacionesDelPeriodo,
+  importarCotizacionesComoIngresos,
 } from '../control.actions'
 
 const SESSION = {
@@ -949,5 +959,150 @@ describe('getMovimientos — paginación, filtros y totales', () => {
 
     expect(res.success).toBe(false)
     expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('cotizaciones de Alegra como ingresos', () => {
+  const COT = (id: string, numero: number, total: number, date = '2026-08-15') => ({
+    id,
+    number: numero,
+    date,
+    client: { name: 'A&A MODA CIRCULAR SAS' },
+    total,
+  })
+
+  beforeEach(() => {
+    alegraMock.mockResolvedValue({ items: [], truncated: false })
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.bolsillo.findFirst.mockResolvedValue({ id: 'cbolivone0001' })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatcobro0001' })
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+  })
+
+  it('pide a Alegra el rango completo del mes', async () => {
+    await getCotizacionesDelPeriodo('2026-02')
+
+    // Febrero 2026 tiene 28 días. Un rango mal armado se come el último día.
+    expect(alegraMock).toHaveBeenCalledWith({
+      dateFrom: '2026-02-01',
+      dateTo: '2026-02-28',
+    })
+  })
+
+  it('marca como registrada la que ya tiene un movimiento', async () => {
+    // Alegra NO sabe si se cobró: la única verdad es que exista el movimiento.
+    alegraMock.mockResolvedValue({
+      items: [COT('e1', 10, 100_000), COT('e2', 11, 250_000)],
+      truncated: false,
+    })
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      { id: 'cmovya0001', alegraEstimateId: 'e1' },
+    ])
+
+    const res = await getCotizacionesDelPeriodo('2026-08')
+
+    expect(res.data!.cotizaciones[0]).toMatchObject({
+      estimateId: 'e1',
+      yaRegistrada: true,
+      movimientoId: 'cmovya0001',
+    })
+    expect(res.data!.cotizaciones[1].yaRegistrada).toBe(false)
+    expect(res.data!.totalCotizado).toBe(350_000)
+    expect(res.data!.totalPendiente).toBe(250_000)
+    expect(res.data!.cantidadPendiente).toBe(1)
+  })
+
+  it('propaga el aviso de búsqueda incompleta', async () => {
+    // Un total que miente por lo bajo es peor que no mostrarlo.
+    alegraMock.mockResolvedValue({ items: [], truncated: true })
+
+    const res = await getCotizacionesDelPeriodo('2026-01')
+
+    expect(res.data!.posiblementeIncompleto).toBe(true)
+  })
+
+  it('devuelve un error legible si Alegra se cae', async () => {
+    alegraMock.mockRejectedValue(new Error('ECONNRESET'))
+
+    const res = await getCotizacionesDelPeriodo('2026-08')
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('Alegra')
+  })
+
+  it('registra el ingreso en IVONE con la fecha de la cotización', async () => {
+    alegraMock.mockResolvedValue({
+      items: [COT('e1', 10, 520_000, '2026-08-15')],
+      truncated: false,
+    })
+
+    const res = await importarCotizacionesComoIngresos({
+      periodo: '2026-08',
+      estimateIds: ['e1'],
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.INGRESO,
+          monto: 520_000,
+          bolsilloId: 'cbolivone0001',
+          periodo: '2026-08',
+          fecha: new Date('2026-08-15T00:00:00.000Z'),
+          alegraEstimateId: 'e1',
+        }),
+      })
+    )
+  })
+
+  it('NO vuelve a registrar una cotización ya registrada', async () => {
+    alegraMock.mockResolvedValue({ items: [COT('e1', 10, 520_000)], truncated: false })
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      { id: 'cmovya0001', alegraEstimateId: 'e1' },
+    ])
+
+    const res = await importarCotizacionesComoIngresos({
+      periodo: '2026-08',
+      estimateIds: ['e1'],
+    })
+
+    expect(res.data!.creados).toBe(0)
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('no registra nada en un periodo cerrado', async () => {
+    alegraMock.mockResolvedValue({ items: [COT('e1', 10, 520_000)], truncated: false })
+    prismaMock.cierreMensual.findUnique.mockResolvedValue({ cerrado: true })
+
+    const res = await importarCotizacionesComoIngresos({
+      periodo: '2026-08',
+      estimateIds: ['e1'],
+    })
+
+    expect(res.data!.creados).toBe(0)
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('rechaza si no existe el bolsillo IVONE', async () => {
+    prismaMock.bolsillo.findFirst.mockResolvedValue(null)
+
+    const res = await importarCotizacionesComoIngresos({
+      periodo: '2026-08',
+      estimateIds: ['e1'],
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('IVONE')
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect((await getCotizacionesDelPeriodo('2026-08')).success).toBe(false)
+    expect((await importarCotizacionesComoIngresos({ periodo: '2026-08', estimateIds: ['e1'] })).success).toBe(false)
+    expect(alegraMock).not.toHaveBeenCalled()
   })
 })

@@ -24,6 +24,15 @@ import { revalidatePath } from 'next/cache'
 import prisma from '@/lib/db/prisma'
 import { auth } from '@/lib/auth/auth'
 import { hasControlAccess } from '@/lib/auth/rbac'
+/**
+ * Único punto donde Control mira hacia Alegra.
+ *
+ * No rompe la separación de los dos libros: acá NO se suman totales de uno con
+ * el otro. Se lee un documento de Alegra para poder registrar, en Control, el
+ * ingreso de plata que ese documento originó. La referencia queda guardada en
+ * `Movimiento.alegraEstimateId`, que es un puntero, no una consolidación.
+ */
+import { getCachedEstimatesInRange } from '@/lib/alegra/cache'
 import {
   GrupoCategoria,
   TipoMovimiento,
@@ -45,6 +54,8 @@ import {
   type ReporteAnual,
   type MovimientosPaginados,
   type FilaAgrupada,
+  type CotizacionParaIngreso,
+  type CotizacionesDelPeriodo,
 } from '@/lib/types/control.types'
 import {
   parseFechaCalendario,
@@ -1718,3 +1729,173 @@ export const getReporteAnual = cache(
     }
   }
 )
+
+// ---------------------------------------------------------------------------
+// Cotizaciones de Alegra como ingresos
+// ---------------------------------------------------------------------------
+
+/** Primer y último día de un periodo "AAAA-MM", en formato AAAA-MM-DD. */
+function rangoDelPeriodo(periodo: string): { desde: string; hasta: string } {
+  const [anio, mes] = periodo.split('-').map(Number)
+  const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate()
+  return {
+    desde: `${periodo}-01`,
+    hasta: `${periodo}-${String(ultimo).padStart(2, '0')}`,
+  }
+}
+
+/** Nombre del bolsillo al que entran los cobros. Confirmado con el negocio. */
+const BOLSILLO_DE_COBROS = 'IVONE'
+
+/**
+ * Cotizaciones de Alegra del periodo, marcando cuáles ya se registraron como
+ * ingreso en este libro.
+ *
+ * Alegra no sabe si una cotización se cobró — no tiene status ni balance. La
+ * única verdad sobre el cobro es si existe acá un movimiento que la referencia.
+ */
+export const getCotizacionesDelPeriodo = cache(
+  async (periodo: string): Promise<ActionResponse<CotizacionesDelPeriodo>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const { desde, hasta } = rangoDelPeriodo(periodo)
+
+    let alegra
+    try {
+      alegra = await getCachedEstimatesInRange({ dateFrom: desde, dateTo: hasta })
+    } catch (error) {
+      console.error('[control] getCotizacionesDelPeriodo:', error)
+      return {
+        success: false,
+        error: 'No se pudo consultar Alegra. Volvé a intentar en un momento.',
+      }
+    }
+
+    const ids = alegra.items.map((e) => String(e.id))
+    const yaRegistradas = await prisma.movimiento.findMany({
+      where: { alegraEstimateId: { in: ids } },
+      select: { id: true, alegraEstimateId: true },
+    })
+    const porEstimate = new Map(
+      yaRegistradas.map((m) => [m.alegraEstimateId!, m.id])
+    )
+
+    const cotizaciones: CotizacionParaIngreso[] = alegra.items.map((e) => {
+      const estimateId = String(e.id)
+      const movimientoId = porEstimate.get(estimateId) ?? null
+      return {
+        estimateId,
+        numero: Number(e.number),
+        fecha: e.date,
+        cliente: e.client?.name ?? 'Sin cliente',
+        total: Number(e.total),
+        yaRegistrada: movimientoId !== null,
+        movimientoId,
+      }
+    })
+
+    const pendientes = cotizaciones.filter((c) => !c.yaRegistrada)
+
+    return {
+      success: true,
+      data: {
+        periodo,
+        cotizaciones,
+        totalCotizado: sumarMontos(cotizaciones.map((c) => c.total)),
+        totalPendiente: sumarMontos(pendientes.map((c) => c.total)),
+        cantidadPendiente: pendientes.length,
+        posiblementeIncompleto: alegra.truncated,
+      },
+    }
+  }
+)
+
+/**
+ * Registra cotizaciones como ingresos a IVONE.
+ *
+ * El bolsillo no se pregunta: el negocio confirmó que TODAS las cotizaciones
+ * entran a IVONE. Si algún día eso cambia, esto pasa a ser un parámetro.
+ *
+ * La fecha del movimiento es la de la cotización. Es una aproximación
+ * declarada: Alegra no guarda cuándo se cobró, y el día del documento es lo
+ * más cercano que hay. Queda dicho en las notas de cada movimiento.
+ */
+export async function importarCotizacionesComoIngresos(input: {
+  periodo: string
+  estimateIds: string[]
+}): Promise<ActionResponse<{ creados: number; salteados: number }>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  if (!input.estimateIds?.length) {
+    return { success: false, error: 'No seleccionaste ninguna cotización' }
+  }
+
+  const [bolsillo, categoriaId, resumen] = await Promise.all([
+    prisma.bolsillo.findFirst({
+      where: { nombre: BOLSILLO_DE_COBROS },
+      select: { id: true },
+    }),
+    resolverCategoria(GrupoCategoria.COBRO_A_CLIENTE),
+    getCotizacionesDelPeriodo(input.periodo),
+  ])
+
+  if (!bolsillo) {
+    return { success: false, error: `No existe el bolsillo "${BOLSILLO_DE_COBROS}"` }
+  }
+  if (!categoriaId) {
+    return {
+      success: false,
+      error: 'Falta una categoría de grupo COBRO_A_CLIENTE. Creala en Catálogos.',
+    }
+  }
+  if (!resumen.success || !resumen.data) {
+    return { success: false, error: resumen.error ?? 'No se pudo leer Alegra' }
+  }
+
+  const seleccionadas = resumen.data.cotizaciones.filter(
+    (c) => input.estimateIds.includes(c.estimateId) && !c.yaRegistrada
+  )
+
+  let creados = 0
+  for (const c of seleccionadas) {
+    const fecha = parseFechaCalendario(c.fecha.slice(0, 10))
+    const periodo = periodoDeFecha(fecha)
+
+    if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
+
+    try {
+      await prisma.movimiento.create({
+        data: {
+          fecha,
+          periodo,
+          tipo: TipoMovimiento.INGRESO,
+          monto: c.total,
+          concepto: `Cobro cotización #${c.numero} — ${c.cliente}`.slice(0, 200),
+          bolsilloId: bolsillo.id,
+          categoriaId,
+          notas:
+            'Importado desde Alegra. La fecha es la de la cotización: Alegra no ' +
+            'guarda cuándo se cobró.',
+          alegraEstimateId: c.estimateId,
+          createdById: auth.userId,
+        },
+      })
+      creados++
+    } catch (error) {
+      // El índice único de alegraEstimateId puede rebotar una carrera entre
+      // dos importaciones simultáneas. No es un error que valga la pena
+      // mostrar: significa que ya está registrada.
+      console.warn('[control] cotización ya registrada:', c.estimateId, error)
+    }
+  }
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
+    data: { creados, salteados: input.estimateIds.length - creados },
+  }
+}
