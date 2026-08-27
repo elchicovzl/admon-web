@@ -63,6 +63,11 @@ import {
   TrendingDown,
   Banknote,
   ArrowDownCircle,
+  Coins,
+  ArrowLeftRight,
+  HandCoins,
+  Handshake,
+  BookLock,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -139,6 +144,12 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   badge?: string
   roles?: UserRole[]
+  /**
+   * Visible solo con acceso al módulo Control. Es una condición aparte de
+   * `roles` porque el permiso es ortogonal al rol: un MANAGER puede tenerlo
+   * sin que eso cambie nada de lo demás (ver User.canAccessControl).
+   */
+  requiresControlAccess?: boolean
   subItems?: NavSubItem[]
 }
 
@@ -213,6 +224,12 @@ interface AppSidebarProps {
     email: string
     image: string | null
     role: UserRole
+    /**
+     * Solo decide si el ítem se DIBUJA. La autorización real vive en el
+     * middleware y, sobre todo, en requireControlAccess() del lado del
+     * servidor: esconder un link no protege nada.
+     */
+    canAccessControl?: boolean
   }
 }
 
@@ -338,6 +355,39 @@ export function AppSidebar({ user }: AppSidebarProps) {
       ],
     },
     {
+      title: 'Control',
+      href: '/dashboard/control',
+      icon: BookLock,
+      requiresControlAccess: true,
+      subItems: [
+        {
+          title: 'Resumen',
+          href: '/dashboard/control',
+          icon: LayoutDashboard,
+        },
+        {
+          title: 'Movimientos',
+          href: '/dashboard/control/movimientos',
+          icon: ArrowLeftRight,
+        },
+        {
+          title: 'Préstamos',
+          href: '/dashboard/control/prestamos',
+          icon: HandCoins,
+        },
+        {
+          title: 'Servicios',
+          href: '/dashboard/control/servicios',
+          icon: Handshake,
+        },
+        {
+          title: 'Cierre mensual',
+          href: '/dashboard/control/cierres',
+          icon: Coins,
+        },
+      ],
+    },
+    {
       title: 'Blog',
       href: '/dashboard/blog',
       icon: FileText,
@@ -384,7 +434,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
     }
   }
 
+  const puedeVerControl =
+    user.role === UserRole.SUPER_ADMIN || user.canAccessControl === true
+
   const filteredNavItems = navItems.filter((item) => {
+    if (item.requiresControlAccess && !puedeVerControl) return false
     if (!item.roles) return true
     return item.roles.includes(user.role)
   })
