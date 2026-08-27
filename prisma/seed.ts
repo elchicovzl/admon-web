@@ -1,5 +1,6 @@
 import { PrismaClient, UserRole, AdministradoraType } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { seedControlCatalogs } from './seeds/control'
 
 const prisma = new PrismaClient()
 
@@ -155,6 +156,9 @@ async function main() {
   }
 
   console.log(`✅ Seeded ${administradoras.length} administradoras`)
+
+  // Catálogos del módulo Control (bolsillos, categorías, tipos de servicio)
+  await seedControlCatalogs(prisma, superAdmin.id)
 
   console.log('\n🎉 Seeding completed!')
   console.log('\n📝 Test credentials:')
