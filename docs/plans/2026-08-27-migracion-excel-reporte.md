@@ -220,3 +220,38 @@ cierres) queda correcto; solo el día es aproximado, y queda dicho que lo es.
 | 5 | Fechas de enero y febrero | Último día del mes, marcado en las notas |
 
 Con esas cinco respuestas, el importador se escribe y se corre.
+
+
+---
+
+## Addendum — los ingresos (2026-08-27, después del análisis)
+
+Resuelto: **los ingresos del libro vienen de cobrar cotizaciones de Alegra, y
+todas entran a IVONE.** Se construyó la pantalla `/dashboard/control/cobros`
+para registrarlos.
+
+Lo consultado contra la cuenta real:
+
+| Periodo | Cotizaciones | Total | Búsqueda completa |
+|---|---:|---:|---|
+| 2026-01 | 0 | 0 | no |
+| 2026-02 | 0 | 0 | no |
+| 2026-03 | 29 | 4.427.400 | no |
+| 2026-04 | 81 | 9.850.000 | sí |
+| 2026-05 | 58 | 7.085.000 | sí |
+| 2026-06 | 51 | 5.870.000 | sí |
+| 2026-07 | 36 | 5.500.000 | sí |
+| 2026-08 | 45 | 6.428.000 | sí |
+
+**Abril a agosto: 34.733.000 de ingresos reales.**
+
+### Por qué enero, febrero y marzo salen vacíos
+
+**Los ingresos "por debajo" se empezaron a manejar con cotizaciones recién en
+abril de 2026.** Antes de esa fecha no hay nada que buscar, así que NO hace
+falta subir el tope de páginas de la búsqueda en Alegra: completarla no
+encontraría nada.
+
+Consecuencia a asumir: los meses de enero a marzo van a quedar con egresos y
+sin ingresos, y sus saldos van a dar negativo. Eso es fiel a lo que está
+documentado — esos meses se financiaron con algo que el Excel nunca registró.

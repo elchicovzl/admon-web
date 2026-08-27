@@ -40,13 +40,25 @@ async function Cobros({ periodo }: { periodo: string }) {
   return (
     <div className="space-y-4">
       {d.posiblementeIncompleto && (
-        <Alert variant="destructive">
+        <Alert variant={d.cotizaciones.length === 0 ? 'default' : 'destructive'}>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>La lista puede estar incompleta</AlertTitle>
+          <AlertTitle>La búsqueda en Alegra quedó corta</AlertTitle>
           <AlertDescription>
-            La consulta a Alegra llegó al tope de páginas antes de cubrir todo el
-            mes. Lo que ves es un piso, no el total. Revisá el mes en Finanzas
-            antes de darlo por cerrado.
+            {d.cotizaciones.length === 0 ? (
+              <>
+                No apareció ninguna cotización, pero la búsqueda llegó al tope de
+                páginas antes de cubrir el mes. Puede ser que no haya ninguna —
+                los ingresos se empezaron a manejar con cotizaciones en{' '}
+                <strong>abril de 2026</strong>, así que antes de esa fecha esto es
+                lo esperado— o que estén más atrás de donde alcanzó a mirar.
+              </>
+            ) : (
+              <>
+                Lo que ves es un piso, no el total: la consulta llegó al tope de
+                páginas antes de cubrir todo el mes. Revisá el mes en Finanzas
+                antes de darlo por cerrado.
+              </>
+            )}
           </AlertDescription>
         </Alert>
       )}
