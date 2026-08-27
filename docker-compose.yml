@@ -1,0 +1,38 @@
+# Base de datos de DESARROLLO LOCAL.
+#
+# Producción vive en Dokploy (proyecto "admon db" → admonDB) y no se toca desde
+# acá. Esto existe para poder correr migraciones, seeds y el dashboard sin
+# depender de una base remota.
+#
+#   docker compose up -d      (o: podman-compose up -d)
+#   pnpm db:migrate
+#   pnpm db:seed
+#
+# El puerto del host es 55432 a propósito. Los puertos 5432/5433/5434 se los
+# van repartiendo por incremento el resto de los proyectos de esta máquina
+# (Postgres.app, asofer-postgres-test, etc.), y un choque de puertos se
+# diagnostica pésimo: parece un problema de credenciales o de red.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: admon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admon_local_dev
+      # Mismo nombre que en Dokploy, para que las connection strings de local y
+      # producción se lean igual y no haya sorpresas al comparar.
+      POSTGRES_DB: admon
+    ports:
+      - '55432:5432'
+    volumes:
+      - admon_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d admon']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  admon_pgdata:
