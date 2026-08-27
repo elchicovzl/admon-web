@@ -211,7 +211,19 @@ export function generateContactEmailHtml({
 }
 
 /**
- * Send OTP email using React Email template
+ * Send OTP email using React Email template.
+ *
+ * En DESARROLLO no manda nada: imprime el código en la consola del servidor.
+ * Sin esto no se puede entrar en local — los usuarios del seed
+ * (admin@admon.com) están en un dominio inventado, así que ese correo no le
+ * llega a nadie. Además evita quemar cuota de Resend y evita generar rebotes
+ * contra direcciones falsas, que castigan la reputación del dominio.
+ *
+ * El guard es `=== 'development'` a propósito, NO `!== 'production'`. Acá se
+ * imprime un código de acceso en un log: si mañana aparece un entorno de
+ * staging o de test con NODE_ENV sin setear, la diferencia entre las dos
+ * formas es que una sigue mandando el mail y la otra escupe credenciales a
+ * un log que nadie está mirando.
  */
 export async function sendOtpEmail({
   to,
@@ -222,6 +234,16 @@ export async function sendOtpEmail({
   code: string
   expirationMinutes?: number
 }) {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(
+      `\n${'─'.repeat(54)}\n` +
+        `🔑  OTP para ${to}: ${code}\n` +
+        `    (modo desarrollo — el correo NO se envió, vence en ${expirationMinutes} min)\n` +
+        `${'─'.repeat(54)}\n`
+    )
+    return { id: 'dev-console' }
+  }
+
   const html = await render(OtpEmail({ code, expirationMinutes }))
 
   return sendEmail({
