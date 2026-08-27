@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { TipoMovimiento, GrupoCategoria } from '@prisma/client'
+import { TipoMovimiento, GrupoCategoria, TipoBolsillo } from '@prisma/client'
 
 const USER_ID = 'cuseraaaaa0001'
 const EFECTIVO = 'cbolefectivo1'
@@ -27,7 +27,7 @@ const { prismaMock, authMock, hasControlAccessMock } = vi.hoisted(() => ({
     cierreMensual: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
     categoriaMovimiento: { findFirst: vi.fn(), create: vi.fn() },
     prestamo: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
-    bolsillo: { findMany: vi.fn() },
+    bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     servicioReferenciado: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     $transaction: vi.fn(),
@@ -51,6 +51,8 @@ import {
   getBolsillos,
   registrarPataServicio,
   createCategoria,
+  createBolsillo,
+  setBolsilloActivo,
 } from '../control.actions'
 
 const SESSION = {
@@ -658,5 +660,84 @@ describe('createCategoria', () => {
 
     expect(res.success).toBe(false)
     expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('catálogo de bolsillos', () => {
+  beforeEach(() => {
+    prismaMock.bolsillo.findFirst.mockResolvedValue(null)
+  })
+
+  it('crea un bolsillo', async () => {
+    prismaMock.bolsillo.create.mockResolvedValue({
+      id: 'cbolnuevo0001',
+      nombre: 'DAVIVIENDA',
+      tipo: TipoBolsillo.BANCARIA,
+      orden: 6,
+      isActive: true,
+      cerradoEn: null,
+    })
+
+    const res = await createBolsillo({
+      nombre: 'DAVIVIENDA',
+      tipo: TipoBolsillo.BANCARIA,
+      orden: 6,
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.bolsillo.create).toHaveBeenCalled()
+  })
+
+  it('NO deja crear un bolsillo con nombre repetido en otra caja', async () => {
+    // "efectivo" y "EFECTIVO" como dos bolsillos separados partirían el saldo
+    // en dos y ningún cierre volvería a cuadrar.
+    prismaMock.bolsillo.findFirst.mockResolvedValue({ nombre: 'EFECTIVO' })
+
+    const res = await createBolsillo({
+      nombre: 'efectivo',
+      tipo: TipoBolsillo.EFECTIVO,
+      orden: 0,
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('Ya existe')
+    expect(prismaMock.bolsillo.create).not.toHaveBeenCalled()
+    expect(prismaMock.bolsillo.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { nombre: { equals: 'efectivo', mode: 'insensitive' } },
+      })
+    )
+  })
+
+  it('cerrar un bolsillo lo desactiva y le pone fecha, sin borrarlo', async () => {
+    prismaMock.bolsillo.update.mockResolvedValue({})
+
+    const res = await setBolsilloActivo({ id: 'cbolefectivo1', isActive: false })
+
+    expect(res.success).toBe(true)
+    const [args] = prismaMock.bolsillo.update.mock.calls[0]
+    expect(args.where).toEqual({ id: 'cbolefectivo1' })
+    expect(args.data.isActive).toBe(false)
+    expect(args.data.cerradoEn).toBeInstanceOf(Date)
+  })
+
+  it('reabrir limpia la fecha de cierre', async () => {
+    prismaMock.bolsillo.update.mockResolvedValue({})
+
+    await setBolsilloActivo({ id: 'cbolefectivo1', isActive: true })
+
+    const [args] = prismaMock.bolsillo.update.mock.calls[0]
+    expect(args.data).toEqual({ isActive: true, cerradoEn: null })
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    const res = await setBolsilloActivo({ id: 'cbolefectivo1', isActive: false })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.bolsillo.update).not.toHaveBeenCalled()
   })
 })

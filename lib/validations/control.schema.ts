@@ -99,6 +99,21 @@ export const createTipoServicioSchema = z.object({
   categoriaId: cuid('Seleccioná la categoría con la que se registra el servicio'),
 })
 
+/**
+ * Activar o desactivar una entrada de catálogo.
+ *
+ * No hay borrado: los movimientos históricos apuntan a estas filas y tienen
+ * que poder seguir existiendo. Un bolsillo que se deja de usar se cierra, no
+ * se elimina — ver JOSE Q, que sale de circulación en enero-2026 pero cuyos
+ * movimientos siguen contando.
+ */
+export const toggleCatalogoSchema = z.object({
+  id: cuid('Registro inválido'),
+  isActive: z.boolean(),
+})
+
+export type ToggleCatalogoInput = z.infer<typeof toggleCatalogoSchema>
+
 export type CreateBolsilloInput = z.infer<typeof createBolsilloSchema>
 export type CreateCategoriaInput = z.infer<typeof createCategoriaSchema>
 export type CreateTipoServicioInput = z.infer<typeof createTipoServicioSchema>

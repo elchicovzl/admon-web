@@ -58,7 +58,10 @@ import {
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
 import {
+  createBolsilloSchema,
   createCategoriaSchema,
+  createTipoServicioSchema,
+  toggleCatalogoSchema,
   createContraparteSchema,
   createMovimientoSchema,
   anularMovimientoSchema,
@@ -70,7 +73,10 @@ import {
   registrarConteoSchema,
   aperturaInicialSchema,
   cerrarPeriodoSchema,
+  type CreateBolsilloInput,
   type CreateCategoriaInput,
+  type CreateTipoServicioInput,
+  type ToggleCatalogoInput,
   type CreateContraparteInput,
   type CreateMovimientoInput,
   type AnularMovimientoInput,
@@ -226,12 +232,12 @@ export const getBolsillos = cache(
 )
 
 export const getCategorias = cache(
-  async (): Promise<ActionResponse<CategoriaListItem[]>> => {
+  async (incluirInactivas = false): Promise<ActionResponse<CategoriaListItem[]>> => {
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
     const categorias = await prisma.categoriaMovimiento.findMany({
-      where: { isActive: true },
+      where: incluirInactivas ? undefined : { isActive: true },
       orderBy: [{ grupo: 'asc' }, { nombre: 'asc' }],
       select: { id: true, nombre: true, grupo: true, isActive: true },
     })
@@ -241,12 +247,12 @@ export const getCategorias = cache(
 )
 
 export const getTiposServicio = cache(
-  async (): Promise<ActionResponse<TipoServicioListItem[]>> => {
+  async (incluirInactivos = false): Promise<ActionResponse<TipoServicioListItem[]>> => {
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
     const tipos = await prisma.tipoServicioReferenciado.findMany({
-      where: { isActive: true },
+      where: incluirInactivos ? undefined : { isActive: true },
       orderBy: { nombre: 'asc' },
       select: {
         id: true,
@@ -259,6 +265,168 @@ export const getTiposServicio = cache(
     return { success: true, data: tipos }
   }
 )
+
+export async function createBolsillo(
+  data: CreateBolsilloInput
+): Promise<ActionResponse<BolsilloListItem>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = createBolsilloSchema.safeParse(data)
+  if (!validado.success) {
+    return { success: false, error: validado.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const { nombre } = validado.data
+
+  const existente = await prisma.bolsillo.findFirst({
+    where: { nombre: { equals: nombre, mode: 'insensitive' } },
+    select: { nombre: true },
+  })
+
+  if (existente) {
+    return { success: false, error: `Ya existe un bolsillo llamado "${existente.nombre}"` }
+  }
+
+  const bolsillo = await prisma.bolsillo.create({
+    data: validado.data,
+    select: {
+      id: true,
+      nombre: true,
+      tipo: true,
+      orden: true,
+      isActive: true,
+      cerradoEn: true,
+    },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Bolsillo creado', data: bolsillo }
+}
+
+/**
+ * Cierra o reabre un bolsillo.
+ *
+ * Nunca se borra: sus movimientos históricos apuntan acá y tienen que poder
+ * seguir existiendo. Cerrarlo solo lo saca de los selectores.
+ */
+export async function setBolsilloActivo(
+  data: ToggleCatalogoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleCatalogoSchema.safeParse(data)
+  if (!validado.success) {
+    return { success: false, error: 'Datos inválidos' }
+  }
+
+  const { id, isActive } = validado.data
+
+  await prisma.bolsillo.update({
+    where: { id },
+    data: { isActive, cerradoEn: isActive ? null : new Date() },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: isActive ? 'Bolsillo reabierto' : 'Bolsillo cerrado' }
+}
+
+export async function createTipoServicio(
+  data: CreateTipoServicioInput
+): Promise<ActionResponse<TipoServicioListItem>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = createTipoServicioSchema.safeParse(data)
+  if (!validado.success) {
+    return { success: false, error: validado.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const { nombre, categoriaId } = validado.data
+
+  const existente = await prisma.tipoServicioReferenciado.findFirst({
+    where: { nombre: { equals: nombre, mode: 'insensitive' } },
+    select: { nombre: true },
+  })
+
+  if (existente) {
+    return { success: false, error: `Ya existe un servicio llamado "${existente.nombre}"` }
+  }
+
+  const tipo = await prisma.tipoServicioReferenciado.create({
+    data: { nombre, categoriaId },
+    select: {
+      id: true,
+      nombre: true,
+      isActive: true,
+      categoria: { select: { id: true, nombre: true } },
+    },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Tipo de servicio creado', data: tipo }
+}
+
+export async function setTipoServicioActivo(
+  data: ToggleCatalogoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleCatalogoSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.tipoServicioReferenciado.update({
+    where: { id: validado.data.id },
+    data: { isActive: validado.data.isActive },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Listo' }
+}
+
+export async function setCategoriaActiva(
+  data: ToggleCatalogoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleCatalogoSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.categoriaMovimiento.update({
+    where: { id: validado.data.id },
+    data: { isActive: validado.data.isActive },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Listo' }
+}
+
+export async function setContraparteActiva(
+  data: ToggleCatalogoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleCatalogoSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.contraparte.update({
+    where: { id: validado.data.id },
+    data: { isActive: validado.data.isActive },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Listo' }
+}
 
 /**
  * Crea una categoría desde el formulario de movimiento.
@@ -314,12 +482,12 @@ export async function createCategoria(
 // ---------------------------------------------------------------------------
 
 export const getContrapartes = cache(
-  async (): Promise<ActionResponse<ContraparteListItem[]>> => {
+  async (incluirInactivas = false): Promise<ActionResponse<ContraparteListItem[]>> => {
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
     const contrapartes = await prisma.contraparte.findMany({
-      where: { isActive: true },
+      where: incluirInactivas ? undefined : { isActive: true },
       orderBy: [{ tipo: 'asc' }, { nombre: 'asc' }],
       select: {
         id: true,

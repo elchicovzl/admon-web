@@ -385,6 +385,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           href: '/dashboard/control/cierres',
           icon: Coins,
         },
+        {
+          title: 'Catálogos',
+          href: '/dashboard/control/catalogos',
+          icon: Settings,
+        },
       ],
     },
     {

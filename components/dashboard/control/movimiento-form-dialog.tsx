@@ -48,27 +48,7 @@ import {
 } from '@/components/ui/select'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { MontoInput } from './monto-input'
-
-/** Etiquetas legibles de los grupos, para agrupar el selector de categorías. */
-const ETIQUETA_GRUPO: Record<GrupoCategoria, string> = {
-  NOMINA_COMPLEMENTARIA: 'Nómina complementaria',
-  NOMINA_FIJA: 'Nómina fija',
-  COMISION: 'Comisiones',
-  SERVICIO_REFERENCIADO: 'Servicios referenciados',
-  GASTO_OPERATIVO: 'Gastos operativos',
-  GASTO_BIENESTAR: 'Bienestar',
-  PRESTAMO_DESEMBOLSO: 'Préstamos — desembolso',
-  PRESTAMO_ABONO: 'Préstamos — abono',
-  TRASLADO: 'Traslados',
-  DEVOLUCION: 'Devoluciones',
-  OTRO: 'Otros',
-}
-
-const ETIQUETA_TIPO: Record<TipoMovimiento, string> = {
-  INGRESO: 'Ingreso — entra plata',
-  EGRESO: 'Egreso — sale plata',
-  TRASLADO: 'Traslado — entre bolsillos',
-}
+import { ETIQUETA_GRUPO, ETIQUETA_TIPO_MOVIMIENTO } from './etiquetas'
 
 interface Props {
   bolsillos: BolsilloListItem[]
@@ -250,7 +230,7 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
                       <SelectContent>
                         {Object.values(TipoMovimiento).map((t) => (
                           <SelectItem key={t} value={t}>
-                            {ETIQUETA_TIPO[t]}
+                            {ETIQUETA_TIPO_MOVIMIENTO[t]}
                           </SelectItem>
                         ))}
                       </SelectContent>
