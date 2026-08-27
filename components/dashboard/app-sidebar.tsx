@@ -386,6 +386,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           icon: Coins,
         },
         {
+          title: 'Reportes',
+          href: '/dashboard/control/reportes',
+          icon: TrendingUp,
+        },
+        {
           title: 'Catálogos',
           href: '/dashboard/control/catalogos',
           icon: Settings,

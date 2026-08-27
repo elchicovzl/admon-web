@@ -17,6 +17,7 @@ import {
   periodoActual,
 } from '@/lib/utils/control-format'
 import { ControlStatsSkeleton, ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
+import { SelectorPeriodo } from '@/components/dashboard/control/selector-periodo'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -250,9 +251,12 @@ export default async function ControlPage({ searchParams }: PageProps) {
             Libro de caja interno · {formatearPeriodo(periodo)}
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/control/movimientos">Registrar movimiento</Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SelectorPeriodo periodo={periodo} />
+          <Button asChild>
+            <Link href="/dashboard/control/movimientos">Registrar movimiento</Link>
+          </Button>
+        </div>
       </div>
 
       <Suspense fallback={<ControlStatsSkeleton />}>

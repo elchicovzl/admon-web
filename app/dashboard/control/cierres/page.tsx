@@ -5,6 +5,7 @@ import { getResumenPeriodo } from '@/lib/actions/control.actions'
 import { formatearPeriodo, periodoActual } from '@/lib/utils/control-format'
 import { CierresTable } from '@/components/dashboard/control/cierres-table'
 import { ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
+import { SelectorPeriodo } from '@/components/dashboard/control/selector-periodo'
 
 export const metadata: Metadata = {
   title: 'Cierre mensual | Control',
@@ -35,12 +36,15 @@ export default async function CierresPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Cierre mensual</h1>
-        <p className="text-muted-foreground">
-          {formatearPeriodo(periodo)} · el saldo calculado nunca se digita, sale
-          de los movimientos
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Cierre mensual</h1>
+          <p className="text-muted-foreground">
+            {formatearPeriodo(periodo)} · el saldo calculado nunca se digita,
+            sale de los movimientos
+          </p>
+        </div>
+        <SelectorPeriodo periodo={periodo} />
       </div>
 
       <Suspense fallback={<ControlTableSkeleton filas={6} columnas={8} />}>

@@ -11,6 +11,7 @@ import { formatearPeriodo, periodoActual } from '@/lib/utils/control-format'
 import { MovimientosTable } from '@/components/dashboard/control/movimientos-table'
 import { MovimientoFormDialog } from '@/components/dashboard/control/movimiento-form-dialog'
 import { ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
+import { SelectorPeriodo } from '@/components/dashboard/control/selector-periodo'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export const metadata: Metadata = {
@@ -68,9 +69,12 @@ export default async function MovimientosPage({ searchParams }: PageProps) {
           <h1 className="text-3xl font-bold tracking-tight">Movimientos</h1>
           <p className="text-muted-foreground">{formatearPeriodo(periodo)}</p>
         </div>
-        <Suspense fallback={<Skeleton className="h-9 w-40" />}>
-          <BotonNuevo />
-        </Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <SelectorPeriodo periodo={periodo} />
+          <Suspense fallback={<Skeleton className="h-9 w-40" />}>
+            <BotonNuevo />
+          </Suspense>
+        </div>
       </div>
 
       <Suspense fallback={<ControlTableSkeleton filas={10} columnas={7} />}>

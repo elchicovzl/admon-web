@@ -191,3 +191,47 @@ export interface ResumenPeriodo {
   /** True si algún bolsillo tiene diferencia sin justificar. */
   tieneDescuadres: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Reporte anual
+// ---------------------------------------------------------------------------
+
+export interface FilaAgrupada {
+  id: string
+  nombre: string
+  /** Etiqueta secundaria: el grupo de una categoría, el tipo de una contraparte. */
+  detalle?: string
+  cantidad: number
+  ingresos: number
+  egresos: number
+  /** ingresos - egresos. Negativo significa que salió más de lo que entró. */
+  neto: number
+}
+
+export interface MesDelAnio {
+  periodo: string
+  cantidad: number
+  ingresos: number
+  egresos: number
+  neto: number
+}
+
+/**
+ * Vista anual del libro.
+ *
+ * Es la pregunta que el Excel no podía responder: cuánto se gastó en cada cosa
+ * y cuánto se le pagó a cada quien en el año. No podía porque el "quién" y el
+ * "qué" vivían en la misma columna.
+ */
+export interface ReporteAnual {
+  anio: number
+  meses: MesDelAnio[]
+  porCategoria: FilaAgrupada[]
+  porContraparte: FilaAgrupada[]
+  porBolsillo: FilaAgrupada[]
+  totalIngresos: number
+  totalEgresos: number
+  cantidadMovimientos: number
+  /** Años que tienen al menos un movimiento, para el selector. */
+  aniosConDatos: number[]
+}

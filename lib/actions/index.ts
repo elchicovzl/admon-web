@@ -137,6 +137,7 @@ export {
   createServicio,
   registrarPataServicio,
   getResumenPeriodo,
+  getReporteAnual,
   registrarAperturaInicial,
   registrarConteo,
   cerrarPeriodo,

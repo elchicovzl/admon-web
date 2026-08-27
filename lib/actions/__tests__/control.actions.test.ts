@@ -53,6 +53,7 @@ import {
   createCategoria,
   createBolsillo,
   setBolsilloActivo,
+  getResumenPeriodo,
 } from '../control.actions'
 
 const SESSION = {
@@ -350,26 +351,40 @@ describe('cerrarPeriodo', () => {
     cerrado?: boolean
   }) {
     prismaMock.bolsillo.findMany.mockResolvedValue([{ id: EFECTIVO, nombre: 'EFECTIVO' }])
-    prismaMock.movimiento.findMany.mockResolvedValue(
-      opts.movimientos.map((m) => ({
+
+    // getResumenPeriodo consulta movimientos DOS veces: los del periodo y los
+    // anteriores (para acumular el saldo inicial). Acá solo interesan los del
+    // periodo, así que la consulta de anteriores devuelve vacío.
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) => {
+      if (args?.where?.periodo?.lt) return []
+      return opts.movimientos.map((m) => ({
         tipo: m.tipo,
         monto: dec(m.monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: m.destino ?? null,
       }))
-    )
-    prismaMock.cierreMensual.findMany.mockResolvedValue([
-      {
-        id: 'ccie0000001',
-        bolsilloId: EFECTIVO,
-        saldoInicial: dec(opts.saldoInicial),
-        saldoFinalReal: opts.saldoFinalReal === undefined ? null : dec(opts.saldoFinalReal!),
-        justificacion: opts.justificacion ?? null,
-        esAperturaInicial: false,
-        cerrado: opts.cerrado ?? false,
-        cerradoEn: null,
-      },
-    ])
+    })
+
+    // Igual con cierreMensual: una consulta trae el cierre del periodo y otra
+    // las aperturas semilla. El saldo inicial de estos casos viene de la
+    // semilla, para que el cálculo acumulado dé el mismo número de siempre.
+    prismaMock.cierreMensual.findMany.mockImplementation(async (args: any) => {
+      if (args?.where?.esAperturaInicial) {
+        return [{ bolsilloId: EFECTIVO, saldoInicial: dec(opts.saldoInicial) }]
+      }
+      return [
+        {
+          id: 'ccie0000001',
+          bolsilloId: EFECTIVO,
+          saldoInicial: dec(opts.saldoInicial),
+          saldoFinalReal: opts.saldoFinalReal === undefined ? null : dec(opts.saldoFinalReal!),
+          justificacion: opts.justificacion ?? null,
+          esAperturaInicial: false,
+          cerrado: opts.cerrado ?? false,
+          cerradoEn: null,
+        },
+      ]
+    })
     prismaMock.$transaction.mockResolvedValue([])
   }
 
@@ -739,5 +754,109 @@ describe('catálogo de bolsillos', () => {
 
     expect(res.success).toBe(false)
     expect(prismaMock.bolsillo.update).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('getResumenPeriodo — saldo inicial acumulado', () => {
+  /**
+   * Prepara los cinco findMany que hace la action, discriminando por el `where`
+   * porque movimiento y cierreMensual se consultan dos veces cada uno.
+   */
+  function prepararBase(opts: {
+    semilla?: number
+    previos?: number[]
+    delPeriodo?: number[]
+    cierreDelPeriodo?: Record<string, unknown> | null
+  }) {
+    prismaMock.bolsillo.findMany.mockResolvedValue([{ id: EFECTIVO, nombre: 'EFECTIVO' }])
+
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) => {
+      const montos = args?.where?.periodo?.lt ? (opts.previos ?? []) : (opts.delPeriodo ?? [])
+      return montos.map((monto) => ({
+        tipo: TipoMovimiento.EGRESO,
+        monto: dec(monto),
+        bolsilloId: EFECTIVO,
+        bolsilloDestinoId: null,
+      }))
+    })
+
+    prismaMock.cierreMensual.findMany.mockImplementation(async (args: any) => {
+      if (args?.where?.esAperturaInicial) {
+        return opts.semilla === undefined
+          ? []
+          : [{ bolsilloId: EFECTIVO, saldoInicial: dec(opts.semilla) }]
+      }
+      return opts.cierreDelPeriodo ? [opts.cierreDelPeriodo] : []
+    })
+  }
+
+  it('acumula desde la semilla cuando el mes anterior nunca se cerró', async () => {
+    // ESTE es el bug que se corrigió: sin acumular, un mes al que no se le
+    // cerró el anterior arrancaba en cero y todos los saldos daban negativo.
+    prepararBase({ semilla: 344_000, previos: [100_000, 44_000], delPeriodo: [50_000] })
+
+    const res = await getResumenPeriodo('2026-08')
+    const efectivo = res.data!.cierres[0]
+
+    expect(efectivo.saldoInicial).toBe(200_000) // 344.000 − 144.000
+    expect(efectivo.saldoFinalCalculado).toBe(150_000) // − 50.000
+  })
+
+  it('sin semilla ni movimientos previos, arranca en cero', async () => {
+    prepararBase({ previos: [], delPeriodo: [30_000] })
+
+    const res = await getResumenPeriodo('2026-01')
+
+    expect(res.data!.cierres[0].saldoInicial).toBe(0)
+    expect(res.data!.cierres[0].saldoFinalCalculado).toBe(-30_000)
+  })
+
+  it('respeta el saldo declarado de un periodo YA CERRADO', async () => {
+    // Un cierre formal es una verdad declarada y le gana al acumulado.
+    prepararBase({
+      semilla: 344_000,
+      previos: [999_999],
+      delPeriodo: [],
+      cierreDelPeriodo: {
+        id: 'ccie1',
+        bolsilloId: EFECTIVO,
+        saldoInicial: dec(777_000),
+        saldoFinalReal: null,
+        justificacion: null,
+        esAperturaInicial: false,
+        cerrado: true,
+        cerradoEn: new Date(),
+      },
+    })
+
+    const res = await getResumenPeriodo('2026-08')
+
+    expect(res.data!.cierres[0].saldoInicial).toBe(777_000)
+  })
+
+  it('IGNORA el saldo de un cierre que existe pero está abierto', async () => {
+    // Una fila creada al vuelo (por un conteo, por ejemplo) no es una verdad
+    // declarada: si su saldoInicial ganara, volvería el bug.
+    prepararBase({
+      semilla: 500_000,
+      previos: [100_000],
+      delPeriodo: [],
+      cierreDelPeriodo: {
+        id: 'ccie2',
+        bolsilloId: EFECTIVO,
+        saldoInicial: dec(0),
+        saldoFinalReal: null,
+        justificacion: null,
+        esAperturaInicial: false,
+        cerrado: false,
+        cerradoEn: null,
+      },
+    })
+
+    const res = await getResumenPeriodo('2026-08')
+
+    expect(res.data!.cierres[0].saldoInicial).toBe(400_000)
   })
 })

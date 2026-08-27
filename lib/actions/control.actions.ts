@@ -42,6 +42,8 @@ import {
   type ServicioReferenciadoListItem,
   type CierreMensualView,
   type ResumenPeriodo,
+  type ReporteAnual,
+  type FilaAgrupada,
 } from '@/lib/types/control.types'
 import {
   parseFechaCalendario,
@@ -1189,7 +1191,7 @@ export const getResumenPeriodo = cache(
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
-    const [bolsillos, movimientos, cierres] = await Promise.all([
+    const [bolsillos, movimientos, cierres, aperturas, anteriores] = await Promise.all([
       prisma.bolsillo.findMany({
         orderBy: [{ isActive: 'desc' }, { orden: 'asc' }],
         select: { id: true, nombre: true },
@@ -1216,6 +1218,30 @@ export const getResumenPeriodo = cache(
           cerradoEn: true,
         },
       }),
+      // Saldo semilla de cada bolsillo: el único que se digitó alguna vez.
+      prisma.cierreMensual.findMany({
+        where: { esAperturaInicial: true },
+        select: { bolsilloId: true, saldoInicial: true },
+      }),
+      /**
+       * Todo lo movido ANTES de este periodo.
+       *
+       * Sin esto, un mes al que no se le cerró el anterior arrancaba en cero y
+       * todos los saldos daban negativo. Cerrar un periodo siembra la apertura
+       * del siguiente, pero eso no puede ser un requisito para poder MIRAR un
+       * mes: el saldo inicial es, por definición, lo acumulado hasta ahí.
+       *
+       * `periodo` es "AAAA-MM", así que la comparación de textos ordena bien.
+       */
+      prisma.movimiento.findMany({
+        where: { periodo: { lt: periodo } },
+        select: {
+          tipo: true,
+          monto: true,
+          bolsilloId: true,
+          bolsilloDestinoId: true,
+        },
+      }),
     ])
 
     const movs: MovimientoParaSaldo[] = movimientos.map((m) => ({
@@ -1225,11 +1251,36 @@ export const getResumenPeriodo = cache(
       bolsilloDestinoId: m.bolsilloDestinoId,
     }))
 
+    const previos: MovimientoParaSaldo[] = anteriores.map((m) => ({
+      tipo: m.tipo,
+      monto: decimalANumero(m.monto),
+      bolsilloId: m.bolsilloId,
+      bolsilloDestinoId: m.bolsilloDestinoId,
+    }))
+
     const porBolsillo = new Map(cierres.map((c) => [c.bolsilloId, c]))
+    const semillas = new Map(
+      aperturas.map((a) => [a.bolsilloId, decimalANumero(a.saldoInicial)])
+    )
 
     const vistas = bolsillos.map((bolsillo): CierreMensualView => {
       const cierre = porBolsillo.get(bolsillo.id)
-      const saldoInicial = cierre ? decimalANumero(cierre.saldoInicial) : 0
+
+      /**
+       * El saldo inicial se toma del registro solo cuando ese registro es una
+       * verdad declarada: la apertura semilla, o un periodo ya cerrado. En
+       * cualquier otro caso se calcula acumulando desde la semilla, para que
+       * un mes abierto no dependa de que alguien haya cerrado el anterior.
+       */
+      const declarado =
+        cierre && (cierre.esAperturaInicial || cierre.cerrado)
+          ? decimalANumero(cierre.saldoInicial)
+          : null
+
+      const saldoInicial =
+        declarado ??
+        calcularSaldoFinal(semillas.get(bolsillo.id) ?? 0, previos, bolsillo.id)
+
       const saldoFinalCalculado = calcularSaldoFinal(saldoInicial, movs, bolsillo.id)
       const saldoFinalReal = cierre
         ? decimalANumeroOpcional(cierre.saldoFinalReal)
@@ -1476,3 +1527,148 @@ export async function cerrarPeriodo(
     message: `Periodo ${periodo} cerrado. La apertura de ${siguiente} quedó en ${vista.saldoFinalCalculado}.`,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reporte anual
+// ---------------------------------------------------------------------------
+
+/**
+ * Corta el año completo por mes, por categoría, por contraparte y por bolsillo.
+ *
+ * Es la vista que el Excel no podía dar. No por falta de datos, sino porque el
+ * "quién" y el "qué" vivían en la misma columna: preguntarle cuánto se le
+ * compró a Burbuja en el año, o cuánto se gastó en transporte, no tenía
+ * respuesta posible.
+ *
+ * Los TRASLADOS se excluyen de ingresos y egresos a propósito: mover plata de
+ * un bolsillo a otro no es ni una cosa ni la otra, y contarlos inflaría los dos
+ * lados por el mismo monto.
+ */
+export const getReporteAnual = cache(
+  async (anio: number): Promise<ActionResponse<ReporteAnual>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const [movimientos, todosLosPeriodos] = await Promise.all([
+      prisma.movimiento.findMany({
+        where: { periodo: { startsWith: `${anio}-` } },
+        select: {
+          tipo: true,
+          monto: true,
+          periodo: true,
+          bolsillo: { select: { id: true, nombre: true } },
+          categoria: { select: { id: true, nombre: true, grupo: true } },
+          contraparte: { select: { id: true, nombre: true } },
+        },
+      }),
+      prisma.movimiento.findMany({
+        distinct: ['periodo'],
+        select: { periodo: true },
+        orderBy: { periodo: 'asc' },
+      }),
+    ])
+
+    interface Acumulador {
+      nombre: string
+      detalle?: string
+      cantidad: number
+      ingresos: number[]
+      egresos: number[]
+    }
+
+    const nuevo = (nombre: string, detalle?: string): Acumulador => ({
+      nombre,
+      detalle,
+      cantidad: 0,
+      ingresos: [],
+      egresos: [],
+    })
+
+    const porCategoria = new Map<string, Acumulador>()
+    const porContraparte = new Map<string, Acumulador>()
+    const porBolsillo = new Map<string, Acumulador>()
+    const porMes = new Map<string, Acumulador>()
+
+    function acumular(
+      mapa: Map<string, Acumulador>,
+      id: string,
+      nombre: string,
+      tipo: TipoMovimiento,
+      monto: number,
+      detalle?: string
+    ) {
+      const acc = mapa.get(id) ?? nuevo(nombre, detalle)
+      acc.cantidad++
+      if (tipo === TipoMovimiento.INGRESO) acc.ingresos.push(monto)
+      else if (tipo === TipoMovimiento.EGRESO) acc.egresos.push(monto)
+      mapa.set(id, acc)
+    }
+
+    for (const m of movimientos) {
+      const monto = decimalANumero(m.monto)
+
+      acumular(porMes, m.periodo, m.periodo, m.tipo, monto)
+      acumular(porBolsillo, m.bolsillo.id, m.bolsillo.nombre, m.tipo, monto)
+      acumular(
+        porCategoria,
+        m.categoria.id,
+        m.categoria.nombre,
+        m.tipo,
+        monto,
+        m.categoria.grupo
+      )
+      if (m.contraparte) {
+        acumular(porContraparte, m.contraparte.id, m.contraparte.nombre, m.tipo, monto)
+      }
+    }
+
+    const aFilas = (mapa: Map<string, Acumulador>): FilaAgrupada[] =>
+      [...mapa.entries()]
+        .map(([id, a]) => {
+          const ingresos = sumarMontos(a.ingresos)
+          const egresos = sumarMontos(a.egresos)
+          return {
+            id,
+            nombre: a.nombre,
+            detalle: a.detalle,
+            cantidad: a.cantidad,
+            ingresos,
+            egresos,
+            neto: sumarMontos([ingresos, -egresos]),
+          }
+        })
+        // De mayor a menor movimiento: lo que más pesa, primero.
+        .sort((x, y) => y.ingresos + y.egresos - (x.ingresos + x.egresos))
+
+    const meses = [...porMes.entries()]
+      .map(([periodo, a]) => {
+        const ingresos = sumarMontos(a.ingresos)
+        const egresos = sumarMontos(a.egresos)
+        return {
+          periodo,
+          cantidad: a.cantidad,
+          ingresos,
+          egresos,
+          neto: sumarMontos([ingresos, -egresos]),
+        }
+      })
+      .sort((x, y) => x.periodo.localeCompare(y.periodo))
+
+    return {
+      success: true,
+      data: {
+        anio,
+        meses,
+        porCategoria: aFilas(porCategoria),
+        porContraparte: aFilas(porContraparte),
+        porBolsillo: aFilas(porBolsillo),
+        totalIngresos: sumarMontos(meses.map((m) => m.ingresos)),
+        totalEgresos: sumarMontos(meses.map((m) => m.egresos)),
+        cantidadMovimientos: movimientos.length,
+        aniosConDatos: [
+          ...new Set(todosLosPeriodos.map((p) => Number(p.periodo.slice(0, 4)))),
+        ].sort((a, b) => b - a),
+      },
+    }
+  }
+)
