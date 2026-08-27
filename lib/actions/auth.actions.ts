@@ -1,6 +1,7 @@
 'use server'
 
 import { signIn, signOut, auth } from '@/lib/auth/auth'
+import { emitirPermisoDeLogin } from '@/lib/auth/login-grant'
 import prisma from '@/lib/db/prisma'
 import bcrypt from 'bcryptjs'
 import { AuthError } from 'next-auth'
@@ -204,9 +205,17 @@ export async function verifyOtp(
       console.error('[OTP] Login success email failed:', emailError)
     }
 
-    // Crear sesión NextAuth
+    // Crear sesión NextAuth.
+    //
+    // El permiso se emite ACÁ, recién después de haber validado el código, y
+    // authorize() lo consume. Es lo único que hace que el OTP importe: sin
+    // esto, un POST directo a /api/auth/callback/credentials con solo el email
+    // devolvía una sesión válida sin ver jamás un código.
+    const permisoDeLogin = await emitirPermisoDeLogin(email)
+
     await signIn('credentials', {
       email,
+      loginToken: permisoDeLogin,
       redirect: false,
     })
 

@@ -2,6 +2,7 @@ import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import type { UserRole } from '@prisma/client'
 import prisma from '@/lib/db/prisma'
+import { LOGIN_GRANT_PREFIX } from './login-grant'
 
 export const authConfig = {
   providers: [
@@ -9,15 +10,64 @@ export const authConfig = {
       name: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
+        loginToken: { label: 'Login token', type: 'text' },
       },
+      /**
+       * Autoriza SOLO contra un permiso de un uso emitido por verifyOtp().
+       *
+       * Antes esta función se conformaba con que el email existiera y el
+       * usuario estuviera activo, apoyada en que `signIn('credentials')` se
+       * llama únicamente desde verifyOtp() después de validar el código.
+       *
+       * Esa suposición era falsa: NextAuth expone
+       * `/api/auth/callback/credentials` como endpoint HTTP público, y ese
+       * endpoint entra acá directo sin pasar por ninguna Server Action. Con
+       * dos peticiones —pedir el csrfToken y postear un email— se obtenía una
+       * sesión de SUPER_ADMIN sin ver jamás un código. El OTP era un trámite
+       * de la interfaz, no un control.
+       *
+       * El csrfToken no cubría nada de esto: protege contra que OTRO sitio
+       * haga que tu navegador postee, no contra alguien que llama la API de
+       * frente.
+       *
+       * Ahora el permiso lo emite verifyOtp() y se consume acá.
+       */
       async authorize(credentials) {
         try {
-          // Solo validar que el email existe y está activo
-          // La verificación OTP ya se hizo en verifyOtp() action
+          const { email, loginToken } = credentials as {
+            email?: string
+            loginToken?: string
+          }
 
-          const { email } = credentials as { email: string }
+          if (!email || !loginToken) {
+            return null
+          }
 
-          if (!email) {
+          /**
+           * Consumir primero y preguntar después.
+           *
+           * El delete es la operación atómica: si dos peticiones llegan con el
+           * mismo token, solo una lo borra y la otra recibe null. Verificar y
+           * después borrar dejaría una ventana para reusarlo.
+           */
+          const permiso = await prisma.verificationToken
+            .delete({ where: { token: loginToken } })
+            .catch(() => null)
+
+          if (!permiso) {
+            console.log('[auth] Login rechazado: permiso inexistente o ya usado')
+            return null
+          }
+
+          // El permiso está atado al email que lo pidió: uno emitido para otra
+          // cuenta no sirve para entrar a esta.
+          if (permiso.identifier !== `${LOGIN_GRANT_PREFIX}${email}`) {
+            console.log('[auth] Login rechazado: el permiso es de otra cuenta')
+            return null
+          }
+
+          if (permiso.expires < new Date()) {
+            console.log('[auth] Login rechazado: permiso vencido')
             return null
           }
 
