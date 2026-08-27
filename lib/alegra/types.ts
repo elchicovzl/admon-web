@@ -724,3 +724,71 @@ export interface ListPaymentsParams {
   fields?: string
   [key: string]: unknown
 }
+
+
+// =============================================================================
+// Items (productos y servicios) — el catálogo de lo que se vende
+//
+// Es lo que aparece como línea en una cotización o factura: "Independiente 03",
+// "Administración", "Recaudo para Terceros". El nombre del ítem ES el servicio
+// por el que se cobró, y por eso interesa: permite preguntar cuánto se recaudó
+// por cada uno.
+//
+// Los montos vuelven a pasar por `safeNumber`: Alegra devuelve campos
+// numéricos como string según la cuenta.
+// =============================================================================
+
+export const AlegraItemPriceSchema = z
+  .object({
+    idPriceList: z.union([z.string(), z.number()]).optional(),
+    name: z.string().optional(),
+    price: safeNumber.optional(),
+  })
+  .passthrough()
+
+export const AlegraItemSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).transform(String),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    reference: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    /** 'product' | 'service' según la cuenta; llega suelto, no se restringe. */
+    type: z.string().nullable().optional(),
+    /** Puede venir como número suelto o como lista de precios. */
+    price: z.union([safeNumber, z.array(AlegraItemPriceSchema)]).optional(),
+  })
+  .passthrough()
+
+export type AlegraItem = z.infer<typeof AlegraItemSchema>
+
+/** Igual que las demás listas: o viene envuelto en metadata, o es un array. */
+const AlegraItemListResponseBaseSchema = z.union([
+  z.object({
+    metadata: z.object({ total: z.number() }),
+    data: z.array(AlegraItemSchema),
+  }),
+  z.array(AlegraItemSchema),
+])
+
+export const AlegraItemListResponseSchema =
+  AlegraItemListResponseBaseSchema.transform((v) =>
+    Array.isArray(v) ? { data: v, total: v.length } : { data: v.data, total: v.metadata.total }
+  )
+
+export interface AlegraItemListResponse {
+  data: AlegraItem[]
+  total: number
+}
+
+export interface ListItemsParams {
+  start?: number
+  limit?: number
+  metadata?: boolean
+  name?: string
+  /** 'active' | 'inactive' según la cuenta. */
+  status?: string
+  order_field?: 'id' | 'name' | 'reference'
+  order_direction?: 'ASC' | 'DESC'
+  [key: string]: unknown
+}

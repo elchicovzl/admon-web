@@ -39,6 +39,7 @@ import {
   type DateRangeResult,
 } from './date-range-walk'
 import type {
+  AlegraItemListResponse,
   BillDetail,
   BillListItem,
   BillListResponse,
@@ -51,6 +52,7 @@ import type {
   ListBillsParams,
   ListEstimatesParams,
   ListInvoicesParams,
+  ListItemsParams,
   ListPaymentsParams,
   PaymentDetail,
   PaymentListItem,
@@ -149,6 +151,27 @@ export function getCachedInvoices(
     {
       revalidate: ttl,
       tags: [ALEGRA_TAGS.all, ALEGRA_TAGS.invoices],
+    },
+  )()
+}
+
+/**
+ * Catálogo de productos y servicios de Alegra.
+ *
+ * TTL largo: un catálogo de servicios cambia cuando alguien agrega un servicio
+ * nuevo, no cada cinco minutos.
+ */
+export function getCachedItems(
+  params: ListItemsParams = {},
+): Promise<AlegraItemListResponse> {
+  const key = stableKey(params)
+
+  return unstable_cache(
+    async () => getAlegraClient().listItems(params),
+    ['alegra', 'items', 'list', key],
+    {
+      revalidate: ALEGRA_TTL.company,
+      tags: [ALEGRA_TAGS.all],
     },
   )()
 }
