@@ -25,7 +25,7 @@ const { prismaMock, authMock, hasControlAccessMock } = vi.hoisted(() => ({
   prismaMock: {
     movimiento: { create: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     cierreMensual: { findUnique: vi.fn(), findMany: vi.fn(), upsert: vi.fn() },
-    categoriaMovimiento: { findFirst: vi.fn() },
+    categoriaMovimiento: { findFirst: vi.fn(), create: vi.fn() },
     prestamo: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     bolsillo: { findMany: vi.fn() },
     contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
@@ -50,6 +50,7 @@ import {
   cerrarPeriodo,
   getBolsillos,
   registrarPataServicio,
+  createCategoria,
 } from '../control.actions'
 
 const SESSION = {
@@ -561,5 +562,101 @@ describe('registrarPataServicio', () => {
     expect(res.success).toBe(false)
     expect(res.error).toContain('ya está registrado')
     expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('createCategoria', () => {
+  beforeEach(() => {
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue(null)
+  })
+
+  it('crea la categoría con su grupo', async () => {
+    prismaMock.categoriaMovimiento.create.mockResolvedValue({
+      id: 'ccatnueva0001',
+      nombre: 'Fumigación',
+      grupo: GrupoCategoria.GASTO_OPERATIVO,
+      isActive: true,
+    })
+
+    const res = await createCategoria({
+      nombre: 'Fumigación',
+      grupo: GrupoCategoria.GASTO_OPERATIVO,
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.categoriaMovimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { nombre: 'Fumigación', grupo: GrupoCategoria.GASTO_OPERATIVO },
+      })
+    )
+  })
+
+  it('recorta los espacios del nombre', async () => {
+    prismaMock.categoriaMovimiento.create.mockResolvedValue({
+      id: 'c1', nombre: 'Fumigación', grupo: GrupoCategoria.GASTO_OPERATIVO, isActive: true,
+    })
+
+    await createCategoria({
+      nombre: '  Fumigación  ',
+      grupo: GrupoCategoria.GASTO_OPERATIVO,
+    })
+
+    expect(prismaMock.categoriaMovimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ nombre: 'Fumigación' }) })
+    )
+  })
+
+  it('NO duplica cuando ya existe con otras mayúsculas', async () => {
+    // "PAPELERIA" y "Papelería" partirían el total en dos y nadie lo notaría.
+    // Se devuelve la existente para que el operador la use, en vez de un error
+    // que lo empuje a inventar una variante para esquivarlo.
+    const existente = {
+      id: 'ccatpapeleria',
+      nombre: 'Papelería y oficina',
+      grupo: GrupoCategoria.GASTO_OPERATIVO,
+      isActive: true,
+    }
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue(existente)
+
+    const res = await createCategoria({
+      nombre: 'PAPELERÍA Y OFICINA',
+      grupo: GrupoCategoria.GASTO_BIENESTAR,
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.data).toEqual(existente)
+    expect(res.message).toContain('ya existía')
+    expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
+
+    // La búsqueda tiene que ser insensible a mayúsculas o el dedup no sirve.
+    expect(prismaMock.categoriaMovimiento.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { nombre: { equals: 'PAPELERÍA Y OFICINA', mode: 'insensitive' } },
+      })
+    )
+  })
+
+  it('rechaza un nombre demasiado corto', async () => {
+    const res = await createCategoria({
+      nombre: 'x',
+      grupo: GrupoCategoria.OTRO,
+    })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    const res = await createCategoria({
+      nombre: 'Fumigación',
+      grupo: GrupoCategoria.GASTO_OPERATIVO,
+    })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
   })
 })

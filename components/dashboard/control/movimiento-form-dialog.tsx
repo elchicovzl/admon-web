@@ -7,7 +7,7 @@ import { TipoMovimiento, GrupoCategoria } from '@prisma/client'
 import { toast } from 'sonner'
 import { Loader2, Plus } from 'lucide-react'
 
-import { createMovimiento } from '@/lib/actions/control.actions'
+import { createMovimiento, createCategoria } from '@/lib/actions/control.actions'
 import {
   createMovimientoSchema,
   type CreateMovimientoInput,
@@ -42,12 +42,12 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { MontoInput } from './monto-input'
 
 /** Etiquetas legibles de los grupos, para agrupar el selector de categorías. */
 const ETIQUETA_GRUPO: Record<GrupoCategoria, string> = {
@@ -80,6 +80,19 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
   const [abierto, setAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
+  /**
+   * Las categorías se guardan en estado local, no se leen de las props, porque
+   * se pueden crear sin salir de este formulario y tienen que aparecer en el
+   * selector al instante.
+   */
+  const [catalogo, setCatalogo] = useState(categorias)
+  const [creandoCategoria, setCreandoCategoria] = useState(false)
+  const [nombreNuevaCategoria, setNombreNuevaCategoria] = useState('')
+  const [grupoNuevaCategoria, setGrupoNuevaCategoria] = useState<GrupoCategoria>(
+    GrupoCategoria.GASTO_OPERATIVO
+  )
+  const [guardandoCategoria, setGuardandoCategoria] = useState(false)
+
   const form = useForm<CreateMovimientoInput>({
     resolver: zodResolver(createMovimientoSchema),
     defaultValues: {
@@ -110,13 +123,49 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
     }
   }, [esTraslado, form])
 
-  const categoriasPorGrupo = categorias.reduce<Record<string, CategoriaListItem[]>>(
-    (acc, categoria) => {
-      ;(acc[categoria.grupo] ??= []).push(categoria)
-      return acc
-    },
-    {}
-  )
+  /**
+   * El grupo va dentro de la etiqueta, no como encabezado.
+   *
+   * Un selector agrupado se lee lindo con diez opciones; con veintiséis hay
+   * que scrollear. Metiendo el grupo en el texto se gana la búsqueda: escribir
+   * "gasto" filtra todos los operativos, y escribir "burbuja" encuentra la
+   * categoría sin saber en qué grupo cayó.
+   */
+  const opcionesCategoria = catalogo.map((categoria) => ({
+    value: categoria.id,
+    label: `${categoria.nombre} · ${ETIQUETA_GRUPO[categoria.grupo] ?? categoria.grupo}`,
+  }))
+
+  const opcionesContraparte = [
+    { value: '__ninguna__', label: 'Sin contraparte' },
+    ...contrapartes.map((c) => ({ value: c.id, label: c.nombre })),
+  ]
+
+  async function crearCategoria() {
+    setGuardandoCategoria(true)
+    try {
+      const resultado = await createCategoria({
+        nombre: nombreNuevaCategoria,
+        grupo: grupoNuevaCategoria,
+      })
+
+      if (resultado.success && resultado.data) {
+        const creada = resultado.data
+        // Puede venir una que ya existía: en ese caso no se duplica en la lista.
+        setCatalogo((actual) =>
+          actual.some((c) => c.id === creada.id) ? actual : [...actual, creada]
+        )
+        form.setValue('categoriaId', creada.id, { shouldValidate: true })
+        toast.success(resultado.message ?? 'Categoría creada')
+        setCreandoCategoria(false)
+        setNombreNuevaCategoria('')
+      } else {
+        toast.error(resultado.error ?? 'No se pudo crear la categoría')
+      }
+    } finally {
+      setGuardandoCategoria(false)
+    }
+  }
 
   async function onSubmit(data: CreateMovimientoInput) {
     setGuardando(true)
@@ -219,19 +268,11 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
                 <FormItem>
                   <FormLabel>Monto</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      step={1}
-                      placeholder="40000"
+                    <MontoInput
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
                       disabled={guardando}
-                      value={field.value ?? ''}
-                      onChange={(e) =>
-                        field.onChange(
-                          e.target.value === '' ? undefined : e.target.valueAsNumber
-                        )
-                      }
                     />
                   </FormControl>
                   <FormDescription>
@@ -331,32 +372,82 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
               name="categoriaId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Categoría</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={guardando}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccioná…" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.entries(categoriasPorGrupo).map(([grupo, items]) => (
-                        <SelectGroup key={grupo}>
-                          <SelectLabel>
-                            {ETIQUETA_GRUPO[grupo as GrupoCategoria] ?? grupo}
-                          </SelectLabel>
-                          {items.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.nombre}
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Categoría</FormLabel>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      disabled={guardando}
+                      onClick={() => setCreandoCategoria((v) => !v)}
+                    >
+                      {creandoCategoria ? 'Cancelar' : '+ Crear categoría'}
+                    </Button>
+                  </div>
+
+                  <FormControl>
+                    <SearchableSelect
+                      options={opcionesCategoria}
+                      value={field.value || null}
+                      onValueChange={(v) => field.onChange(v ?? '')}
+                      placeholder="Buscá o seleccioná…"
+                      searchPlaceholder="Escribí para filtrar…"
+                      disabled={guardando}
+                    />
+                  </FormControl>
+
+                  {/* Crear una categoría sin salir del formulario. Exige el
+                      grupo: sin clasificar, el catálogo degenera hasta volver
+                      a ser la columna de 93 conceptos del Excel. */}
+                  {creandoCategoria && (
+                    <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+                      <Input
+                        placeholder="Nombre de la categoría"
+                        value={nombreNuevaCategoria}
+                        onChange={(e) => setNombreNuevaCategoria(e.target.value)}
+                        disabled={guardandoCategoria}
+                      />
+                      <Select
+                        value={grupoNuevaCategoria}
+                        onValueChange={(v) =>
+                          setGrupoNuevaCategoria(v as GrupoCategoria)
+                        }
+                        disabled={guardandoCategoria}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(GrupoCategoria).map((g) => (
+                            <SelectItem key={g} value={g}>
+                              {ETIQUETA_GRUPO[g]}
                             </SelectItem>
                           ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        El grupo define en qué renglón aparece en los reportes.
+                        Buscá antes de crear: si ya existe con otro nombre, se
+                        parten los totales en dos.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full"
+                        disabled={
+                          guardandoCategoria || nombreNuevaCategoria.trim().length < 2
+                        }
+                        onClick={crearCategoria}
+                      >
+                        {guardandoCategoria && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Crear y seleccionar
+                      </Button>
+                    </div>
+                  )}
+
                   <FormMessage />
                 </FormItem>
               )}
@@ -368,25 +459,20 @@ export function MovimientoFormDialog({ bolsillos, categorias, contrapartes }: Pr
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Contraparte (opcional)</FormLabel>
-                  <Select
-                    onValueChange={(v) => field.onChange(v === '__ninguna__' ? null : v)}
-                    value={field.value ?? '__ninguna__'}
-                    disabled={guardando}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="__ninguna__">Sin contraparte</SelectItem>
-                      {contrapartes.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    {/* Buscable igual que las categorías: hoy son cuatro, pero
+                        esta lista crece con cada persona a la que se le paga. */}
+                    <SearchableSelect
+                      options={opcionesContraparte}
+                      value={field.value ?? '__ninguna__'}
+                      onValueChange={(v) =>
+                        field.onChange(!v || v === '__ninguna__' ? null : v)
+                      }
+                      placeholder="Sin contraparte"
+                      searchPlaceholder="Buscar persona o empresa…"
+                      disabled={guardando}
+                    />
+                  </FormControl>
                   <FormDescription>
                     Quién recibe o entrega. Es lo que después permite preguntar
                     cuánto se le pagó a alguien en el año.

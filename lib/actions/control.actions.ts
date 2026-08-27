@@ -58,6 +58,7 @@ import {
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
 import {
+  createCategoriaSchema,
   createContraparteSchema,
   createMovimientoSchema,
   anularMovimientoSchema,
@@ -69,6 +70,7 @@ import {
   registrarConteoSchema,
   aperturaInicialSchema,
   cerrarPeriodoSchema,
+  type CreateCategoriaInput,
   type CreateContraparteInput,
   type CreateMovimientoInput,
   type AnularMovimientoInput,
@@ -257,6 +259,55 @@ export const getTiposServicio = cache(
     return { success: true, data: tipos }
   }
 )
+
+/**
+ * Crea una categoría desde el formulario de movimiento.
+ *
+ * El `grupo` es obligatorio y no se puede inferir del nombre: es lo único que
+ * evita que el catálogo degenere. El Excel que este módulo reemplaza tenía 93
+ * conceptos distintos en una columna donde nadie clasificaba nada, y por eso
+ * era imposible preguntarle cuánto se gastó en transporte.
+ *
+ * El nombre se compara sin distinguir mayúsculas para no terminar con
+ * "Papelería" y "PAPELERIA" como dos categorías.
+ */
+export async function createCategoria(
+  data: CreateCategoriaInput
+): Promise<ActionResponse<CategoriaListItem>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = createCategoriaSchema.safeParse(data)
+  if (!validado.success) {
+    return { success: false, error: validado.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const { nombre, grupo } = validado.data
+
+  const existente = await prisma.categoriaMovimiento.findFirst({
+    where: { nombre: { equals: nombre, mode: 'insensitive' } },
+    select: { id: true, nombre: true, grupo: true, isActive: true },
+  })
+
+  if (existente) {
+    // No es un error: lo que el operador quiere es usarla, y ya existe.
+    // Devolverla evita que invente una variante para esquivar el mensaje.
+    return {
+      success: true,
+      message: `"${existente.nombre}" ya existía y quedó seleccionada`,
+      data: existente,
+    }
+  }
+
+  const categoria = await prisma.categoriaMovimiento.create({
+    data: { nombre, grupo },
+    select: { id: true, nombre: true, grupo: true, isActive: true },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Categoría creada', data: categoria }
+}
 
 // ---------------------------------------------------------------------------
 // Contrapartes

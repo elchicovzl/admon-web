@@ -116,6 +116,7 @@ export {
 export {
   getBolsillos,
   getCategorias,
+  createCategoria,
   getTiposServicio,
   getContrapartes,
   createContraparte,
