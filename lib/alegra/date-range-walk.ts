@@ -56,6 +56,20 @@ export const ALEGRA_WALK_MAX_PAGES = 10
 /** Minimum shape the walk needs: anything carrying an optional date string. */
 export interface DatedDocument {
   date?: string | null
+  /**
+   * Identidad del documento. Cuando está, el walk descarta repetidos.
+   *
+   * Hace falta porque la paginación de Alegra NO es estable: ordena por
+   * `date`, y entre documentos del mismo día el desempate cambia de una
+   * petición a otra. Con varios documentos compartiendo fecha en el borde de
+   * una página, la misma fila vuelve a aparecer en la siguiente.
+   *
+   * Observado en la cuenta real: abril-2026 devolvía 81 filas para 73
+   * cotizaciones distintas, con ocho ids consecutivos repetidos justo en un
+   * borde de página. Eso no era solo una clave repetida en React — inflaba el
+   * total en la misma proporción.
+   */
+  id?: string | number
 }
 
 /** Minimum shape of a list response: rows plus an exact account-wide total. */
@@ -113,6 +127,8 @@ export async function collectByDateRange<T extends DatedDocument>(
   }: DateRangeOptions,
 ): Promise<DateRangeResult<T>> {
   const items: T[] = []
+  // Identidades ya vistas, para descartar lo que la paginación repita.
+  const vistos = new Set<string>()
 
   let pagesFetched = 0
   let total = 0
@@ -150,6 +166,14 @@ export async function collectByDateRange<T extends DatedDocument>(
       // Newer than the ceiling — skip it, but keep walking. These sit at the
       // head of a DESC list and are not evidence that we're done.
       if (dateTo && row.date > dateTo) continue
+
+      // Repetido por el solapamiento de páginas: se descarta en silencio.
+      // Un documento sin `id` no se puede deduplicar y pasa tal cual.
+      if (row.id !== undefined && row.id !== null) {
+        const identidad = String(row.id)
+        if (vistos.has(identidad)) continue
+        vistos.add(identidad)
+      }
 
       items.push(row)
     }

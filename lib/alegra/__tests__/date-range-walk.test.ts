@@ -287,3 +287,83 @@ describe('collectByDateRange — truncado', () => {
     expect(fetchPage).toHaveBeenNthCalledWith(3, 20, 10)
   })
 })
+
+describe('collectByDateRange — paginación inestable de Alegra', () => {
+  /**
+   * Alegra ordena por `date` y el desempate entre documentos del mismo día
+   * cambia de una petición a otra. Con varios compartiendo fecha en el borde
+   * de una página, la misma fila vuelve en la siguiente.
+   *
+   * Observado en la cuenta real: abril-2026 devolvía 81 filas para 73
+   * cotizaciones. No era solo una clave repetida en React — inflaba el total
+   * en la misma proporción.
+   */
+  it('descarta los documentos que la paginación repite', async () => {
+    const pagina1 = [
+      { id: 1, date: '2026-04-20' },
+      { id: 2, date: '2026-04-15' },
+      { id: 3, date: '2026-04-15' },
+    ]
+    // El solapamiento: 2 y 3 vuelven a aparecer.
+    const pagina2 = [
+      { id: 2, date: '2026-04-15' },
+      { id: 3, date: '2026-04-15' },
+      { id: 4, date: '2026-04-10' },
+    ]
+
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: pagina1, total: 4 }
+        : start === 3
+          ? { data: pagina2, total: 4 }
+          : { data: [], total: 4 },
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 3,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual([1, 2, 3, 4])
+  })
+
+  it('no descarta documentos sin id', async () => {
+    // Sin identidad no hay forma de saber si son el mismo; se prefiere
+    // repetir antes que perder un documento.
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: [{ date: '2026-04-20' }, { date: '2026-04-20' }], total: 2 }
+        : { data: [], total: 2 },
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 2,
+    })
+
+    expect(result.items).toHaveLength(2)
+  })
+
+  it('un id repetido no cuenta como fin del rango', async () => {
+    // El descarte tiene que ser silencioso: si cortara el walk, se perderían
+    // los documentos que vienen después del solapamiento.
+    const fetchPage = vi.fn(async (start: number) =>
+      start === 0
+        ? { data: [{ id: 1, date: '2026-04-20' }, { id: 2, date: '2026-04-19' }], total: 4 }
+        : start === 2
+          ? { data: [{ id: 2, date: '2026-04-19' }, { id: 3, date: '2026-04-18' }], total: 4 }
+          : { data: [{ id: 4, date: '2026-04-17' }], total: 4 },
+    )
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 2,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual([1, 2, 3, 4])
+    expect(result.truncated).toBe(false)
+  })
+})
