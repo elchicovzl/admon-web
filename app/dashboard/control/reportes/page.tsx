@@ -123,6 +123,10 @@ async function Reporte({ anio }: { anio: number }) {
 
   const r = resultado.data
 
+  // Los ingresos que no son ni cotización ni factura solo se muestran cuando
+  // existen: en un año que no los tiene, una columna de guiones es ruido.
+  const hayOtrosIngresos = r.ingresos.otros.bruto > 0
+
   return (
     <div className="space-y-6">
       {r.aniosConDatos.length > 1 && (
@@ -140,11 +144,16 @@ async function Reporte({ anio }: { anio: number }) {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
-            titulo: 'Entró en el año',
-            valor: formatearMonto(r.totalIngresos),
+            titulo: 'Entró por cotización (C)',
+            valor: formatearMonto(r.ingresos.cotizacion.bruto),
+            icono: TrendingUp,
+          },
+          {
+            titulo: 'Entró por factura (F)',
+            valor: formatearMonto(r.ingresos.factura.bruto),
             icono: TrendingUp,
           },
           {
@@ -229,7 +238,13 @@ async function Reporte({ anio }: { anio: number }) {
                 <TableRow>
                   <TableHead>Mes</TableHead>
                   <TableHead className="text-right">Movs</TableHead>
-                  <TableHead className="text-right">Entró</TableHead>
+                  <TableHead className="text-right">Entró C</TableHead>
+                  <TableHead className="text-right">Entró F</TableHead>
+                  {/* Solo si el año tiene ingresos que no son ni C ni F. Sin
+                      esta columna la fila no sumaría a la vista. */}
+                  {hayOtrosIngresos && (
+                    <TableHead className="text-right">Otros</TableHead>
+                  )}
                   <TableHead className="text-right">Salió</TableHead>
                   <TableHead className="text-right">Neto</TableHead>
                 </TableRow>
@@ -248,9 +263,23 @@ async function Reporte({ anio }: { anio: number }) {
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {m.cantidad}
                     </TableCell>
+                    {/* En bruto: esta tabla es un flujo de caja y su columna
+                        Neto significa ingresos − egresos. Descontar el tránsito
+                        acá cambiaría en silencio lo que significa la otra
+                        columna. El ingreso real vive en su propia tarjeta. */}
                     <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
-                      {m.ingresos === 0 ? '—' : formatearMonto(m.ingresos)}
+                      {m.ingresosCotizacion === 0
+                        ? '—'
+                        : formatearMonto(m.ingresosCotizacion)}
                     </TableCell>
+                    <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {m.ingresosFactura === 0 ? '—' : formatearMonto(m.ingresosFactura)}
+                    </TableCell>
+                    {hayOtrosIngresos && (
+                      <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {m.ingresosOtros === 0 ? '—' : formatearMonto(m.ingresosOtros)}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right tabular-nums text-red-600 dark:text-red-400">
                       {m.egresos === 0 ? '—' : formatearMonto(m.egresos)}
                     </TableCell>

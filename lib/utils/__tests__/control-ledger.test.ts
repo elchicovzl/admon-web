@@ -29,6 +29,7 @@ import {
   type MovimientoDePrestamo,
   repartirEntreServicios,
   ingresoPorServicio,
+  ingresosPorNaturaleza,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -613,5 +614,83 @@ describe('ingresoPorServicio', () => {
     const r = ingresoPorServicio(579_000, [ing(579_000, true)])
 
     expect(r.netos).toBe(0)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('ingresosPorNaturaleza', () => {
+  const mov = (
+    grupo: GrupoCategoria,
+    monto: number,
+    detalles: Array<{ monto: number; enTransito: boolean }> = [],
+    tipo: TipoMovimiento = TipoMovimiento.INGRESO
+  ) => ({ tipo, grupo, monto, detalles })
+
+  it('separa lo que entró por cotización de lo que entró por factura', () => {
+    const r = ingresosPorNaturaleza([
+      mov(GrupoCategoria.COBRO_COTIZACION, 6_408_000),
+      mov(GrupoCategoria.COBRO_FACTURA, 729_000),
+    ])
+
+    expect(r.cotizacion.bruto).toBe(6_408_000)
+    expect(r.factura.bruto).toBe(729_000)
+  })
+
+  it('manda a "otros" lo que no es ni C ni F', () => {
+    // Un abono a préstamo también es un ingreso. Sin este bucket, C + F no
+    // daría el total y las tarjetas mentirían por omisión.
+    const r = ingresosPorNaturaleza([
+      mov(GrupoCategoria.COBRO_COTIZACION, 100_000),
+      mov(GrupoCategoria.PRESTAMO_ABONO, 400_000),
+      mov(GrupoCategoria.DEVOLUCION, 50_000),
+    ])
+
+    expect(r.otros.bruto).toBe(450_000)
+    expect(r.cotizacion.bruto + r.factura.bruto + r.otros.bruto).toBe(550_000)
+  })
+
+  it('descuenta la plata en tránsito dentro de cada naturaleza', () => {
+    // El recaudo para terceros viaja en las facturas, no en las cotizaciones.
+    const r = ingresosPorNaturaleza([
+      mov(GrupoCategoria.COBRO_COTIZACION, 80_000, [
+        { monto: 80_000, enTransito: false },
+      ]),
+      mov(GrupoCategoria.COBRO_FACTURA, 729_000, [
+        { monto: 150_000, enTransito: false },
+        { monto: 579_000, enTransito: true },
+      ]),
+    ])
+
+    expect(r.cotizacion.enTransito).toBe(0)
+    expect(r.cotizacion.neto).toBe(80_000)
+    expect(r.factura.enTransito).toBe(579_000)
+    expect(r.factura.neto).toBe(150_000)
+  })
+
+  it('sin desglose, el neto es igual al bruto', () => {
+    const r = ingresosPorNaturaleza([mov(GrupoCategoria.COBRO_FACTURA, 729_000)])
+
+    expect(r.factura.neto).toBe(729_000)
+  })
+
+  it('ignora los egresos', () => {
+    const r = ingresosPorNaturaleza([
+      mov(GrupoCategoria.COBRO_FACTURA, 729_000, [], TipoMovimiento.EGRESO),
+      mov(GrupoCategoria.GASTO_OPERATIVO, 23_000, [], TipoMovimiento.EGRESO),
+    ])
+
+    expect(r.factura.bruto).toBe(0)
+    expect(r.otros.bruto).toBe(0)
+  })
+
+  it('sin movimientos devuelve las tres naturalezas en cero', () => {
+    // El estado de hoy: 172 movimientos migrados y los 172 son egresos.
+    const r = ingresosPorNaturaleza([])
+
+    expect(r.cotizacion).toEqual({ bruto: 0, enTransito: 0, neto: 0 })
+    expect(r.factura).toEqual({ bruto: 0, enTransito: 0, neto: 0 })
+    expect(r.otros).toEqual({ bruto: 0, enTransito: 0, neto: 0 })
   })
 })

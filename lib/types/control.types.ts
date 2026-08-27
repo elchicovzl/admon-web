@@ -16,9 +16,19 @@ import type {
   GrupoCategoria,
   Prisma,
 } from '@prisma/client'
-import type { EstadoPrestamo, EstadoServicio } from '@/lib/utils/control-ledger'
+import type {
+  EstadoPrestamo,
+  EstadoServicio,
+  IngresoDeNaturaleza,
+  IngresosPorNaturaleza,
+} from '@/lib/utils/control-ledger'
 
-export type { EstadoPrestamo, EstadoServicio }
+export type {
+  EstadoPrestamo,
+  EstadoServicio,
+  IngresoDeNaturaleza,
+  IngresosPorNaturaleza,
+}
 
 /**
  * Único punto donde un Decimal se vuelve number. Si aparece un `.toNumber()`
@@ -239,6 +249,12 @@ export interface ResumenPeriodo {
   cierres: CierreMensualView[]
   totalIngresos: number
   totalEgresos: number
+  /**
+   * Los ingresos abiertos por naturaleza: cotización (C), factura (F) y el
+   * resto. Para el negocio C y F son cosas distintas, y sumarlos en un solo
+   * número pierde media razón de ser del módulo.
+   */
+  ingresos: IngresosPorNaturaleza
   ingresoNeto: IngresoNeto
   /** Suma de los saldos finales de todos los bolsillos. */
   saldoConsolidado: number
@@ -266,6 +282,23 @@ export interface MesDelAnio {
   periodo: string
   cantidad: number
   ingresos: number
+  /**
+   * Lo que entró por cada vía, en BRUTO.
+   *
+   * Acá no se descuenta la plata en tránsito a propósito: esta tabla es un
+   * flujo de caja y su columna `neto` significa ingresos − egresos. Netear el
+   * tránsito solo en una columna cambiaría en silencio lo que significa la
+   * otra. El ingreso real vive en su propia tarjeta, con su cobertura al lado.
+   */
+  ingresosCotizacion: number
+  ingresosFactura: number
+  /**
+   * Ingresos que no son ni C ni F: abonos a préstamos, devoluciones, cargas
+   * manuales. Va en su propia columna cuando existe, porque si no
+   * `ingresosCotizacion + ingresosFactura - egresos` no daría `neto` y la
+   * tabla dejaría de sumar a la vista.
+   */
+  ingresosOtros: number
   egresos: number
   neto: number
 }
@@ -291,6 +324,8 @@ export interface ReporteAnual {
    */
   porServicio: FilaAgrupada[]
   ingresoNeto: IngresoNeto
+  /** Los ingresos del año abiertos en C, F y el resto. */
+  ingresos: IngresosPorNaturaleza
   totalIngresos: number
   totalEgresos: number
   cantidadMovimientos: number

@@ -408,6 +408,7 @@ describe('cerrarPeriodo', () => {
         monto: dec(m.monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: m.destino ?? null,
+        categoria: { grupo: GrupoCategoria.GASTO_OPERATIVO },
         detalleServicios: [],
       }))
     })
@@ -826,6 +827,7 @@ describe('getResumenPeriodo — saldo inicial acumulado', () => {
         monto: dec(monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: null,
+        categoria: { grupo: GrupoCategoria.GASTO_OPERATIVO },
         detalleServicios: [],
       }))
     })
@@ -1800,6 +1802,60 @@ describe('reporte: separar lo ganado de lo que solo pasó', () => {
     expect(res.data!.ingresoNeto.sinDesglose).toBe(500_000)
   })
 
+  it('separa en el año lo que entró por cotización de lo que entró por factura', async () => {
+    // Para el negocio son cosas distintas — "por debajo" y "por arriba" — y
+    // por eso son dos grupos de categoría y no dos categorías del mismo grupo.
+    prepararReporte([
+      {
+        ...mov(TipoMovimiento.INGRESO, 6_408_000),
+        categoria: {
+          id: 'ccatcot00001',
+          nombre: 'Cobro de cotización',
+          grupo: GrupoCategoria.COBRO_COTIZACION,
+        },
+      },
+      mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA),
+    ])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.ingresos.cotizacion.bruto).toBe(6_408_000)
+    expect(res.data!.ingresos.factura.bruto).toBe(729_000)
+    expect(res.data!.ingresos.factura.neto).toBe(150_000)
+  })
+
+  it('el mes a mes trae C y F en BRUTO, sin descontar el tránsito', async () => {
+    // La columna Neto de esa tabla significa ingresos − egresos. Descontar el
+    // tránsito solo en una columna cambiaría en silencio lo que dice la otra.
+    prepararReporte([mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA)])
+
+    const res = await getReporteAnual(2026)
+
+    const agosto = res.data!.meses.find((m) => m.periodo === '2026-08')!
+    expect(agosto.ingresosFactura).toBe(729_000)
+    expect(agosto.ingresos).toBe(729_000)
+  })
+
+  it('los ingresos que no son C ni F van a "otros"', async () => {
+    // Un abono a préstamo también entra. Sin este bucket, C + F no daría el
+    // total y la tabla dejaría de sumar a la vista.
+    prepararReporte([
+      {
+        ...mov(TipoMovimiento.INGRESO, 400_000),
+        categoria: {
+          id: 'ccatabono001',
+          nombre: 'Abono a préstamo',
+          grupo: GrupoCategoria.PRESTAMO_ABONO,
+        },
+      },
+    ])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.ingresos.otros.bruto).toBe(400_000)
+    expect(res.data!.meses[0]!.ingresosOtros).toBe(400_000)
+  })
+
   it('el egreso de una anulación cuenta del lado del egreso, no resta del neto', async () => {
     // Misma regla que el corte por categoría: una anulación aparece como
     // egreso. Restarla del neto lo dejaría fuera de escala con totalIngresos,
@@ -1815,5 +1871,87 @@ describe('reporte: separar lo ganado de lo que solo pasó', () => {
     expect(res.data!.porServicio.find((f) => f.id === 'csrvrecaudo1')!.egresos).toBe(
       579_000
     )
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('getResumenPeriodo — ingresos C y F separados', () => {
+  function prepararIngresos(
+    movimientos: Array<{
+      grupo: GrupoCategoria
+      monto: number
+      detalles?: Array<{ monto: number; enTransito: boolean }>
+    }>
+  ) {
+    prismaMock.bolsillo.findMany.mockResolvedValue([{ id: IVONE, nombre: 'IVONE' }])
+    prismaMock.cierreMensual.findMany.mockResolvedValue([])
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) => {
+      if (args?.where?.periodo?.lt) return []
+      return movimientos.map((m) => ({
+        tipo: TipoMovimiento.INGRESO,
+        monto: dec(m.monto),
+        bolsilloId: IVONE,
+        bolsilloDestinoId: null,
+        categoria: { grupo: m.grupo },
+        detalleServicios: (m.detalles ?? []).map((d) => ({
+          monto: dec(d.monto),
+          servicio: { enTransito: d.enTransito },
+        })),
+      }))
+    })
+  }
+
+  it('separa el cobro por cotización del cobro por factura', async () => {
+    prepararIngresos([
+      { grupo: GrupoCategoria.COBRO_COTIZACION, monto: 6_408_000 },
+      { grupo: GrupoCategoria.COBRO_FACTURA, monto: 729_000 },
+    ])
+
+    const res = await getResumenPeriodo('2026-08')
+
+    expect(res.data!.ingresos.cotizacion.bruto).toBe(6_408_000)
+    expect(res.data!.ingresos.factura.bruto).toBe(729_000)
+    expect(res.data!.totalIngresos).toBe(7_137_000)
+  })
+
+  it('descuenta el tránsito solo dentro de la factura', async () => {
+    // El recaudo para terceros viaja en las facturas, no en las cotizaciones.
+    prepararIngresos([
+      { grupo: GrupoCategoria.COBRO_COTIZACION, monto: 80_000 },
+      {
+        grupo: GrupoCategoria.COBRO_FACTURA,
+        monto: 729_000,
+        detalles: [
+          { monto: 150_000, enTransito: false },
+          { monto: 579_000, enTransito: true },
+        ],
+      },
+    ])
+
+    const res = await getResumenPeriodo('2026-08')
+
+    expect(res.data!.ingresos.cotizacion.neto).toBe(80_000)
+    expect(res.data!.ingresos.factura.neto).toBe(150_000)
+  })
+
+  it('el saldo del bolsillo NO descuenta la plata en tránsito', async () => {
+    // La regla que no se puede romper: los 729.000 entraron al banco de verdad
+    // y la caja tiene que seguir cuadrando contra el extracto.
+    prepararIngresos([
+      {
+        grupo: GrupoCategoria.COBRO_FACTURA,
+        monto: 729_000,
+        detalles: [
+          { monto: 150_000, enTransito: false },
+          { monto: 579_000, enTransito: true },
+        ],
+      },
+    ])
+
+    const res = await getResumenPeriodo('2026-08')
+
+    expect(res.data!.saldoConsolidado).toBe(729_000)
   })
 })

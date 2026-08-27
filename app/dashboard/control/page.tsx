@@ -57,34 +57,54 @@ async function Kpis({ periodo }: { periodo: string }) {
   }
 
   const {
-    totalIngresos,
     totalEgresos,
     saldoConsolidado,
     tieneDescuadres,
     cierres,
-    ingresoNeto,
+    ingresos,
   } = resultado.data
 
   const tarjetas = [
-    // Cuando hay plata en tránsito, la tarjeta muestra lo GANADO y no lo que
-    // entró: de una factura de 729.000 solo 150.000 son de Admon, y un
-    // "ingresos del mes" que muestre los 729.000 hace tomar decisiones sobre
-    // plata ajena. El bruto queda en la nota, no se esconde.
-    ingresoNeto.enTransito > 0
+    // C y F van en tarjetas separadas porque para el negocio son cosas
+    // distintas — "por debajo" y "por arriba" — y sumarlas en un solo número
+    // pierde media razón de ser del módulo.
+    {
+      titulo: 'Ingresos por cotización (C)',
+      valor: formatearMonto(ingresos.cotizacion.bruto),
+      icono: TrendingUp,
+      nota: '"Por debajo". El documento es una cotización de Alegra',
+    },
+    // Cuando hay plata en tránsito, esta tarjeta muestra lo GANADO y no lo que
+    // entró: de una factura de 729.000 solo 150.000 son de Admon, y mostrar
+    // los 729.000 hace tomar decisiones sobre plata ajena. El bruto no se
+    // esconde: queda en la nota.
+    ingresos.factura.enTransito > 0
       ? {
-          titulo: 'Ingreso real del mes',
-          valor: formatearMonto(ingresoNeto.netos),
+          titulo: 'Ingreso real por factura (F)',
+          valor: formatearMonto(ingresos.factura.neto),
           icono: TrendingUp,
-          nota: `Entraron ${formatearMonto(totalIngresos)}; ${formatearMonto(
-            ingresoNeto.enTransito
-          )} son plata en tránsito`,
+          nota: `Entraron ${formatearMonto(
+            ingresos.factura.bruto
+          )}; ${formatearMonto(ingresos.factura.enTransito)} son plata en tránsito`,
         }
       : {
-          titulo: 'Ingresos del mes',
-          valor: formatearMonto(totalIngresos),
+          titulo: 'Ingresos por factura (F)',
+          valor: formatearMonto(ingresos.factura.bruto),
           icono: TrendingUp,
-          nota: 'Todo lo que entró, sin traslados',
+          nota: '"Por arriba". El documento es una factura de venta',
         },
+    // Solo si hay algo: un abono a préstamo o una devolución también son
+    // ingresos, y sin esta tarjeta C + F no daría el total de la fila.
+    ...(ingresos.otros.bruto > 0
+      ? [
+          {
+            titulo: 'Otros ingresos',
+            valor: formatearMonto(ingresos.otros.bruto),
+            icono: TrendingUp,
+            nota: 'Abonos a préstamos, devoluciones y cargas manuales',
+          },
+        ]
+      : []),
     {
       titulo: 'Egresos del mes',
       valor: formatearMonto(totalEgresos),
@@ -123,7 +143,7 @@ async function Kpis({ periodo }: { periodo: string }) {
         </Alert>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tarjetas.map((tarjeta) => {
           const Icono = tarjeta.icono
           return (

@@ -79,10 +79,12 @@ import {
   estadoServicio,
   contraMovimiento,
   ingresoPorServicio,
+  ingresosPorNaturaleza,
   repartirEntreServicios,
   sumarMontos,
   type LineaDeDocumento,
   type DetalleParaReporte,
+  type MovimientoParaNaturaleza,
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
 import {
@@ -1530,6 +1532,8 @@ export const getResumenPeriodo = cache(
           monto: true,
           bolsilloId: true,
           bolsilloDestinoId: true,
+          // Para separar "por debajo" (C) de "por arriba" (F).
+          categoria: { select: { grupo: true } },
           // Para separar lo ganado de lo que solo pasó. NO entra en el cálculo
           // del saldo: la plata en tránsito entró al bolsillo de verdad.
           detalleServicios: {
@@ -1640,6 +1644,16 @@ export const getResumenPeriodo = cache(
       movs.filter((m) => m.tipo === TipoMovimiento.INGRESO).map((m) => m.monto)
     )
 
+    const paraNaturaleza: MovimientoParaNaturaleza[] = movimientos.map((m) => ({
+      tipo: m.tipo,
+      grupo: m.categoria.grupo,
+      monto: decimalANumero(m.monto),
+      detalles: m.detalleServicios.map((d) => ({
+        monto: decimalANumero(d.monto),
+        enTransito: d.servicio.enTransito,
+      })),
+    }))
+
     const detallesDelPeriodo: DetalleParaReporte[] = movimientos.flatMap((m) =>
       m.detalleServicios.map((d) => ({
         tipo: m.tipo,
@@ -1657,6 +1671,7 @@ export const getResumenPeriodo = cache(
         totalEgresos: sumarMontos(
           movs.filter((m) => m.tipo === TipoMovimiento.EGRESO).map((m) => m.monto)
         ),
+        ingresos: ingresosPorNaturaleza(paraNaturaleza),
         ingresoNeto: ingresoPorServicio(totalIngresos, detallesDelPeriodo),
         saldoConsolidado: sumarMontos(vistas.map((v) => v.saldoFinalCalculado)),
         tieneDescuadres: vistas.some(
@@ -1944,6 +1959,10 @@ export const getReporteAnual = cache(
     const porServicio = new Map<string, Acumulador>()
     const porMes = new Map<string, Acumulador>()
     const detalles: DetalleParaReporte[] = []
+    // Los ingresos C y F por mes. Van aparte del acumulador genérico porque
+    // ese no distingue naturaleza: solo suma ingresos contra egresos.
+    const naturalezaPorMes = new Map<string, MovimientoParaNaturaleza[]>()
+    const paraNaturaleza: MovimientoParaNaturaleza[] = []
 
     function acumular(
       mapa: Map<string, Acumulador>,
@@ -1962,6 +1981,18 @@ export const getReporteAnual = cache(
 
     for (const m of movimientos) {
       const monto = decimalANumero(m.monto)
+
+      const paraM: MovimientoParaNaturaleza = {
+        tipo: m.tipo,
+        grupo: m.categoria.grupo,
+        monto,
+        detalles: m.detalleServicios.map((d) => ({
+          monto: decimalANumero(d.monto),
+          enTransito: d.servicio.enTransito,
+        })),
+      }
+      paraNaturaleza.push(paraM)
+      naturalezaPorMes.set(m.periodo, [...(naturalezaPorMes.get(m.periodo) ?? []), paraM])
 
       acumular(porMes, m.periodo, m.periodo, m.tipo, monto)
       acumular(porBolsillo, m.bolsillo.id, m.bolsillo.nombre, m.tipo, monto)
@@ -2017,10 +2048,17 @@ export const getReporteAnual = cache(
       .map(([periodo, a]) => {
         const ingresos = sumarMontos(a.ingresos)
         const egresos = sumarMontos(a.egresos)
+        // En BRUTO: esta tabla es un flujo de caja y su `neto` significa
+        // ingresos − egresos. Descontar el tránsito solo en una columna
+        // cambiaría en silencio lo que significa la otra.
+        const delMes = ingresosPorNaturaleza(naturalezaPorMes.get(periodo) ?? [])
         return {
           periodo,
           cantidad: a.cantidad,
           ingresos,
+          ingresosCotizacion: delMes.cotizacion.bruto,
+          ingresosFactura: delMes.factura.bruto,
+          ingresosOtros: delMes.otros.bruto,
           egresos,
           neto: sumarMontos([ingresos, -egresos]),
         }
@@ -2040,6 +2078,7 @@ export const getReporteAnual = cache(
           sumarMontos(meses.map((m) => m.ingresos)),
           detalles
         ),
+        ingresos: ingresosPorNaturaleza(paraNaturaleza),
         totalIngresos: sumarMontos(meses.map((m) => m.ingresos)),
         totalEgresos: sumarMontos(meses.map((m) => m.egresos)),
         cantidadMovimientos: movimientos.length,

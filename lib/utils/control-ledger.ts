@@ -466,3 +466,94 @@ export function ingresoPorServicio(
     netos: redondearMonto(totalIngresos - enTransito),
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Ingresos por naturaleza: "por debajo" (C) y "por arriba" (F)
+// ---------------------------------------------------------------------------
+//
+// Para el negocio no son lo mismo y la base ya los separa en dos grupos de
+// categoría. Sumarlos en un solo "ingresos del mes" pierde media razón de ser
+// del módulo — es la misma distinción que llevó a que COBRO_COTIZACION y
+// COBRO_FACTURA sean grupos distintos y no dos categorías del mismo grupo.
+//
+// El tercer bucket NO es relleno: un abono a préstamo o una devolución también
+// son ingresos. Sin él, C + F no daría el total y las tarjetas mentirían por
+// omisión.
+
+export interface IngresoDeNaturaleza {
+  /** Todo lo que entró por esta vía. */
+  bruto: number
+  /** Parte que es plata en tránsito: entra y vuelve a salir. */
+  enTransito: number
+  /** `bruto` menos la plata en tránsito: lo que se ganó de verdad. */
+  neto: number
+}
+
+export interface IngresosPorNaturaleza {
+  /** "Por debajo": el documento es una cotización de Alegra. */
+  cotizacion: IngresoDeNaturaleza
+  /** "Por arriba": el documento es una factura de venta. */
+  factura: IngresoDeNaturaleza
+  /** Ni C ni F: abonos a préstamos, devoluciones, cargas manuales. */
+  otros: IngresoDeNaturaleza
+}
+
+export interface MovimientoParaNaturaleza {
+  tipo: TipoMovimiento
+  grupo: GrupoCategoria
+  monto: number
+  /** Desglose por servicio, si lo tiene. */
+  detalles: Array<{ monto: number; enTransito: boolean }>
+}
+
+/**
+ * Separa los ingresos en cotización, factura y todo lo demás.
+ *
+ * Solo mira los movimientos de INGRESO. Un egreso con categoría de cobro no
+ * existe en la práctica, pero si existiera —una anulación de un ingreso— no
+ * tiene por qué restar acá: `totalIngresos` tampoco lo descuenta. Misma regla
+ * que en `ingresoPorServicio`.
+ */
+export function ingresosPorNaturaleza(
+  movimientos: MovimientoParaNaturaleza[]
+): IngresosPorNaturaleza {
+  const vacio = (): { montos: number[]; transito: number[] } => ({
+    montos: [],
+    transito: [],
+  })
+
+  const cubos = {
+    cotizacion: vacio(),
+    factura: vacio(),
+    otros: vacio(),
+  }
+
+  for (const m of movimientos) {
+    if (m.tipo !== TipoMovimiento.INGRESO) continue
+
+    const cubo =
+      m.grupo === GrupoCategoria.COBRO_COTIZACION
+        ? cubos.cotizacion
+        : m.grupo === GrupoCategoria.COBRO_FACTURA
+          ? cubos.factura
+          : cubos.otros
+
+    cubo.montos.push(m.monto)
+    for (const d of m.detalles) {
+      if (d.enTransito) cubo.transito.push(d.monto)
+    }
+  }
+
+  const cerrar = (c: { montos: number[]; transito: number[] }): IngresoDeNaturaleza => {
+    const bruto = sumarMontos(c.montos)
+    const enTransito = sumarMontos(c.transito)
+    return { bruto, enTransito, neto: redondearMonto(bruto - enTransito) }
+  }
+
+  return {
+    cotizacion: cerrar(cubos.cotizacion),
+    factura: cerrar(cubos.factura),
+    otros: cerrar(cubos.otros),
+  }
+}
