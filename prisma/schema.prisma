@@ -75,6 +75,17 @@ model User {
   novedades                      Novedad[]                @relation("UserNovedades")
   createdNovedades               Novedad[]                @relation("NovedadCreatedBy")
 
+  // Módulo Control (caja interna)
+  // Un usuario puede tener una contraparte cuando además de operar el sistema
+  // recibe plata del libro (nómina complementaria, préstamos).
+  contraparte                    Contraparte?             @relation("ContraparteUser")
+  createdContrapartes            Contraparte[]            @relation("ContraparteCreatedBy")
+  createdMovimientos             Movimiento[]             @relation("MovimientoCreatedBy")
+  createdPrestamos               Prestamo[]               @relation("PrestamoCreatedBy")
+  createdServiciosReferenciados  ServicioReferenciado[]   @relation("ServicioCreatedBy")
+  createdCierres                 CierreMensual[]          @relation("CierreCreatedBy")
+  cierresCerrados                CierreMensual[]          @relation("CierreCerradoBy")
+
   @@map("users")
 }
 
@@ -238,6 +249,10 @@ model Client {
   // Employment join table back-relations (Phase 1 additive; legacy CompanyEmployees stays)
   employmentsAsEmployee Employment[] @relation("EmploymentEmployee")
   employmentsAsCompany  Employment[] @relation("EmploymentCompany")
+
+  // Módulo Control — un cliente puede ser contraparte del libro de caja
+  // (ej. A&A Moda Circular y Mompossina, clientes de mensajería).
+  contraparte Contraparte? @relation("ContraparteClient")
 
   @@map("clients")
   @@index([companyId])
@@ -944,4 +959,385 @@ model BlogPost {
   @@index([publishedAt])
   @@index([authorId])
   @@map("blog_posts")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MÓDULO CONTROL — libro de caja interno
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Reemplaza el Excel de contabilidad (hojas PAGOS POR DEBAJO, CUENTAS,
+// PRESTAMOS, PAGOS FAWER, EXAMENES MEDICOS).
+//
+// Este libro es INDEPENDIENTE de Alegra (/dashboard/finances), que es la
+// contabilidad formal y es de solo lectura. Los dos libros NUNCA se suman ni
+// se consolidan; a lo sumo se referencian por id (ver alegraEstimateId).
+//
+// Reglas que el modelo hace cumplir:
+//   1. Ningún movimiento sin bolsillo, categoría, fecha y monto > 0.
+//   2. Los movimientos son INMUTABLES: no se editan ni se borran. Para
+//      corregir se crea un contra-movimiento (`anulaMovimientoId`).
+//   3. Los saldos NUNCA se digitan. `saldoFinalCalculado` sale de los
+//      movimientos; el valor que venía del Excel entra como `saldoFinalReal`
+//      solo para comparar contra el cálculo.
+//   4. Los saldos de préstamo y el margen de los servicios son DERIVADOS —
+//      no existen como columna, justamente para que no puedan desincronizarse.
+//
+// Acceso: SUPER_ADMIN o User.canAccessControl (ver lib/auth/rbac.ts).
+
+enum TipoBolsillo {
+  BANCARIA    // cuenta de banco usada como operativa (ej. IVONE)
+  EFECTIVO    // caja en efectivo
+  CAJA_MENOR  // caja chica para gastos menores
+  AHORRO      // efectivo guardado
+}
+
+enum TipoContraparte {
+  EMPLEADO   // equipo interno; puede o no tener usuario del sistema
+  PROVEEDOR  // a quien se le paga (Fawer, laboratorio, don Luis)
+  CLIENTE    // quien paga (A&A Moda Circular, Mompossina, pacientes)
+  OTRO
+}
+
+enum TipoMovimiento {
+  INGRESO
+  EGRESO
+  TRASLADO  // entre dos bolsillos; exige bolsilloDestinoId
+}
+
+// Agrupación para reportes. La categoría concreta vive en un catálogo
+// editable (CategoriaMovimiento) para no necesitar migración cada vez que
+// aparece un concepto nuevo.
+enum GrupoCategoria {
+  NOMINA_COMPLEMENTARIA  // los pagos "por debajo"
+  NOMINA_FIJA            // recurrentes mensuales del equipo
+  COMISION
+  SERVICIO_REFERENCIADO  // patas de un ServicioReferenciado
+  GASTO_OPERATIVO        // papelería, transporte, arreglos de oficina
+  GASTO_BIENESTAR        // almuerzos, regalos, celebraciones
+  PRESTAMO_DESEMBOLSO
+  PRESTAMO_ABONO
+  TRASLADO
+  DEVOLUCION
+  OTRO
+}
+
+// Bolsillo: de dónde sale y a dónde entra la plata.
+// El catálogo es editable — el Excel muestra IVONE, EFECTIVO, CAJA MENOR,
+// ADMON, AHORRO EFECTIVO y JOSE Q (cerrado en enero-2026), pero hay más
+// cuentas en uso.
+model Bolsillo {
+  id        String       @id @default(cuid())
+  nombre    String       @unique
+  tipo      TipoBolsillo
+  orden     Int          @default(0) // orden de despliegue en la UI
+
+  // Un bolsillo que se deja de usar se cierra, no se borra: sus movimientos
+  // históricos tienen que seguir existiendo.
+  isActive  Boolean      @default(true)
+  cerradoEn DateTime?    @db.Date
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  movimientos       Movimiento[]    @relation("MovimientoBolsillo")
+  movimientosComoDestino Movimiento[] @relation("MovimientoBolsilloDestino")
+  prestamosOriginados    Prestamo[]  @relation("PrestamoBolsilloOrigen")
+  cierres           CierreMensual[]
+
+  @@map("bolsillos")
+  @@index([isActive, orden])
+}
+
+// Contraparte: quién recibe o entrega plata en este libro.
+//
+// Un solo catálogo para empleados, proveedores, clientes y pacientes, con
+// enlaces OPCIONALES a User y Client. Se hizo así a propósito: con entidades
+// separadas (persona / tercero), cada Movimiento cargaría dos FK nullables y
+// nada garantizaría que exactamente una esté llena.
+//
+// NO se extiende User: `email` es único y hay `password`, así que un
+// proveedor informal exigiría un email falso y quedaría como fila capaz de
+// iniciar sesión. Además Novedad ya trata a User como empleado interno.
+model Contraparte {
+  id        String          @id @default(cuid())
+  nombre    String
+  tipo      TipoContraparte
+
+  // Si es del equipo y tiene usuario del sistema
+  userId    String?         @unique
+  user      User?           @relation("ContraparteUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  // Si es un cliente ya registrado en el sistema
+  clientId  String?         @unique
+  client    Client?         @relation("ContraparteClient", fields: [clientId], references: [id], onDelete: SetNull)
+
+  // Solo dígitos, sin dígito de verificación (el DV se calcula con el
+  // algoritmo DIAN). Ej: NIT 901485874-1 se guarda como "901485874".
+  documento String?         @unique
+
+  notas     String?         @db.Text
+  isActive  Boolean         @default(true)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdById String
+  createdBy   User          @relation("ContraparteCreatedBy", fields: [createdById], references: [id])
+
+  movimientos          Movimiento[]
+  prestamos            Prestamo[]
+  serviciosComoCliente   ServicioReferenciado[] @relation("ServicioCliente")
+  serviciosComoProveedor ServicioReferenciado[] @relation("ServicioProveedor")
+
+  @@map("contrapartes")
+  @@index([tipo, isActive])
+  @@index([nombre])
+}
+
+// Catálogo editable de categorías. `grupo` es lo que se usa para reportes.
+model CategoriaMovimiento {
+  id        String         @id @default(cuid())
+  nombre    String         @unique
+  grupo     GrupoCategoria
+  isActive  Boolean        @default(true)
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  movimientos Movimiento[]
+
+  @@map("categorias_movimiento")
+  @@index([grupo, isActive])
+}
+
+// Catálogo de tipos de servicio referenciado (mensajería, exámenes médicos…).
+// Es tabla y no enum a propósito: van a aparecer más servicios y no debería
+// hacer falta una migración para agregarlos.
+model TipoServicioReferenciado {
+  id       String  @id @default(cuid())
+  nombre   String  @unique
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  servicios ServicioReferenciado[]
+
+  @@map("tipos_servicio_referenciado")
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Movimiento — la tabla central. Las cuatro hojas de dinero del Excel
+// colapsan acá; todo lo demás es una vista sobre esto.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// INMUTABLE. No hay updatedAt ni isActive porque no se edita ni se borra: un
+// movimiento equivocado se corrige creando otro que lo anula. Esto es lo que
+// evita el error silencioso del Excel, donde alguien pisó un saldo y el
+// descuadre desapareció de la vista.
+model Movimiento {
+  id       String         @id @default(cuid())
+
+  // Fecha de calendario, no timestamp: todo el libro es America/Bogotá y un
+  // pago no debe poder correrse de día por zona horaria.
+  fecha    DateTime       @db.Date
+  // "2026-08" — denormalizado para agrupar y cerrar por periodo.
+  periodo  String
+  tipo     TipoMovimiento
+  monto    Decimal        @db.Decimal(14, 2)
+  concepto String
+
+  // De dónde salió / a dónde entró. Obligatorio, siempre.
+  bolsilloId String
+  bolsillo   Bolsillo @relation("MovimientoBolsillo", fields: [bolsilloId], references: [id])
+
+  // Solo para TRASLADO. Hay un CHECK en la migración que lo exige para
+  // TRASLADO, lo prohíbe para el resto, e impide que sea igual al origen.
+  bolsilloDestinoId String?
+  bolsilloDestino   Bolsillo? @relation("MovimientoBolsilloDestino", fields: [bolsilloDestinoId], references: [id])
+
+  categoriaId String
+  categoria   CategoriaMovimiento @relation(fields: [categoriaId], references: [id])
+
+  contraparteId String?
+  contraparte   Contraparte? @relation(fields: [contraparteId], references: [id])
+
+  // Si es desembolso o abono de un préstamo
+  prestamoId String?
+  prestamo   Prestamo? @relation(fields: [prestamoId], references: [id])
+
+  // Anulación: este movimiento revierte a otro. Único, para que un
+  // movimiento no pueda anularse dos veces.
+  anulaMovimientoId String?     @unique
+  anulaMovimiento   Movimiento? @relation("MovimientoAnulacion", fields: [anulaMovimientoId], references: [id])
+  anuladoPor        Movimiento? @relation("MovimientoAnulacion")
+
+  notas        String? @db.Text
+  // Trazabilidad de la migración: "PAGOS POR DEBAJO!K168"
+  origenImport String?
+
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation("MovimientoCreatedBy", fields: [createdById], references: [id])
+
+  servicioComoIngreso ServicioReferenciado? @relation("ServicioMovimientoIngreso")
+  servicioComoEgreso  ServicioReferenciado? @relation("ServicioMovimientoEgreso")
+
+  @@map("movimientos")
+  @@index([periodo, bolsilloId])
+  @@index([fecha])
+  @@index([contraparteId, fecha])
+  @@index([categoriaId])
+  @@index([prestamoId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Préstamo — desembolso a una contraparte, con abonos.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// `saldoActual` y `estado` NO son columnas: se derivan de los movimientos
+// ligados por prestamoId. Guardarlos sería repetir el error del Excel, donde
+// el estado es texto libre con 178 variantes ("DESCONTADO 30/04", "ok",
+// "RESTA 100,000") y no hay forma de saber cuánto debe alguien sin leer 240
+// filas.
+//
+// La única parte del estado que no se puede derivar es la decisión de dar un
+// préstamo por perdido, y por eso es un flag explícito.
+model Prestamo {
+  id              String   @id @default(cuid())
+  contraparteId   String
+  contraparte     Contraparte @relation(fields: [contraparteId], references: [id])
+
+  fechaDesembolso DateTime @db.Date
+  montoOriginal   Decimal  @db.Decimal(14, 2)
+  concepto        String
+
+  bolsilloOrigenId String
+  bolsilloOrigen   Bolsillo @relation("PrestamoBolsilloOrigen", fields: [bolsilloOrigenId], references: [id])
+
+  // Decisión manual, no derivable. Un préstamo activo NO se archiva: si
+  // desaparece de la vista vuelve el problema que teníamos en el Excel.
+  marcadoIncobrable Boolean @default(false)
+  incobrableMotivo  String? @db.Text
+
+  notas        String? @db.Text
+  origenImport String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("PrestamoCreatedBy", fields: [createdById], references: [id])
+
+  // Desembolso + abonos
+  movimientos Movimiento[]
+
+  @@map("prestamos")
+  @@index([contraparteId])
+  @@index([fechaDesembolso])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ServicioReferenciado — servicio que Admon intermedia entre un cliente y un
+// tercero, atando las dos patas de movimiento.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Mensajería y exámenes médicos son el mismo animal:
+//
+//   mensajería  cotiza 520.000 → entrega 520.000 a Fawer        → margen 0
+//   exámenes    cobra   45.000 → entrega  30.000 al consultorio → margen 15.000
+//
+// Registrar solo el egreso — que es lo que hace el Excel hoy — infla el gasto
+// del mes con plata que no es de Admon, y es un error que nunca se detecta
+// porque se ve como un gasto más.
+//
+// `margen` NO es columna: es valorFacturado - valorEntregado. En junio-2026 la
+// comisión de exámenes fue 10.000 en dos casos y 15.000 en otros dos, así que
+// tampoco puede ser una constante de configuración.
+model ServicioReferenciado {
+  id             String @id @default(cuid())
+
+  tipoServicioId String
+  tipoServicio   TipoServicioReferenciado @relation(fields: [tipoServicioId], references: [id])
+
+  fecha   DateTime @db.Date
+  periodo String
+
+  // Quién paga
+  clienteId String
+  cliente   Contraparte @relation("ServicioCliente", fields: [clienteId], references: [id])
+  // A quién se le entrega (Fawer, el consultorio)
+  proveedorId String
+  proveedor   Contraparte @relation("ServicioProveedor", fields: [proveedorId], references: [id])
+
+  valorFacturado Decimal @db.Decimal(14, 2)
+  valorEntregado Decimal @db.Decimal(14, 2)
+
+  // null = facturado/cotizado pero todavía sin cobrar
+  movimientoIngresoId String?     @unique
+  movimientoIngreso   Movimiento? @relation("ServicioMovimientoIngreso", fields: [movimientoIngresoId], references: [id])
+  // null = cobrado pero todavía sin entregar al tercero
+  movimientoEgresoId  String?     @unique
+  movimientoEgreso    Movimiento? @relation("ServicioMovimientoEgreso", fields: [movimientoEgresoId], references: [id])
+
+  // Referencia a la cotización en Alegra. Es un puntero para poder saltar a
+  // /dashboard/finances/estimates/[id], NO una consolidación de los dos libros.
+  alegraEstimateId String?
+
+  notas        String? @db.Text
+  origenImport String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("ServicioCreatedBy", fields: [createdById], references: [id])
+
+  @@map("servicios_referenciados")
+  @@index([periodo])
+  @@index([tipoServicioId, fecha])
+  @@index([clienteId])
+  @@index([proveedorId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// CierreMensual — saldo por bolsillo y periodo. Reemplaza la hoja CUENTAS.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// `saldoFinalCalculado` NUNCA se digita: sale de saldoInicial + movimientos
+// del periodo. `saldoFinalReal` es el conteo físico o el extracto, y existe
+// para COMPARAR contra el cálculo — no para reemplazarlo.
+//
+// Cuando difieren, la diferencia queda registrada y exige justificación. En el
+// Excel esto no se validaba: ADMON cerró noviembre-2025 en 8.000.000 y abrió
+// diciembre en 6.067.340, y esos 1.932.660 no dejaron rastro.
+model CierreMensual {
+  id         String @id @default(cuid())
+  periodo    String // "2026-08"
+  bolsilloId String
+  bolsillo   Bolsillo @relation(fields: [bolsilloId], references: [id])
+
+  // Debe ser igual al saldo final del periodo anterior. La única excepción es
+  // el arranque del módulo, marcado con esAperturaInicial.
+  saldoInicial        Decimal  @db.Decimal(14, 2)
+  saldoFinalCalculado Decimal  @db.Decimal(14, 2)
+  saldoFinalReal      Decimal? @db.Decimal(14, 2)
+  diferencia          Decimal? @db.Decimal(14, 2)
+  justificacion       String?  @db.Text
+
+  // Saldo semilla al arrancar el módulo: es el único que se digita.
+  esAperturaInicial Boolean @default(false)
+
+  // Un periodo cerrado no admite movimientos nuevos sin reabrirlo.
+  cerrado     Boolean   @default(false)
+  cerradoEn   DateTime?
+  cerradoById String?
+  cerradoBy   User?     @relation("CierreCerradoBy", fields: [cerradoById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("CierreCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([periodo, bolsilloId])
+  @@map("cierres_mensuales")
+  @@index([periodo])
+  @@index([bolsilloId, periodo])
 }
