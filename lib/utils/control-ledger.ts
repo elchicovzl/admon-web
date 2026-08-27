@@ -488,6 +488,14 @@ export interface IngresoDeNaturaleza {
   enTransito: number
   /** `bruto` menos la plata en tránsito: lo que se ganó de verdad. */
   neto: number
+  /**
+   * De qué categorías se compone, de mayor a menor.
+   *
+   * Existe sobre todo por "otros": un número agregado que junta abonos a
+   * préstamos, devoluciones y cargas manuales no se puede cuadrar contra nada.
+   * Con el desglose al lado, sí.
+   */
+  porCategoria: Array<{ nombre: string; monto: number }>
 }
 
 export interface IngresosPorNaturaleza {
@@ -502,6 +510,7 @@ export interface IngresosPorNaturaleza {
 export interface MovimientoParaNaturaleza {
   tipo: TipoMovimiento
   grupo: GrupoCategoria
+  categoria: string
   monto: number
   /** Desglose por servicio, si lo tiene. */
   detalles: Array<{ monto: number; enTransito: boolean }>
@@ -518,9 +527,14 @@ export interface MovimientoParaNaturaleza {
 export function ingresosPorNaturaleza(
   movimientos: MovimientoParaNaturaleza[]
 ): IngresosPorNaturaleza {
-  const vacio = (): { montos: number[]; transito: number[] } => ({
+  const vacio = (): {
+    montos: number[]
+    transito: number[]
+    categorias: Map<string, number[]>
+  } => ({
     montos: [],
     transito: [],
+    categorias: new Map(),
   })
 
   const cubos = {
@@ -540,15 +554,23 @@ export function ingresosPorNaturaleza(
           : cubos.otros
 
     cubo.montos.push(m.monto)
+    cubo.categorias.set(m.categoria, [...(cubo.categorias.get(m.categoria) ?? []), m.monto])
     for (const d of m.detalles) {
       if (d.enTransito) cubo.transito.push(d.monto)
     }
   }
 
-  const cerrar = (c: { montos: number[]; transito: number[] }): IngresoDeNaturaleza => {
+  const cerrar = (c: ReturnType<typeof vacio>): IngresoDeNaturaleza => {
     const bruto = sumarMontos(c.montos)
     const enTransito = sumarMontos(c.transito)
-    return { bruto, enTransito, neto: redondearMonto(bruto - enTransito) }
+    return {
+      bruto,
+      enTransito,
+      neto: redondearMonto(bruto - enTransito),
+      porCategoria: [...c.categorias.entries()]
+        .map(([nombre, montos]) => ({ nombre, monto: sumarMontos(montos) }))
+        .sort((a, b) => b.monto - a.monto),
+    }
   }
 
   return {

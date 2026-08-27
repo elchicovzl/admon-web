@@ -156,6 +156,20 @@ async function Reporte({ anio }: { anio: number }) {
             valor: formatearMonto(r.ingresos.factura.bruto),
             icono: TrendingUp,
           },
+          // Sin esta tarjeta, C + F no da el total de ingresos y la fila deja
+          // de cuadrar apenas entra un abono a préstamo o una devolución. Se
+          // muestra solo cuando hay algo: en un año sin otros ingresos, un
+          // cero no explica nada.
+          ...(hayOtrosIngresos
+            ? [
+                {
+                  titulo: 'Otros ingresos',
+                  valor: formatearMonto(r.ingresos.otros.bruto),
+                  icono: TrendingUp,
+                  detalle: r.ingresos.otros.porCategoria,
+                },
+              ]
+            : []),
           {
             titulo: 'Salió en el año',
             valor: formatearMonto(r.totalEgresos),
@@ -176,6 +190,19 @@ async function Reporte({ anio }: { anio: number }) {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold tabular-nums">{t.valor}</div>
+                {/* De qué se compone. Un agregado que junta abonos,
+                    devoluciones y cargas manuales no se puede cuadrar contra
+                    nada; con el desglose al lado, sí. */}
+                {'detalle' in t && t.detalle && t.detalle.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                    {t.detalle.map((c) => (
+                      <li key={c.nombre} className="flex justify-between gap-2">
+                        <span className="truncate">{c.nombre}</span>
+                        <span className="tabular-nums">{formatearMonto(c.monto)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CardContent>
             </Card>
           )
@@ -288,6 +315,36 @@ async function Reporte({ anio }: { anio: number }) {
                     </TableCell>
                   </TableRow>
                 ))}
+                {/* Totales. Es lo que permite verificar de un vistazo que
+                    C + F + Otros da lo que entró en el año: una tabla que no
+                    suma a la vista no se puede cuadrar contra nada. */}
+                <TableRow className="border-t-2 font-medium">
+                  <TableCell>Total {r.anio}</TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {r.cantidadMovimientos}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {r.ingresos.cotizacion.bruto === 0
+                      ? '—'
+                      : formatearMonto(r.ingresos.cotizacion.bruto)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {r.ingresos.factura.bruto === 0
+                      ? '—'
+                      : formatearMonto(r.ingresos.factura.bruto)}
+                  </TableCell>
+                  {hayOtrosIngresos && (
+                    <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {formatearMonto(r.ingresos.otros.bruto)}
+                    </TableCell>
+                  )}
+                  <TableCell className="text-right tabular-nums text-red-600 dark:text-red-400">
+                    {r.totalEgresos === 0 ? '—' : formatearMonto(r.totalEgresos)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Monto valor={r.totalIngresos - r.totalEgresos} />
+                  </TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </div>

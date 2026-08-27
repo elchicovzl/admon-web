@@ -408,7 +408,7 @@ describe('cerrarPeriodo', () => {
         monto: dec(m.monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: m.destino ?? null,
-        categoria: { grupo: GrupoCategoria.GASTO_OPERATIVO },
+        categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO },
         detalleServicios: [],
       }))
     })
@@ -827,7 +827,7 @@ describe('getResumenPeriodo — saldo inicial acumulado', () => {
         monto: dec(monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: null,
-        categoria: { grupo: GrupoCategoria.GASTO_OPERATIVO },
+        categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO },
         detalleServicios: [],
       }))
     })
@@ -1854,6 +1854,14 @@ describe('reporte: separar lo ganado de lo que solo pasó', () => {
 
     expect(res.data!.ingresos.otros.bruto).toBe(400_000)
     expect(res.data!.meses[0]!.ingresosOtros).toBe(400_000)
+    // La fila del mes a mes tiene que sumar a la vista.
+    const mes = res.data!.meses[0]!
+    expect(mes.ingresosCotizacion + mes.ingresosFactura + mes.ingresosOtros).toBe(
+      mes.ingresos
+    )
+    expect(res.data!.ingresos.otros.porCategoria).toEqual([
+      { nombre: 'Abono a préstamo', monto: 400_000 },
+    ])
   })
 
   it('el egreso de una anulación cuenta del lado del egreso, no resta del neto', async () => {
@@ -1881,6 +1889,7 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
   function prepararIngresos(
     movimientos: Array<{
       grupo: GrupoCategoria
+      categoria?: string
       monto: number
       detalles?: Array<{ monto: number; enTransito: boolean }>
     }>
@@ -1894,7 +1903,7 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
         monto: dec(m.monto),
         bolsilloId: IVONE,
         bolsilloDestinoId: null,
-        categoria: { grupo: m.grupo },
+        categoria: { nombre: m.categoria ?? 'Cobro', grupo: m.grupo },
         detalleServicios: (m.detalles ?? []).map((d) => ({
           monto: dec(d.monto),
           servicio: { enTransito: d.enTransito },
@@ -1934,6 +1943,52 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
 
     expect(res.data!.ingresos.cotizacion.neto).toBe(80_000)
     expect(res.data!.ingresos.factura.neto).toBe(150_000)
+  })
+
+  it('C + F + otros da el total de ingresos', async () => {
+    // Es lo que permite cuadrar la fila de tarjetas del resumen: un ingreso
+    // que no viene de una cotización ni de una factura —un abono a préstamo—
+    // tiene que aparecer en algún lado o el total no cierra.
+    prepararIngresos([
+      { grupo: GrupoCategoria.COBRO_COTIZACION, monto: 6_408_000 },
+      { grupo: GrupoCategoria.COBRO_FACTURA, monto: 729_000 },
+      {
+        grupo: GrupoCategoria.PRESTAMO_ABONO,
+        categoria: 'Abono a préstamo',
+        monto: 400_000,
+      },
+    ])
+
+    const res = await getResumenPeriodo('2026-08')
+    const i = res.data!.ingresos
+
+    expect(i.otros.bruto).toBe(400_000)
+    expect(i.cotizacion.bruto + i.factura.bruto + i.otros.bruto).toBe(
+      res.data!.totalIngresos
+    )
+  })
+
+  it('"otros" dice de qué categorías se compone', async () => {
+    // Un agregado sin desglose no se puede cuadrar contra nada.
+    prepararIngresos([
+      {
+        grupo: GrupoCategoria.PRESTAMO_ABONO,
+        categoria: 'Abono a préstamo',
+        monto: 400_000,
+      },
+      {
+        grupo: GrupoCategoria.DEVOLUCION,
+        categoria: 'Devolución a cliente',
+        monto: 50_000,
+      },
+    ])
+
+    const res = await getResumenPeriodo('2026-08')
+
+    expect(res.data!.ingresos.otros.porCategoria).toEqual([
+      { nombre: 'Abono a préstamo', monto: 400_000 },
+      { nombre: 'Devolución a cliente', monto: 50_000 },
+    ])
   })
 
   it('el saldo del bolsillo NO descuenta la plata en tránsito', async () => {

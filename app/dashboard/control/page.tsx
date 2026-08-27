@@ -95,13 +95,19 @@ async function Kpis({ periodo }: { periodo: string }) {
         },
     // Solo si hay algo: un abono a préstamo o una devolución también son
     // ingresos, y sin esta tarjeta C + F no daría el total de la fila.
+    //
+    // La nota dice de QUÉ se compone, no qué podría contener. Un agregado que
+    // junta abonos, devoluciones y cargas manuales no se puede cuadrar contra
+    // nada; con las categorías al lado, sí.
     ...(ingresos.otros.bruto > 0
       ? [
           {
             titulo: 'Otros ingresos',
             valor: formatearMonto(ingresos.otros.bruto),
             icono: TrendingUp,
-            nota: 'Abonos a préstamos, devoluciones y cargas manuales',
+            nota: ingresos.otros.porCategoria
+              .map((c) => `${c.nombre} ${formatearMonto(c.monto)}`)
+              .join(' · '),
           },
         ]
       : []),

@@ -1532,8 +1532,9 @@ export const getResumenPeriodo = cache(
           monto: true,
           bolsilloId: true,
           bolsilloDestinoId: true,
-          // Para separar "por debajo" (C) de "por arriba" (F).
-          categoria: { select: { grupo: true } },
+          // El grupo separa "por debajo" (C) de "por arriba" (F); el nombre
+          // arma el desglose de "otros", que sin él no se puede cuadrar.
+          categoria: { select: { nombre: true, grupo: true } },
           // Para separar lo ganado de lo que solo pasó. NO entra en el cálculo
           // del saldo: la plata en tránsito entró al bolsillo de verdad.
           detalleServicios: {
@@ -1647,6 +1648,7 @@ export const getResumenPeriodo = cache(
     const paraNaturaleza: MovimientoParaNaturaleza[] = movimientos.map((m) => ({
       tipo: m.tipo,
       grupo: m.categoria.grupo,
+      categoria: m.categoria.nombre,
       monto: decimalANumero(m.monto),
       detalles: m.detalleServicios.map((d) => ({
         monto: decimalANumero(d.monto),
@@ -1985,6 +1987,7 @@ export const getReporteAnual = cache(
       const paraM: MovimientoParaNaturaleza = {
         tipo: m.tipo,
         grupo: m.categoria.grupo,
+        categoria: m.categoria.nombre,
         monto,
         detalles: m.detalleServicios.map((d) => ({
           monto: decimalANumero(d.monto),

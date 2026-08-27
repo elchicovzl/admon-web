@@ -625,8 +625,9 @@ describe('ingresosPorNaturaleza', () => {
     grupo: GrupoCategoria,
     monto: number,
     detalles: Array<{ monto: number; enTransito: boolean }> = [],
-    tipo: TipoMovimiento = TipoMovimiento.INGRESO
-  ) => ({ tipo, grupo, monto, detalles })
+    tipo: TipoMovimiento = TipoMovimiento.INGRESO,
+    categoria = 'Categoría'
+  ) => ({ tipo, grupo, categoria, monto, detalles })
 
   it('separa lo que entró por cotización de lo que entró por factura', () => {
     const r = ingresosPorNaturaleza([
@@ -689,8 +690,34 @@ describe('ingresosPorNaturaleza', () => {
     // El estado de hoy: 172 movimientos migrados y los 172 son egresos.
     const r = ingresosPorNaturaleza([])
 
-    expect(r.cotizacion).toEqual({ bruto: 0, enTransito: 0, neto: 0 })
-    expect(r.factura).toEqual({ bruto: 0, enTransito: 0, neto: 0 })
-    expect(r.otros).toEqual({ bruto: 0, enTransito: 0, neto: 0 })
+    expect(r.cotizacion).toEqual({ bruto: 0, enTransito: 0, neto: 0, porCategoria: [] })
+    expect(r.factura).toEqual({ bruto: 0, enTransito: 0, neto: 0, porCategoria: [] })
+    expect(r.otros).toEqual({ bruto: 0, enTransito: 0, neto: 0, porCategoria: [] })
+  })
+
+  it('desglosa "otros" por categoría, de mayor a menor', () => {
+    // Un número agregado que junta abonos, devoluciones y cargas manuales no
+    // se puede cuadrar contra nada. Con el desglose al lado, sí.
+    const r = ingresosPorNaturaleza([
+      mov(GrupoCategoria.PRESTAMO_ABONO, 400_000, [], TipoMovimiento.INGRESO, 'Abono a préstamo'),
+      mov(GrupoCategoria.DEVOLUCION, 50_000, [], TipoMovimiento.INGRESO, 'Devolución a cliente'),
+      mov(GrupoCategoria.PRESTAMO_ABONO, 100_000, [], TipoMovimiento.INGRESO, 'Abono a préstamo'),
+    ])
+
+    expect(r.otros.bruto).toBe(550_000)
+    expect(r.otros.porCategoria).toEqual([
+      { nombre: 'Abono a préstamo', monto: 500_000 },
+      { nombre: 'Devolución a cliente', monto: 50_000 },
+    ])
+  })
+
+  it('el desglose de cada naturaleza suma su propio bruto', () => {
+    // Si no cerrara, la nota contradiría al número que tiene arriba.
+    const r = ingresosPorNaturaleza([
+      mov(GrupoCategoria.PRESTAMO_ABONO, 400_000, [], TipoMovimiento.INGRESO, 'Abono a préstamo'),
+      mov(GrupoCategoria.OTRO, 25_000, [], TipoMovimiento.INGRESO, 'Varios'),
+    ])
+
+    expect(sumarMontos(r.otros.porCategoria.map((c) => c.monto))).toBe(r.otros.bruto)
   })
 })
