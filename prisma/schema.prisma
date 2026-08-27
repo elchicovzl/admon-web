@@ -27,6 +27,16 @@ model User {
   image         String?
   role          UserRole  @default(MANAGER)
   isActive      Boolean   @default(true)
+
+  // Acceso al módulo Control (caja interna: movimientos, préstamos, cierres).
+  // Es un permiso ORTOGONAL al rol, no un rol nuevo: `role` es un campo único,
+  // así que un UserRole.CONTROL le quitaría al usuario todo lo demás (clientes,
+  // procesos, incapacidades). Con este flag un MANAGER puede llevar la caja sin
+  // perder el resto del dashboard.
+  //
+  // SUPER_ADMIN entra siempre, tenga el flag en false o no — ver lib/auth/rbac.ts.
+  canAccessControl Boolean @default(false)
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

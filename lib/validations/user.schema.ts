@@ -15,6 +15,11 @@ export const createUserSchema = z.object({
   role: z
     .nativeEnum(UserRole)
     .default(UserRole.MANAGER),
+  // Acceso al módulo Control (caja interna). Se otorga explícitamente:
+  // nadie lo hereda por ser MANAGER.
+  canAccessControl: z
+    .boolean()
+    .default(false),
 })
 
 export type CreateUserInput = z.infer<typeof createUserSchema>
@@ -32,6 +37,9 @@ export const updateUserSchema = z.object({
     .optional(),
   role: z
     .nativeEnum(UserRole)
+    .optional(),
+  canAccessControl: z
+    .boolean()
     .optional(),
 })
 

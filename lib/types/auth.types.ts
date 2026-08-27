@@ -20,6 +20,8 @@ export interface SafeUser {
   image: string | null
   role: UserRole
   isActive: boolean
+  /** Acceso al módulo Control (caja interna). SUPER_ADMIN entra igual. */
+  canAccessControl: boolean
   createdAt: Date
   updatedAt: Date
 }

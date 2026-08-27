@@ -9,6 +9,10 @@ const protectedRoutes = ['/dashboard']
 // Routes that require SUPER_ADMIN role
 const superAdminRoutes = ['/dashboard/users']
 
+// Routes that require access to the Control module (caja interna).
+// Open to SUPER_ADMIN, or to any active user with the canAccessControl flag.
+const controlRoutes = ['/dashboard/control']
+
 // Public routes (accessible without authentication)
 const publicRoutes = ['/login', '/']
 
@@ -25,6 +29,11 @@ export default async function middleware(request: NextRequest) {
 
   // Check if route requires SUPER_ADMIN
   const requiresSuperAdmin = superAdminRoutes.some((route) =>
+    pathname.startsWith(route)
+  )
+
+  // Check if route requires Control module access
+  const requiresControlAccess = controlRoutes.some((route) =>
     pathname.startsWith(route)
   )
 
@@ -47,6 +56,24 @@ export default async function middleware(request: NextRequest) {
   if (requiresSuperAdmin && session) {
     if (session.user.role !== UserRole.SUPER_ADMIN) {
       // Redirect to dashboard with error
+      const dashboardUrl = new URL('/dashboard', request.url)
+      dashboardUrl.searchParams.set('error', 'unauthorized')
+      return NextResponse.redirect(dashboardUrl)
+    }
+  }
+
+  // Check Control module authorization.
+  //
+  // This reads the JWT, which can be up to 30 days stale — it is a cheap gate
+  // that keeps unauthorized users from ever seeing the UI, NOT the real
+  // authorization. Every page and Server Action under /dashboard/control must
+  // call requireControlAccess() from lib/auth/rbac.ts, which hits the database.
+  if (requiresControlAccess && session) {
+    const allowed =
+      session.user.role === UserRole.SUPER_ADMIN ||
+      session.user.canAccessControl === true
+
+    if (!allowed) {
       const dashboardUrl = new URL('/dashboard', request.url)
       dashboardUrl.searchParams.set('error', 'unauthorized')
       return NextResponse.redirect(dashboardUrl)

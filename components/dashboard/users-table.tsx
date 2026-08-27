@@ -23,7 +23,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle, Pencil } from 'lucide-react'
+import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle, Pencil, Coins } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -115,17 +115,29 @@ export function UsersTable({ users }: UsersTableProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {user.role === UserRole.SUPER_ADMIN ? (
-                      <Badge variant="default" className="gap-1">
-                        <Shield className="h-3 w-3" />
-                        Super Admin
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="gap-1">
-                        <UserCheck className="h-3 w-3" />
-                        Manager
-                      </Badge>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {user.role === UserRole.SUPER_ADMIN ? (
+                        <Badge variant="default" className="gap-1">
+                          <Shield className="h-3 w-3" />
+                          Super Admin
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="gap-1">
+                          <UserCheck className="h-3 w-3" />
+                          Manager
+                        </Badge>
+                      )}
+                      {/* SUPER_ADMIN entra a Control por rol, sin necesidad del
+                          flag. Se muestra igual para que la tabla responda de un
+                          vistazo "quién puede ver la caja". */}
+                      {(user.role === UserRole.SUPER_ADMIN ||
+                        user.canAccessControl) && (
+                        <Badge variant="outline" className="gap-1">
+                          <Coins className="h-3 w-3" />
+                          Control
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {user.isActive ? (

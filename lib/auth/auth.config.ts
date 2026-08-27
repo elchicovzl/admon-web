@@ -1,5 +1,6 @@
 import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
+import type { UserRole } from '@prisma/client'
 import prisma from '@/lib/db/prisma'
 
 export const authConfig = {
@@ -42,6 +43,7 @@ export const authConfig = {
             email: user.email,
             image: user.image ? `/api/avatar/${user.id}` : null,
             role: user.role,
+            canAccessControl: user.canAccessControl,
           }
         } catch (error) {
           console.error('Auth error:', error)
@@ -62,19 +64,27 @@ export const authConfig = {
         token.email = user.email
         token.name = user.name
         token.picture = user.image
+        token.canAccessControl = user.canAccessControl
       }
 
       // Re-fetch user data when session update is triggered
       if (trigger === 'update' && token.id) {
         const freshUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { name: true, email: true, image: true, role: true },
+          select: {
+            name: true,
+            email: true,
+            image: true,
+            role: true,
+            canAccessControl: true,
+          },
         })
         if (freshUser) {
           token.name = freshUser.name
           token.email = freshUser.email
           token.picture = freshUser.image ? `/api/avatar/${token.id}` : null
           token.role = freshUser.role
+          token.canAccessControl = freshUser.canAccessControl
         }
       }
 
@@ -83,10 +93,14 @@ export const authConfig = {
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string
-        session.user.role = token.role as string
+        session.user.role = token.role as UserRole
         session.user.email = token.email as string
         session.user.name = token.name as string
         session.user.image = token.picture as string | null
+        // Copia perezosa: el token vive 30 días, así que esto puede quedar
+        // desactualizado. Sirve para pintar la UI y para el gate barato del
+        // middleware — nunca para autorizar una acción. Ver lib/auth/rbac.ts.
+        session.user.canAccessControl = token.canAccessControl === true
       }
       return session
     },
