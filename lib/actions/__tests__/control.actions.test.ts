@@ -93,6 +93,7 @@ import {
   getFacturasDelPeriodo,
   importarFacturasComoIngresos,
   sincronizarServiciosAlegra,
+  getReporteAnual,
 } from '../control.actions'
 
 const SESSION = {
@@ -407,6 +408,7 @@ describe('cerrarPeriodo', () => {
         monto: dec(m.monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: m.destino ?? null,
+        detalleServicios: [],
       }))
     })
 
@@ -824,6 +826,7 @@ describe('getResumenPeriodo — saldo inicial acumulado', () => {
         monto: dec(monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: null,
+        detalleServicios: [],
       }))
     })
 
@@ -1697,6 +1700,120 @@ describe('servicio en un movimiento manual', () => {
           },
         }),
       })
+    )
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('reporte: separar lo ganado de lo que solo pasó', () => {
+  /** Un movimiento tal como lo devuelve el select del reporte anual. */
+  function mov(
+    tipo: TipoMovimiento,
+    monto: number,
+    detalles: Array<{ id: string; nombre: string; monto: number; enTransito: boolean }> = []
+  ) {
+    return {
+      tipo,
+      monto: dec(monto),
+      periodo: '2026-08',
+      bolsillo: { id: IVONE, nombre: 'IVONE' },
+      categoria: { id: CATEGORIA, nombre: 'Cobro de factura', grupo: GrupoCategoria.COBRO_FACTURA },
+      contraparte: null,
+      detalleServicios: detalles.map((d) => ({
+        monto: dec(d.monto),
+        servicio: {
+          id: d.id,
+          nombre: d.nombre,
+          referencia: null,
+          enTransito: d.enTransito,
+        },
+      })),
+    }
+  }
+
+  const FACTURA_DESGLOSADA = [
+    { id: 'csrvadmin001', nombre: 'Administracion', monto: 150_000, enTransito: false },
+    { id: 'csrvrecaudo1', nombre: 'Recaudo para Terceros', monto: 579_000, enTransito: true },
+  ]
+
+  function prepararReporte(movimientos: unknown[]) {
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) =>
+      args?.distinct ? [{ periodo: '2026-08' }] : movimientos
+    )
+  }
+
+  it('descuenta la plata en tránsito del ingreso del año', async () => {
+    prepararReporte([mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA)])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.totalIngresos).toBe(729_000)
+    expect(res.data!.ingresoNeto.enTransito).toBe(579_000)
+    expect(res.data!.ingresoNeto.netos).toBe(150_000)
+  })
+
+  it('agrupa por servicio', async () => {
+    prepararReporte([mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA)])
+
+    const res = await getReporteAnual(2026)
+
+    const porServicio = res.data!.porServicio
+    expect(porServicio).toHaveLength(2)
+    expect(porServicio.find((f) => f.id === 'csrvadmin001')!.ingresos).toBe(150_000)
+    expect(porServicio.find((f) => f.id === 'csrvrecaudo1')!.ingresos).toBe(579_000)
+  })
+
+  it('marca el servicio en tránsito en la etiqueta secundaria', async () => {
+    prepararReporte([mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA)])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.porServicio.find((f) => f.id === 'csrvrecaudo1')!.detalle).toBe(
+      'En tránsito'
+    )
+  })
+
+  it('informa cuánto entró SIN desglose', async () => {
+    // Es lo que hace honesto al neto: hoy el libro tiene ingresos viejos sin
+    // desglose, y sin este número el neto parecería exacto.
+    prepararReporte([
+      mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA),
+      mov(TipoMovimiento.INGRESO, 200_000), // cargado a mano, sin servicio
+    ])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.ingresoNeto.conDesglose).toBe(729_000)
+    expect(res.data!.ingresoNeto.sinDesglose).toBe(200_000)
+  })
+
+  it('sin ningún desglose, el neto es igual al bruto', async () => {
+    // El caso de hoy: catálogo recién creado y ningún cobro importado.
+    prepararReporte([mov(TipoMovimiento.INGRESO, 500_000)])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.porServicio).toEqual([])
+    expect(res.data!.ingresoNeto.netos).toBe(500_000)
+    expect(res.data!.ingresoNeto.sinDesglose).toBe(500_000)
+  })
+
+  it('el egreso de una anulación cuenta del lado del egreso, no resta del neto', async () => {
+    // Misma regla que el corte por categoría: una anulación aparece como
+    // egreso. Restarla del neto lo dejaría fuera de escala con totalIngresos,
+    // que tampoco descuenta anulaciones.
+    prepararReporte([
+      mov(TipoMovimiento.INGRESO, 729_000, FACTURA_DESGLOSADA),
+      mov(TipoMovimiento.EGRESO, 729_000, FACTURA_DESGLOSADA),
+    ])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.ingresoNeto.enTransito).toBe(579_000)
+    expect(res.data!.porServicio.find((f) => f.id === 'csrvrecaudo1')!.egresos).toBe(
+      579_000
     )
   })
 })

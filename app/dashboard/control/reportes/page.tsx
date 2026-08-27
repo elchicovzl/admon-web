@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { TrendingUp, TrendingDown, Hash } from 'lucide-react'
+import { TrendingUp, TrendingDown, Hash, ArrowLeftRight } from 'lucide-react'
 
 import { getReporteAnual } from '@/lib/actions/control.actions'
 import { formatearMonto, formatearPeriodo } from '@/lib/utils/control-format'
@@ -12,6 +12,7 @@ import type { FilaAgrupada } from '@/lib/types/control.types'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -172,6 +173,49 @@ async function Reporte({ anio }: { anio: number }) {
         })}
       </div>
 
+      {/* Lo ganado, separado de lo que solo pasó.
+          Solo se muestra si hay algo en tránsito: con el catálogo recién
+          sincronizado y sin cobros importados, esta tarjeta sería un cero que
+          no explica nada. */}
+      {r.ingresoNeto.enTransito > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Ingreso real del año
+            </CardTitle>
+            <ArrowLeftRight className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-2xl font-bold tabular-nums">
+              {formatearMonto(r.ingresoNeto.netos)}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              De los {formatearMonto(r.totalIngresos)} que entraron,{' '}
+              <strong>{formatearMonto(r.ingresoNeto.enTransito)}</strong> son plata
+              en tránsito — entra y vuelve a salir, como el recaudo para
+              terceros. El saldo de los bolsillos NO cambia: esa plata sí pasó
+              por la caja.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* La cobertura va al lado del número, siempre. El desglose por servicio
+          existe solo desde que se importa con él: sin decir cuánto quedó
+          afuera, el neto parecería exacto. */}
+      {r.ingresoNeto.sinDesglose > 0 && r.totalIngresos > 0 && (
+        <Alert>
+          <AlertTitle>El corte por servicio no cubre todo el año</AlertTitle>
+          <AlertDescription>
+            {formatearMonto(r.ingresoNeto.sinDesglose)} de{' '}
+            {formatearMonto(r.totalIngresos)} entraron sin desglose por servicio
+            {r.ingresoNeto.conDesglose === 0
+              ? '. Todavía no se importó ningún cobro con detalle.'
+              : `, así que "ingreso real" descontó solo lo que pudo mirar.`}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Mes a mes</CardTitle>
@@ -224,6 +268,7 @@ async function Reporte({ anio }: { anio: number }) {
           <TabsTrigger value="categorias">Por categoría</TabsTrigger>
           <TabsTrigger value="contrapartes">Por contraparte</TabsTrigger>
           <TabsTrigger value="bolsillos">Por bolsillo</TabsTrigger>
+          <TabsTrigger value="servicios">Por servicio</TabsTrigger>
         </TabsList>
 
         <TabsContent value="categorias" className="space-y-2">
@@ -249,6 +294,23 @@ async function Reporte({ anio }: { anio: number }) {
             dos cosas.
           </p>
           <TablaAgrupada filas={r.porBolsillo} encabezado="Bolsillo" />
+        </TabsContent>
+
+        <TabsContent value="servicios" className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Por qué entró la plata. Es el desglose de cada cobro en los
+            servicios que lo componen: una factura de 729.000 puede ser 150.000
+            de administración y 579.000 de recaudo para terceros. Los marcados{' '}
+            <strong>En tránsito</strong> no son ingreso de Admon.
+          </p>
+          {r.porServicio.length === 0 ? (
+            <div className="rounded-md border p-12 text-center text-muted-foreground">
+              Todavía no hay cobros con desglose por servicio. Importalos desde
+              Cobros, o cargá un ingreso manual eligiendo el servicio.
+            </div>
+          ) : (
+            <TablaAgrupada filas={r.porServicio} encabezado="Servicio" mostrarGrupo />
+          )}
         </TabsContent>
       </Tabs>
     </div>

@@ -395,3 +395,74 @@ export function repartirEntreServicios(
   // significa nada y es más honesto no devolver ninguno.
   return partes[0]!.monto > 0 ? partes : []
 }
+
+
+// ---------------------------------------------------------------------------
+// Cuánto de lo que entró es ingreso de verdad
+// ---------------------------------------------------------------------------
+//
+// No todo lo que entra se gana. En las facturas de venta viaja el "Recaudo
+// para Terceros": plata que entra y vuelve a salir, y que en las 25 facturas
+// más recientes de la cuenta va SIEMPRE junto a `Administracion`. De una
+// factura de 729.000, solo 150.000 son de Admon.
+//
+// EL SALDO DEL BOLSILLO NO CAMBIA. Los 729.000 entraron al banco de verdad y
+// la caja tiene que seguir cuadrando contra el extracto. Lo que se corrige es
+// la MÉTRICA DE INGRESO, que es otra cosa.
+//
+// La cobertura se informa junto al número a propósito. El desglose por
+// servicio existe solo desde que se importa con él, y los movimientos viejos
+// no lo tienen: sin decir cuánto quedó afuera, "ingresos netos" parecería
+// exacto cuando en realidad solo descontó la parte que pudo mirar.
+
+export interface DetalleParaReporte {
+  /** Tipo del MOVIMIENTO al que pertenece el detalle, no del detalle. */
+  tipo: TipoMovimiento
+  monto: number
+  /** El servicio está marcado como plata en tránsito. */
+  enTransito: boolean
+}
+
+export interface IngresoPorServicio {
+  /** Ingresos que sí tienen desglose por servicio. */
+  conDesglose: number
+  /** Ingresos de los que no se sabe por qué servicio entraron. */
+  sinDesglose: number
+  /** Parte de los ingresos que es plata en tránsito: entra y vuelve a salir. */
+  enTransito: number
+  /** Lo que efectivamente se ganó: ingresos menos la plata en tránsito. */
+  netos: number
+}
+
+/**
+ * Separa, dentro de los ingresos, lo ganado de lo que solo pasó.
+ *
+ * Solo mira los detalles de movimientos de INGRESO. Los de EGRESO existen
+ * —una anulación espeja el desglose del original— pero NO se restan acá, y es
+ * deliberado: `totalIngresos` tampoco descuenta las anulaciones. Restarlas en
+ * un solo número lo dejaría fuera de escala con el resto del reporte, donde
+ * una anulación aparece del lado del egreso. Es la misma regla que ya rige
+ * para el corte por categoría.
+ */
+export function ingresoPorServicio(
+  totalIngresos: number,
+  detalles: DetalleParaReporte[]
+): IngresoPorServicio {
+  const deIngresos = detalles.filter((d) => d.tipo === TipoMovimiento.INGRESO)
+
+  const conDesglose = sumarMontos(deIngresos.map((d) => d.monto))
+  const enTransito = sumarMontos(
+    deIngresos.filter((d) => d.enTransito).map((d) => d.monto)
+  )
+
+  return {
+    conDesglose,
+    // Nunca negativo: el desglose de un movimiento suma su monto exacto, así
+    // que no puede haber más desglose que ingresos. Se acota igual por si un
+    // dato viejo o importado a mano se sale de esa garantía — un número
+    // negativo acá se leería como un error del libro, no del dato.
+    sinDesglose: Math.max(0, redondearMonto(totalIngresos - conDesglose)),
+    enTransito,
+    netos: redondearMonto(totalIngresos - enTransito),
+  }
+}

@@ -78,9 +78,11 @@ import {
   margenServicio,
   estadoServicio,
   contraMovimiento,
+  ingresoPorServicio,
   repartirEntreServicios,
   sumarMontos,
   type LineaDeDocumento,
+  type DetalleParaReporte,
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
 import {
@@ -1528,6 +1530,11 @@ export const getResumenPeriodo = cache(
           monto: true,
           bolsilloId: true,
           bolsilloDestinoId: true,
+          // Para separar lo ganado de lo que solo pasó. NO entra en el cálculo
+          // del saldo: la plata en tránsito entró al bolsillo de verdad.
+          detalleServicios: {
+            select: { monto: true, servicio: { select: { enTransito: true } } },
+          },
         },
       }),
       prisma.cierreMensual.findMany({
@@ -1629,17 +1636,28 @@ export const getResumenPeriodo = cache(
       }
     })
 
+    const totalIngresos = sumarMontos(
+      movs.filter((m) => m.tipo === TipoMovimiento.INGRESO).map((m) => m.monto)
+    )
+
+    const detallesDelPeriodo: DetalleParaReporte[] = movimientos.flatMap((m) =>
+      m.detalleServicios.map((d) => ({
+        tipo: m.tipo,
+        monto: decimalANumero(d.monto),
+        enTransito: d.servicio.enTransito,
+      }))
+    )
+
     return {
       success: true,
       data: {
         periodo,
         cierres: vistas,
-        totalIngresos: sumarMontos(
-          movs.filter((m) => m.tipo === TipoMovimiento.INGRESO).map((m) => m.monto)
-        ),
+        totalIngresos,
         totalEgresos: sumarMontos(
           movs.filter((m) => m.tipo === TipoMovimiento.EGRESO).map((m) => m.monto)
         ),
+        ingresoNeto: ingresoPorServicio(totalIngresos, detallesDelPeriodo),
         saldoConsolidado: sumarMontos(vistas.map((v) => v.saldoFinalCalculado)),
         tieneDescuadres: vistas.some(
           (v) => v.diferencia !== null && v.diferencia !== 0 && !v.justificacion
@@ -1884,6 +1902,17 @@ export const getReporteAnual = cache(
           bolsillo: { select: { id: true, nombre: true } },
           categoria: { select: { id: true, nombre: true, grupo: true } },
           contraparte: { select: { id: true, nombre: true } },
+          // Por qué entró la plata. Solo lo tienen los movimientos importados
+          // (o cargados) con desglose; el resto queda fuera de este corte y se
+          // informa en `ingresoNeto.sinDesglose`.
+          detalleServicios: {
+            select: {
+              monto: true,
+              servicio: {
+                select: { id: true, nombre: true, referencia: true, enTransito: true },
+              },
+            },
+          },
         },
       }),
       prisma.movimiento.findMany({
@@ -1912,7 +1941,9 @@ export const getReporteAnual = cache(
     const porCategoria = new Map<string, Acumulador>()
     const porContraparte = new Map<string, Acumulador>()
     const porBolsillo = new Map<string, Acumulador>()
+    const porServicio = new Map<string, Acumulador>()
     const porMes = new Map<string, Acumulador>()
+    const detalles: DetalleParaReporte[] = []
 
     function acumular(
       mapa: Map<string, Acumulador>,
@@ -1944,6 +1975,23 @@ export const getReporteAnual = cache(
       )
       if (m.contraparte) {
         acumular(porContraparte, m.contraparte.id, m.contraparte.nombre, m.tipo, monto)
+      }
+
+      for (const d of m.detalleServicios) {
+        const parte = decimalANumero(d.monto)
+        acumular(
+          porServicio,
+          d.servicio.id,
+          d.servicio.nombre,
+          m.tipo,
+          parte,
+          d.servicio.enTransito ? 'En tránsito' : (d.servicio.referencia ?? undefined)
+        )
+        detalles.push({
+          tipo: m.tipo,
+          monto: parte,
+          enTransito: d.servicio.enTransito,
+        })
       }
     }
 
@@ -1987,6 +2035,11 @@ export const getReporteAnual = cache(
         porCategoria: aFilas(porCategoria),
         porContraparte: aFilas(porContraparte),
         porBolsillo: aFilas(porBolsillo),
+        porServicio: aFilas(porServicio),
+        ingresoNeto: ingresoPorServicio(
+          sumarMontos(meses.map((m) => m.ingresos)),
+          detalles
+        ),
         totalIngresos: sumarMontos(meses.map((m) => m.ingresos)),
         totalEgresos: sumarMontos(meses.map((m) => m.egresos)),
         cantidadMovimientos: movimientos.length,
@@ -2010,8 +2063,12 @@ export const getReporteAnual = cache(
  * cada servicio.
  *
  * OJO: esto lee `observations` / `anotation`, que son los campos que trae la
- * LISTA. Si el servicio viniera en los ítems del documento, habría que pedir
- * el detalle de cada uno — un request por factura— y eso todavía no se hace.
+ * LISTA, y casi siempre vienen vacíos — de 45 cotizaciones de agosto-2026,
+ * solo 2 tenían `observations`. Sirve como texto para el concepto del
+ * movimiento, nada más.
+ *
+ * El servicio DE VERDAD no está acá: está en los `items` del detalle, y es lo
+ * que lee `desgloseDeDocumento`. Este texto no reemplaza a aquel dato.
  */
 function descripcionDelDocumento(doc: {
   observations?: string | null

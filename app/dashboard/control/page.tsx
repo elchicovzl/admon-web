@@ -56,16 +56,35 @@ async function Kpis({ periodo }: { periodo: string }) {
     )
   }
 
-  const { totalIngresos, totalEgresos, saldoConsolidado, tieneDescuadres, cierres } =
-    resultado.data
+  const {
+    totalIngresos,
+    totalEgresos,
+    saldoConsolidado,
+    tieneDescuadres,
+    cierres,
+    ingresoNeto,
+  } = resultado.data
 
   const tarjetas = [
-    {
-      titulo: 'Ingresos del mes',
-      valor: formatearMonto(totalIngresos),
-      icono: TrendingUp,
-      nota: 'Todo lo que entró, sin traslados',
-    },
+    // Cuando hay plata en tránsito, la tarjeta muestra lo GANADO y no lo que
+    // entró: de una factura de 729.000 solo 150.000 son de Admon, y un
+    // "ingresos del mes" que muestre los 729.000 hace tomar decisiones sobre
+    // plata ajena. El bruto queda en la nota, no se esconde.
+    ingresoNeto.enTransito > 0
+      ? {
+          titulo: 'Ingreso real del mes',
+          valor: formatearMonto(ingresoNeto.netos),
+          icono: TrendingUp,
+          nota: `Entraron ${formatearMonto(totalIngresos)}; ${formatearMonto(
+            ingresoNeto.enTransito
+          )} son plata en tránsito`,
+        }
+      : {
+          titulo: 'Ingresos del mes',
+          valor: formatearMonto(totalIngresos),
+          icono: TrendingUp,
+          nota: 'Todo lo que entró, sin traslados',
+        },
     {
       titulo: 'Egresos del mes',
       valor: formatearMonto(totalEgresos),

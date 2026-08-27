@@ -216,11 +216,30 @@ export interface CierreMensualView {
 }
 
 /** Resumen de un periodo completo, para la pantalla de cierre. */
+/**
+ * Cuánto de lo que entró es ingreso de verdad.
+ *
+ * No todo lo que entra se gana: en las facturas de venta viaja el "Recaudo
+ * para Terceros", que entra y vuelve a salir. Va junto a la cobertura porque
+ * el desglose por servicio existe solo desde que se importa con él: sin decir
+ * cuánto quedó afuera, el neto parecería exacto.
+ *
+ * OJO: esto NO afecta el saldo de los bolsillos. La plata entró de verdad y la
+ * caja tiene que seguir cuadrando contra el extracto.
+ */
+export interface IngresoNeto {
+  conDesglose: number
+  sinDesglose: number
+  enTransito: number
+  netos: number
+}
+
 export interface ResumenPeriodo {
   periodo: string
   cierres: CierreMensualView[]
   totalIngresos: number
   totalEgresos: number
+  ingresoNeto: IngresoNeto
   /** Suma de los saldos finales de todos los bolsillos. */
   saldoConsolidado: number
   /** True si algún bolsillo tiene diferencia sin justificar. */
@@ -264,6 +283,14 @@ export interface ReporteAnual {
   porCategoria: FilaAgrupada[]
   porContraparte: FilaAgrupada[]
   porBolsillo: FilaAgrupada[]
+  /**
+   * Corte por servicio de Alegra: por qué entró la plata.
+   *
+   * Es el único corte que NO cubre todo el libro — solo los movimientos que
+   * tienen desglose. `ingresoNeto.sinDesglose` dice cuánto queda afuera.
+   */
+  porServicio: FilaAgrupada[]
+  ingresoNeto: IngresoNeto
   totalIngresos: number
   totalEgresos: number
   cantidadMovimientos: number

@@ -28,6 +28,7 @@ import {
   type MovimientoParaSaldo,
   type MovimientoDePrestamo,
   repartirEntreServicios,
+  ingresoPorServicio,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -550,5 +551,67 @@ describe('repartirEntreServicios', () => {
     )
 
     expect(partes).toEqual([{ itemId: 'a', monto: 100 }])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('ingresoPorServicio', () => {
+  const ing = (monto: number, enTransito = false) => ({
+    tipo: TipoMovimiento.INGRESO,
+    monto,
+    enTransito,
+  })
+
+  it('descuenta la plata en tránsito de los ingresos', () => {
+    // Factura de 729.000: 150.000 de Administracion, 579.000 de recaudo.
+    const r = ingresoPorServicio(729_000, [ing(150_000), ing(579_000, true)])
+
+    expect(r.enTransito).toBe(579_000)
+    expect(r.netos).toBe(150_000)
+  })
+
+  it('informa cuánto de los ingresos NO tiene desglose', () => {
+    // Sin este número, "ingresos netos" parecería exacto cuando en realidad
+    // solo descontó la parte que pudo mirar.
+    const r = ingresoPorServicio(1_000_000, [ing(150_000), ing(579_000, true)])
+
+    expect(r.conDesglose).toBe(729_000)
+    expect(r.sinDesglose).toBe(271_000)
+  })
+
+  it('sin desglose no descuenta nada: los ingresos quedan enteros', () => {
+    const r = ingresoPorServicio(500_000, [])
+
+    expect(r.conDesglose).toBe(0)
+    expect(r.sinDesglose).toBe(500_000)
+    expect(r.enTransito).toBe(0)
+    expect(r.netos).toBe(500_000)
+  })
+
+  it('no resta los detalles de EGRESO', () => {
+    // Una anulación espeja el desglose del original, pero `totalIngresos`
+    // tampoco descuenta anulaciones: restarlas acá dejaría este número fuera
+    // de escala con el resto del reporte.
+    const r = ingresoPorServicio(729_000, [
+      ing(579_000, true),
+      { tipo: TipoMovimiento.EGRESO, monto: 579_000, enTransito: true },
+    ])
+
+    expect(r.enTransito).toBe(579_000)
+  })
+
+  it('nunca devuelve un sinDesglose negativo', () => {
+    // Un número negativo acá se leería como un error del libro, no del dato.
+    const r = ingresoPorServicio(100_000, [ing(150_000)])
+
+    expect(r.sinDesglose).toBe(0)
+  })
+
+  it('todo en tránsito deja los ingresos netos en cero', () => {
+    const r = ingresoPorServicio(579_000, [ing(579_000, true)])
+
+    expect(r.netos).toBe(0)
   })
 })
