@@ -483,6 +483,21 @@ export interface PagoParaEgreso {
    * compra suele ser un gasto, y uno suelto puede ser un traslado.
    */
   aplicadoA: string | null
+  /**
+   * El concepto contable de Alegra: "Aportes a EPS", "Otros honorarios",
+   * "Ingresos recibidos para terceros". Es lo que dice POR QUÉ se pagó.
+   *
+   * Sale del pago cuando no se aplicó a una factura de compra, y de la factura
+   * cuando sí. Medido sobre 150 pagos reales, uno de los dos lo tiene siempre.
+   */
+  conceptos: string[]
+  /**
+   * Categoría del libro deducida del concepto, si ya se mapeó antes.
+   *
+   * Es lo que hace viable clasificar 244 pagos: se decide UNA vez por concepto
+   * y el resto sale solo.
+   */
+  categoriaSugeridaId: string | null
   yaRegistrado: boolean
   movimientoId: string | null
 }

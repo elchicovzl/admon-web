@@ -47,7 +47,17 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
    * traslados y retiros; meterlos a todos en una sola categoría dejaría el
    * reporte por categoría sin significado.
    */
-  const [categoriaPorPago, setCategoriaPorPago] = useState<Record<string, string>>({})
+  const [categoriaPorPago, setCategoriaPorPago] = useState<Record<string, string>>(
+    // Arranca con lo que el concepto de Alegra ya permite deducir. Es lo que
+    // hace viable clasificar 244 pagos: se decide una vez por concepto y de
+    // ahí en más viene resuelto.
+    () =>
+      Object.fromEntries(
+        pendientes
+          .filter((p) => p.categoriaSugeridaId)
+          .map((p) => [p.paymentId, p.categoriaSugeridaId!])
+      )
+  )
   /** Se aplica a los que todavía no tienen una elegida, no pisa lo ya decidido. */
   const [categoriaMasiva, setCategoriaMasiva] = useState('')
 
@@ -219,6 +229,7 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
               <TableHead className="w-[110px]">Fecha</TableHead>
               <TableHead className="w-[80px]">Nº</TableHead>
               <TableHead>Beneficiario</TableHead>
+              <TableHead>Concepto en Alegra</TableHead>
               <TableHead className="w-72">Categoría</TableHead>
               <TableHead className="text-right">Monto</TableHead>
             </TableRow>
@@ -247,12 +258,33 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
                 </TableCell>
                 <TableCell>
                   <div className="font-medium">{p.beneficiario}</div>
-                  {/* A qué documento se aplicó: es la pista para clasificarlo.
-                      Un pago aplicado a una factura de compra suele ser un
-                      gasto; uno suelto puede ser un traslado. */}
-                  {(p.aplicadoA || p.cuenta) && (
-                    <div className="text-xs text-muted-foreground">
-                      {[p.aplicadoA, p.cuenta].filter(Boolean).join(' · ')}
+                  {p.cuenta && (
+                    <div className="text-xs text-muted-foreground">{p.cuenta}</div>
+                  )}
+                </TableCell>
+
+                {/* Por qué se pagó, según Alegra. Es de donde sale la
+                    categoría del libro. */}
+                <TableCell className="text-sm">
+                  {p.conceptos.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {p.conceptos.map((c) => (
+                        <Badge key={c} variant="outline" className="font-normal">
+                          {c}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span
+                      className="text-muted-foreground"
+                      title="El pago salda una factura de compra de otro mes: su concepto no vino en esta consulta."
+                    >
+                      Sin concepto
+                    </span>
+                  )}
+                  {p.aplicadoA && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {p.aplicadoA}
                     </div>
                   )}
                 </TableCell>

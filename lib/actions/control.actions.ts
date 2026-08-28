@@ -39,6 +39,7 @@ import {
   getCachedInvoice,
   getCachedInvoices,
   getCachedItems,
+  getCachedBillsInRange,
   getCachedPaymentsInRange,
 } from '@/lib/alegra/cache'
 import {
@@ -2757,11 +2758,46 @@ export const getPagosDelPeriodo = cache(
     }
 
     const ids = alegra.items.map((p) => String(p.id))
-    const yaRegistrados = await prisma.movimiento.findMany({
-      where: { alegraPaymentId: { in: ids } },
-      select: { id: true, alegraPaymentId: true },
-    })
+
+    /**
+     * El concepto de los pagos aplicados a una factura vive en la factura, no
+     * en el pago. Se resuelve con UNA lista del mes en vez de pedir el detalle
+     * de cada factura: /bills ya devuelve `purchases.categories` en la lista.
+     *
+     * Un pago puede saldar una factura de un mes anterior, así que esto no
+     * cubre el 100%. Lo que no se encuentre queda sin concepto sugerido y se
+     * clasifica a mano — que es mejor que sugerir la categoría equivocada.
+     */
+    let conceptoPorFactura = new Map<string, string>()
+    try {
+      const facturas = await getCachedBillsInRange({ dateFrom: desde, dateTo: hasta })
+      conceptoPorFactura = new Map(
+        facturas.items.flatMap((b) => {
+          const compras = (b as { purchases?: { categories?: Array<{ name?: string }>; items?: Array<{ name?: string }> } }).purchases
+          const nombre = (compras?.categories ?? compras?.items ?? [])
+            .map((c) => c?.name)
+            .find((n): n is string => typeof n === 'string' && n.trim().length > 0)
+          return nombre ? [[String(b.id), nombre] as const] : []
+        })
+      )
+    } catch (error) {
+      // Sin las facturas se pierde la sugerencia, no el pago. Se sigue.
+      console.warn('[control] no se pudieron leer las facturas de compra:', error)
+    }
+
+    const [yaRegistrados, conceptosMapeados] = await Promise.all([
+      prisma.movimiento.findMany({
+        where: { alegraPaymentId: { in: ids } },
+        select: { id: true, alegraPaymentId: true },
+      }),
+      prisma.conceptoPagoAlegra.findMany({
+        select: { nombre: true, categoriaId: true },
+      }),
+    ])
     const porPago = new Map(yaRegistrados.map((m) => [m.alegraPaymentId!, m.id]))
+    const categoriaPorConcepto = new Map(
+      conceptosMapeados.map((c) => [c.nombre, c.categoriaId])
+    )
 
     const pagos: PagoParaEgreso[] = alegra.items.map((p) => {
       const paymentId = String(p.id)
@@ -2770,8 +2806,23 @@ export const getPagosDelPeriodo = cache(
       // describe la documentación. Se muestra tal cual: sirve para reconocer
       // el pago al clasificarlo, no para calcular nada.
       const aplicado = (p as { associations?: unknown }).associations
+
+      // El concepto sale del pago si no se aplicó a una factura, y de la
+      // factura si sí. Medido sobre 150 pagos reales, uno de los dos lo tiene
+      // siempre — nunca los dos, nunca ninguno.
+      const delPago = (p.categories ?? [])
+        .map((c) => c?.name)
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+      const deFacturas = (p.bills ?? [])
+        .map((b) => conceptoPorFactura.get(String(b.id)))
+        .filter((n): n is string => Boolean(n))
+      const conceptos = [...new Set([...delPago, ...deFacturas])]
+
       return {
         paymentId,
+        conceptos,
+        categoriaSugeridaId:
+          conceptos.map((c) => categoriaPorConcepto.get(c)).find(Boolean) ?? null,
         numero: p.number === null || p.number === undefined ? paymentId : String(p.number),
         fecha: p.date,
         beneficiario: p.client?.name ?? 'Sin beneficiario',
@@ -2852,6 +2903,26 @@ export async function importarPagosComoEgresos(input: {
 
     if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
 
+    const categoriaId = categoriaPorPago.get(p.paymentId)!
+
+    /**
+     * La equivalencia concepto → categoría se APRENDE de lo que decide el
+     * operador. Clasificar 244 pagos a mano es un trabajo que nadie hace dos
+     * veces; con esto se decide una vez por concepto y el mes siguiente sale
+     * solo.
+     *
+     * `create` y no `upsert` a propósito: si la equivalencia ya existe, la
+     * decisión vieja manda. Un pago clasificado distinto por excepción no
+     * debería reescribir la regla para todos los demás.
+     */
+    for (const concepto of p.conceptos) {
+      try {
+        await prisma.conceptoPagoAlegra.create({ data: { nombre: concepto, categoriaId } })
+      } catch {
+        // Ya existía. Es el caso normal a partir del segundo pago.
+      }
+    }
+
     try {
       await prisma.movimiento.create({
         data: {
@@ -2861,8 +2932,9 @@ export async function importarPagosComoEgresos(input: {
           monto: p.monto,
           concepto: `Pago #${p.numero} — ${p.beneficiario}`.slice(0, 200),
           bolsilloId: bolsillo.id,
-          categoriaId: categoriaPorPago.get(p.paymentId)!,
+          categoriaId,
           notas: [
+            p.conceptos.length > 0 ? `Concepto en Alegra: ${p.conceptos.join(', ')}.` : null,
             p.cuenta ? `Cuenta en Alegra: ${p.cuenta}.` : null,
             p.metodo ? `Método: ${p.metodo}.` : null,
             p.aplicadoA ? `Aplicado a ${p.aplicadoA}.` : null,

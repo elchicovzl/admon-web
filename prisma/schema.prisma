@@ -1120,6 +1120,7 @@ model CategoriaMovimiento {
   tiposServicio  TipoServicioReferenciado[]
   // Servicios de Alegra cuya plata en tránsito sale por esta categoría.
   serviciosEnTransito ServicioAlegra[] @relation("ServicioAlegraEgreso")
+  conceptosPago       ConceptoPagoAlegra[]
 
   @@map("categorias_movimiento")
   @@index([grupo, isActive])
@@ -1323,6 +1324,40 @@ model Movimiento {
   @@index([contraparteId, fecha])
   @@index([categoriaId])
   @@index([prestamoId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ConceptoPagoAlegra — traduce el concepto contable de Alegra a una categoría.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Un pago de Alegra dice POR QUÉ se pagó: "Aportes a EPS", "Otros honorarios",
+// "Ingresos recibidos para terceros". Medido sobre 150 pagos de salida reales,
+// el concepto está SIEMPRE: 61 lo traen en `payment.categories` y los otros 89
+// en la factura de compra a la que se aplicaron (`bill.purchases.categories`).
+// Ninguno se quedó sin concepto.
+//
+// Esta tabla guarda la equivalencia con las categorías del libro. Sin ella,
+// clasificar 244 pagos a mano es un trabajo que nadie va a hacer dos veces
+// —y un reporte por categoría que nadie mantiene deja de servir—. Con ella,
+// se clasifica UNA vez por concepto y el resto sale solo.
+//
+// El vínculo se aprende solo: cuando alguien importa un pago eligiendo una
+// categoría, la equivalencia queda guardada para la próxima.
+model ConceptoPagoAlegra {
+  id String @id @default(cuid())
+
+  // El nombre tal como lo devuelve Alegra. Es la clave natural: no hay un id
+  // estable de concepto que venga en los dos lados (pago y factura).
+  nombre String @unique
+
+  categoriaId String
+  categoria   CategoriaMovimiento @relation(fields: [categoriaId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("conceptos_pago_alegra")
+  @@index([categoriaId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

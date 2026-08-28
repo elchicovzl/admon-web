@@ -29,6 +29,7 @@ const {
   facturasMock,
   itemsMock,
   pagosMock,
+  billsMock,
   estimateDetalleMock,
   invoiceDetalleMock,
 } = vi.hoisted(() => ({
@@ -40,6 +41,7 @@ const {
     bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
     servicioReferenciado: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    conceptoPagoAlegra: { findMany: vi.fn(), create: vi.fn() },
     servicioAlegra: {
       findMany: vi.fn(),
       create: vi.fn(),
@@ -54,6 +56,7 @@ const {
   facturasMock: vi.fn(),
   itemsMock: vi.fn(),
   pagosMock: vi.fn(),
+  billsMock: vi.fn(),
   estimateDetalleMock: vi.fn(),
   invoiceDetalleMock: vi.fn(),
 }))
@@ -73,6 +76,7 @@ vi.mock('@/lib/alegra/cache', () => ({
   getCachedInvoices: facturasMock,
   getCachedItems: itemsMock,
   getCachedPaymentsInRange: pagosMock,
+  getCachedBillsInRange: billsMock,
   ALEGRA_TTL: { company: 3600, kpis: 300, list: 30, detail: 30 },
   getCachedEstimate: estimateDetalleMock,
   getCachedInvoice: invoiceDetalleMock,
@@ -147,6 +151,9 @@ beforeEach(() => {
   // Catálogo de Alegra vacío por defecto: los tests que necesitan desglose lo
   // llenan en su propio beforeEach.
   prismaMock.servicioAlegra.findMany.mockResolvedValue([])
+  prismaMock.conceptoPagoAlegra.findMany.mockResolvedValue([])
+  prismaMock.conceptoPagoAlegra.create.mockResolvedValue({})
+  billsMock.mockResolvedValue({ items: [], truncated: false })
 })
 
 // ---------------------------------------------------------------------------
@@ -2295,5 +2302,152 @@ describe('pagos de Alegra como egresos', () => {
 
     expect((await getPagosDelPeriodo('2026-08')).success).toBe(false)
     expect(pagosMock).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('el concepto del pago decide la categoría', () => {
+  const PAGO_CON_CONCEPTO = {
+    id: '3578',
+    date: '2026-08-15',
+    number: 713,
+    amount: 32_400,
+    type: 'out',
+    bankAccount: { id: '3', name: 'Banco 1' },
+    client: { id: '34', name: 'SIMPLE S.A.' },
+    categories: [{ id: '5236', name: 'Otros gastos generales' }],
+  }
+
+  const PAGO_CON_FACTURA = {
+    id: '3579',
+    date: '2026-08-15',
+    number: 714,
+    amount: 902_400,
+    type: 'out',
+    bankAccount: { id: '3', name: 'Banco 1' },
+    client: { id: '1170', name: 'NIDIA IVONE RENDON MUÑETON' },
+    bills: [{ id: '275', number: '188' }],
+  }
+
+  beforeEach(() => {
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.bolsillo.findUnique.mockResolvedValue({ id: IVONE, nombre: 'IVONE' })
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+    pagosMock.mockResolvedValue({ items: [], truncated: false })
+  })
+
+  it('lee el concepto del propio pago cuando no tiene factura', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_CONCEPTO], truncated: false })
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.pagos[0]!.conceptos).toEqual(['Otros gastos generales'])
+  })
+
+  it('lo lee de la FACTURA cuando el pago se aplicó a una', async () => {
+    // 89 de cada 150 pagos son así: el concepto no está en el pago, está en la
+    // factura de compra. Y /bills ya lo devuelve en la lista.
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_FACTURA], truncated: false })
+    billsMock.mockResolvedValue({
+      items: [{ id: '275', purchases: { categories: [{ name: 'Otros honorarios' }] } }],
+      truncated: false,
+    })
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.pagos[0]!.conceptos).toEqual(['Otros honorarios'])
+  })
+
+  it('acepta la forma `purchases.items` además de `purchases.categories`', async () => {
+    // Algunas cuentas anidan la compra de una forma y otras de la otra.
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_FACTURA], truncated: false })
+    billsMock.mockResolvedValue({
+      items: [{ id: '275', purchases: { items: [{ name: 'Dotación a trabajadores' }] } }],
+      truncated: false,
+    })
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.pagos[0]!.conceptos).toEqual(['Dotación a trabajadores'])
+  })
+
+  it('sugiere la categoría que ya se mapeó para ese concepto', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_CONCEPTO], truncated: false })
+    prismaMock.conceptoPagoAlegra.findMany.mockResolvedValue([
+      { nombre: 'Otros gastos generales', categoriaId: CATEGORIA },
+    ])
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.pagos[0]!.categoriaSugeridaId).toBe(CATEGORIA)
+  })
+
+  it('sin mapeo previo no sugiere nada', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_CONCEPTO], truncated: false })
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.pagos[0]!.categoriaSugeridaId).toBeNull()
+  })
+
+  it('si no se pueden leer las facturas, el pago igual aparece', async () => {
+    // Sin las facturas se pierde la sugerencia, no el pago.
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_FACTURA], truncated: false })
+    billsMock.mockRejectedValue(new Error('502'))
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.success).toBe(true)
+    expect(res.data!.pagos).toHaveLength(1)
+    expect(res.data!.pagos[0]!.conceptos).toEqual([])
+  })
+
+  it('al importar APRENDE la equivalencia concepto → categoría', async () => {
+    // Es lo que hace viable clasificar 244 pagos: se decide una vez por
+    // concepto y el mes siguiente sale solo.
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_CONCEPTO], truncated: false })
+
+    await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3578', categoriaId: CATEGORIA }],
+    })
+
+    expect(prismaMock.conceptoPagoAlegra.create).toHaveBeenCalledWith({
+      data: { nombre: 'Otros gastos generales', categoriaId: CATEGORIA },
+    })
+  })
+
+  it('una equivalencia ya existente no rompe la importación', async () => {
+    // A partir del segundo pago del mismo concepto el índice único rebota.
+    // Es lo normal, no un error: la decisión vieja manda.
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_CONCEPTO], truncated: false })
+    prismaMock.conceptoPagoAlegra.create.mockRejectedValue(new Error('unique'))
+
+    const res = await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3578', categoriaId: CATEGORIA }],
+    })
+
+    expect(res.success).toBe(true)
+    expect(res.data!.creados).toBe(1)
+  })
+
+  it('deja el concepto escrito en las notas del movimiento', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO_CON_CONCEPTO], truncated: false })
+
+    await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3578', categoriaId: CATEGORIA }],
+    })
+
+    const [args] = prismaMock.movimiento.create.mock.calls[0] as [
+      { data: { notas: string } },
+    ]
+    expect(args.data.notas).toContain('Otros gastos generales')
   })
 })
