@@ -12,6 +12,7 @@ import type {
 import { ETIQUETA_GRUPO } from './etiquetas'
 
 import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 
@@ -49,8 +50,12 @@ export function MovimientosFiltros({ bolsillos, categorias, contrapartes }: Prop
   const bolsilloId = searchParams.get('bolsillo')
   const categoriaId = searchParams.get('categoria')
   const contraparteId = searchParams.get('contraparte')
+  // No tiene selector: se llega desde la pantalla de préstamos. Pero tiene que
+  // ser visible y quitable, o el usuario queda mirando una lista filtrada sin
+  // entender por qué le faltan movimientos.
+  const prestamoId = searchParams.get('prestamo')
   const hayFiltros = Boolean(
-    bolsilloId || categoriaId || contraparteId || searchParams.get('buscar')
+    bolsilloId || categoriaId || contraparteId || prestamoId || searchParams.get('buscar')
   )
 
   return (
@@ -118,13 +123,33 @@ export function MovimientosFiltros({ bolsillos, categorias, contrapartes }: Prop
         />
       </div>
 
+      {prestamoId && (
+        <Badge variant="secondary" className="gap-1">
+          Movimientos de un préstamo
+          <button
+            type="button"
+            aria-label="Quitar el filtro de préstamo"
+            onClick={() => aplicar({ prestamo: null })}
+            className="hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </Badge>
+      )}
+
       {hayFiltros && (
         <Button
           variant="ghost"
           size="sm"
           onClick={() => {
             setTexto('')
-            aplicar({ buscar: null, bolsillo: null, categoria: null, contraparte: null })
+            aplicar({
+              buscar: null,
+              bolsillo: null,
+              categoria: null,
+              contraparte: null,
+              prestamo: null,
+            })
           }}
         >
           <X className="mr-1 h-3.5 w-3.5" />

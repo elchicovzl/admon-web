@@ -32,6 +32,7 @@ interface PageProps {
     bolsillo?: string
     categoria?: string
     contraparte?: string
+    prestamo?: string
     buscar?: string
     pagina?: string
     tam?: string
@@ -43,6 +44,7 @@ async function Listado({
   bolsillo,
   categoria,
   contraparte,
+  prestamo,
   buscar,
   pagina,
   tam,
@@ -51,15 +53,22 @@ async function Listado({
   bolsillo?: string
   categoria?: string
   contraparte?: string
+  prestamo?: string
   buscar?: string
   pagina: number
   tam: number
 }) {
   const resultado = await getMovimientos({
-    periodo,
+    /**
+     * Un préstamo se desembolsa un mes y se abona en otros. Cruzarlo con el
+     * periodo mostraría un abono suelto y escondería el desembolso, que es
+     * justo lo que se quiere ver al auditar un saldo.
+     */
+    periodo: prestamo ? undefined : periodo,
     bolsilloId: bolsillo,
     categoriaId: categoria,
     contraparteId: contraparte,
+    prestamoId: prestamo,
     buscar,
     page: pagina,
     pageSize: tam,
@@ -141,7 +150,13 @@ export default async function MovimientosPage({ searchParams }: PageProps) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Movimientos</h1>
-          <p className="text-muted-foreground">{formatearPeriodo(periodo)}</p>
+          {/* Filtrando por préstamo se muestran todos los periodos: decirlo
+              evita que el número se lea como si fuera solo del mes. */}
+          <p className="text-muted-foreground">
+            {sp.prestamo
+              ? 'Un préstamo · todos los periodos'
+              : formatearPeriodo(periodo)}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} />
@@ -156,7 +171,7 @@ export default async function MovimientosPage({ searchParams }: PageProps) {
       </Suspense>
 
       <Suspense
-        key={`${periodo}-${sp.bolsillo}-${sp.categoria}-${sp.contraparte}-${sp.buscar}-${pagina}-${tam}`}
+        key={`${periodo}-${sp.bolsillo}-${sp.categoria}-${sp.contraparte}-${sp.prestamo}-${sp.buscar}-${pagina}-${tam}`}
         fallback={<ControlTableSkeleton filas={10} columnas={7} />}
       >
         <Listado
@@ -164,6 +179,7 @@ export default async function MovimientosPage({ searchParams }: PageProps) {
           bolsillo={sp.bolsillo}
           categoria={sp.categoria}
           contraparte={sp.contraparte}
+          prestamo={sp.prestamo}
           buscar={sp.buscar}
           pagina={pagina}
           tam={tam}

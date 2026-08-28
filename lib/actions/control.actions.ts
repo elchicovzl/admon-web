@@ -203,6 +203,16 @@ const movimientoSelect = {
   monto: true,
   concepto: true,
   prestamoId: true,
+  // Con solo el id, la fila sabe que hay un préstamo pero no cuál. Si a la
+  // misma persona se le prestó dos veces, un abono no se puede rastrear.
+  prestamo: {
+    select: {
+      id: true,
+      concepto: true,
+      fechaDesembolso: true,
+      contraparte: { select: { nombre: true } },
+    },
+  },
   notas: true,
   createdAt: true,
   anulaMovimientoId: true,
@@ -229,6 +239,14 @@ function aMovimientoListItem(row: MovimientoRow): MovimientoListItem {
     categoria: row.categoria,
     contraparte: row.contraparte,
     prestamoId: row.prestamoId,
+    prestamo: row.prestamo
+      ? {
+          id: row.prestamo.id,
+          concepto: row.prestamo.concepto,
+          fechaDesembolso: row.prestamo.fechaDesembolso,
+          contraparte: row.prestamo.contraparte.nombre,
+        }
+      : null,
     notas: row.notas,
     createdAt: row.createdAt,
     createdBy: row.createdBy,
@@ -820,6 +838,13 @@ export const getMovimientos = cache(
     bolsilloId?: string
     categoriaId?: string
     contraparteId?: string
+    /**
+     * Movimientos de UN préstamo: sus desembolsos y sus abonos.
+     *
+     * Es lo que hace auditable el saldo. Sin esto, la pantalla de préstamos
+     * dice "Abonado $400.000 (2)" y no hay forma de ver cuáles dos.
+     */
+    prestamoId?: string
     /** Busca en el concepto y en las notas, sin distinguir mayúsculas. */
     buscar?: string
     page?: number
@@ -836,6 +861,7 @@ export const getMovimientos = cache(
       periodo: filtros?.periodo,
       categoriaId: filtros?.categoriaId,
       contraparteId: filtros?.contraparteId,
+      prestamoId: filtros?.prestamoId,
       // Un traslado toca dos bolsillos, así que filtrar por bolsillo tiene
       // que mirar los dos extremos o el movimiento desaparece de la vista
       // del bolsillo destino.

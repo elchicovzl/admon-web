@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { TipoMovimiento } from '@prisma/client'
 import { toast } from 'sonner'
@@ -158,6 +159,21 @@ export function MovimientosTable({ movimientos }: { movimientos: MovimientoListI
 
                   <TableCell className="text-sm text-muted-foreground">
                     {movimiento.categoria.nombre}
+                    {/* A CUÁL préstamo. Una persona puede tener más de uno
+                        abierto, y "Abono a préstamo" sin decir a cuál no se
+                        puede rastrear. El link filtra la lista por ese
+                        préstamo, en todos los periodos. */}
+                    {movimiento.prestamo && (
+                      <Link
+                        href={`/dashboard/control/movimientos?prestamo=${movimiento.prestamo.id}`}
+                        className="block text-xs hover:underline"
+                        title={`${movimiento.prestamo.contraparte} · ${formatearFecha(
+                          movimiento.prestamo.fechaDesembolso
+                        )}`}
+                      >
+                        {movimiento.prestamo.concepto}
+                      </Link>
+                    )}
                   </TableCell>
 
                   <TableCell className="text-sm">

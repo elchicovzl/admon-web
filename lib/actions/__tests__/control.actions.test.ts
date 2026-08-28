@@ -2010,3 +2010,33 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
     expect(res.data!.saldoConsolidado).toBe(729_000)
   })
 })
+
+
+// ---------------------------------------------------------------------------
+
+describe('getMovimientos — filtro por préstamo', () => {
+  beforeEach(() => {
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.movimiento.count.mockResolvedValue(0)
+    prismaMock.movimiento.aggregate.mockResolvedValue({ _sum: { monto: null } })
+  })
+
+  it('filtra por prestamoId', async () => {
+    await getMovimientos({ prestamoId: 'cpre0000001' })
+
+    expect(prismaMock.movimiento.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ prestamoId: 'cpre0000001' }),
+      })
+    )
+  })
+
+  it('sin préstamo, no ensucia el where', async () => {
+    await getMovimientos({ periodo: '2026-08' })
+
+    const [args] = prismaMock.movimiento.count.mock.calls[0] as [
+      { where: Record<string, unknown> },
+    ]
+    expect(args.where.prestamoId).toBeUndefined()
+  })
+})

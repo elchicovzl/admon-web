@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, MoreHorizontal, HandCoins, Ban } from 'lucide-react'
+import { Loader2, MoreHorizontal, HandCoins, Ban, ListTree } from 'lucide-react'
 
 import { abonarPrestamo, marcarIncobrable } from '@/lib/actions/control.actions'
 import type { PrestamoListItem, BolsilloListItem, EstadoPrestamo } from '@/lib/types/control.types'
@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import Link from 'next/link'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -184,6 +185,18 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {/* Lo que hace auditable el saldo: de "Abonado
+                            $400.000 (2)" se pasa a ver cuáles dos, cuándo y de
+                            qué bolsillo. El saldo se deriva de esos
+                            movimientos, así que tienen que ser alcanzables. */}
+                        <DropdownMenuItem asChild>
+                          <Link
+                            href={`/dashboard/control/movimientos?prestamo=${prestamo.id}`}
+                          >
+                            <ListTree className="mr-2 h-4 w-4" />
+                            Ver sus movimientos
+                          </Link>
+                        </DropdownMenuItem>
                         {prestamo.saldoActual > 0 && (
                           <DropdownMenuItem onClick={() => setAbonando(prestamo)}>
                             <HandCoins className="mr-2 h-4 w-4" />

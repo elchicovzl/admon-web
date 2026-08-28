@@ -140,6 +140,19 @@ export interface MovimientoListItem {
   categoria: { id: string; nombre: string; grupo: GrupoCategoria }
   contraparte: { id: string; nombre: string } | null
   prestamoId: string | null
+  /**
+   * El préstamo al que pertenece, cuando lo hay.
+   *
+   * Va con el concepto y la contraparte y no solo con el id: una persona puede
+   * tener más de un préstamo abierto, y "abono a préstamo" sin decir a cuál no
+   * se puede rastrear.
+   */
+  prestamo: {
+    id: string
+    concepto: string
+    fechaDesembolso: Date
+    contraparte: string
+  } | null
   notas: string | null
   createdAt: Date
   createdBy: { name: string | null; email: string }
