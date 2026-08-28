@@ -2244,16 +2244,75 @@ describe('pagos de Alegra como egresos', () => {
     )
   })
 
-  it('exige categoría en todos los pagos elegidos', async () => {
+  it('la categoría es OPCIONAL: sin elegir una, se deriva del concepto', async () => {
+    // Lo único que hay que decidir para importar es de qué cuenta salió la
+    // plata. Exigir la categoría convertía cada mes en 244 decisiones.
+    pagosMock.mockResolvedValue({
+      items: [{ ...PAGO('3579', 902_400), categories: [{ id: '5', name: 'Aportes a EPS' }] }],
+      truncated: false,
+    })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue(null)
+    prismaMock.categoriaMovimiento.create.mockResolvedValue({ id: 'ccatnueva001' })
+
     const res = await importarPagosComoEgresos({
       periodo: '2026-08',
       bolsilloId: IVONE,
-      pagos: [{ paymentId: '3579', categoriaId: '' }],
+      pagos: [{ paymentId: '3579' }],
     })
 
-    expect(res.success).toBe(false)
-    expect(res.error).toContain('categoría')
-    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+    expect(res.success).toBe(true)
+    expect(prismaMock.categoriaMovimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          nombre: 'Aportes a EPS',
+          grupo: GrupoCategoria.OTRO,
+        }),
+      })
+    )
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ categoriaId: 'ccatnueva001' }),
+      })
+    )
+  })
+
+  it('reusa la categoría si ya existe una con el nombre del concepto', async () => {
+    pagosMock.mockResolvedValue({
+      items: [{ ...PAGO('3579', 902_400), categories: [{ id: '5', name: 'Aportes a EPS' }] }],
+      truncated: false,
+    })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatya000001' })
+
+    await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3579' }],
+    })
+
+    expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ categoriaId: 'ccatya000001' }),
+      })
+    )
+  })
+
+  it('la categoría elegida a mano MANDA sobre el concepto', async () => {
+    pagosMock.mockResolvedValue({
+      items: [{ ...PAGO('3579', 902_400), categories: [{ id: '5', name: 'Aportes a EPS' }] }],
+      truncated: false,
+    })
+
+    await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3579', categoriaId: CATEGORIA }],
+    })
+
+    expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ categoriaId: CATEGORIA }) })
+    )
   })
 
   it('exige bolsillo', async () => {

@@ -2852,6 +2852,60 @@ export const getPagosDelPeriodo = cache(
 )
 
 /**
+ * La categoría de un pago, sin obligar al operador a elegirla.
+ *
+ * En pagos la categoría es OPCIONAL: lo único que hay que decidir es de qué
+ * cuenta salió la plata. Pero en la base todo movimiento lleva categoría
+ * obligatoria —de eso dependen el reporte por categoría, el filtro y el
+ * cálculo por naturaleza—, así que cuando no se elige se deriva del concepto
+ * contable que ya trae Alegra.
+ *
+ * El orden es deliberado:
+ *
+ *   1. Lo que eligió el operador. Siempre manda.
+ *   2. La equivalencia aprendida para ese concepto, si existe.
+ *   3. Una categoría con el NOMBRE del concepto, creándola si hace falta.
+ *      Así "Ingresos recibidos para terceros" queda como categoría propia y
+ *      se puede atar al recaudo en Catálogos, que es lo único que importaba
+ *      distinguir.
+ *   4. Sin concepto —un pago que salda una factura de otro mes—, cae en el
+ *      grupo OTRO para que nada quede sin registrar.
+ *
+ * El grupo de las categorías nuevas es OTRO a propósito: la máquina no puede
+ * saber si "Otros honorarios" es un gasto operativo o una comisión, así que no
+ * lo inventa. El nombre ya lleva el significado; el grupo se corrige a mano.
+ */
+async function categoriaParaPago(
+  elegida: string | undefined,
+  conceptos: string[],
+  aprendidas: Map<string, string>
+): Promise<string | null> {
+  if (elegida) return elegida
+
+  for (const concepto of conceptos) {
+    const aprendida = aprendidas.get(concepto)
+    if (aprendida) return aprendida
+  }
+
+  const concepto = conceptos[0]
+  if (concepto) {
+    const existente = await prisma.categoriaMovimiento.findFirst({
+      where: { nombre: { equals: concepto, mode: 'insensitive' } },
+      select: { id: true },
+    })
+    if (existente) return existente.id
+
+    const creada = await prisma.categoriaMovimiento.create({
+      data: { nombre: concepto.slice(0, 100), grupo: GrupoCategoria.OTRO },
+      select: { id: true },
+    })
+    return creada.id
+  }
+
+  return resolverCategoria(GrupoCategoria.OTRO)
+}
+
+/**
  * Registra pagos de Alegra como egresos del libro.
  *
  * La categoría viene POR PAGO y no una sola para todos: entre esos pagos hay
@@ -2862,8 +2916,11 @@ export const getPagosDelPeriodo = cache(
 export async function importarPagosComoEgresos(input: {
   periodo: string
   bolsilloId: string
-  /** Qué pago va con qué categoría. */
-  pagos: Array<{ paymentId: string; categoriaId: string }>
+  /**
+   * Los pagos a registrar. La categoría es OPCIONAL: si no viene, se deriva
+   * del concepto contable de Alegra.
+   */
+  pagos: Array<{ paymentId: string; categoriaId?: string }>
 }): Promise<ActionResponse<{ creados: number; salteados: number }>> {
   const auth = await requireControlAuth()
   if (!auth.authorized) return sinAutorizacion(auth.error)
@@ -2874,10 +2931,6 @@ export async function importarPagosComoEgresos(input: {
   if (!input.bolsilloId) {
     return { success: false, error: 'Indicá de qué bolsillo sale la plata' }
   }
-  if (input.pagos.some((p) => !p.categoriaId)) {
-    return { success: false, error: 'Todos los pagos elegidos necesitan una categoría' }
-  }
-
   const [bolsillo, resumen] = await Promise.all([
     prisma.bolsillo.findUnique({
       where: { id: input.bolsilloId },
@@ -2892,6 +2945,16 @@ export async function importarPagosComoEgresos(input: {
   }
 
   const categoriaPorPago = new Map(input.pagos.map((p) => [p.paymentId, p.categoriaId]))
+
+  // Las equivalencias ya aprendidas, para no crear una categoría por concepto
+  // que alguien ya clasificó de otra manera.
+  const aprendidas = new Map(
+    (
+      await prisma.conceptoPagoAlegra.findMany({
+        select: { nombre: true, categoriaId: true },
+      })
+    ).map((c) => [c.nombre, c.categoriaId])
+  )
   const elegidos = resumen.data.pagos.filter(
     (p) => categoriaPorPago.has(p.paymentId) && !p.yaRegistrado
   )
@@ -2903,7 +2966,15 @@ export async function importarPagosComoEgresos(input: {
 
     if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
 
-    const categoriaId = categoriaPorPago.get(p.paymentId)!
+    const categoriaId = await categoriaParaPago(
+      categoriaPorPago.get(p.paymentId),
+      p.conceptos,
+      aprendidas
+    )
+    if (!categoriaId) {
+      console.warn('[control] sin categoría posible para el pago', p.paymentId)
+      continue
+    }
 
     /**
      * La equivalencia concepto → categoría se APRENDE de lo que decide el
@@ -2915,11 +2986,14 @@ export async function importarPagosComoEgresos(input: {
      * decisión vieja manda. Un pago clasificado distinto por excepción no
      * debería reescribir la regla para todos los demás.
      */
-    for (const concepto of p.conceptos) {
-      try {
-        await prisma.conceptoPagoAlegra.create({ data: { nombre: concepto, categoriaId } })
-      } catch {
-        // Ya existía. Es el caso normal a partir del segundo pago.
+    if (categoriaPorPago.get(p.paymentId)) {
+      for (const concepto of p.conceptos) {
+        try {
+          await prisma.conceptoPagoAlegra.create({ data: { nombre: concepto, categoriaId } })
+          aprendidas.set(concepto, categoriaId)
+        } catch {
+          // Ya existía. Es el caso normal a partir del segundo pago.
+        }
       }
     }
 

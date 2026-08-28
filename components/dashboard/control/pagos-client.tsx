@@ -43,21 +43,15 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
   const [bolsilloId, setBolsilloId] = useState('')
 
   /**
-   * La categoría va POR PAGO. Entre estos pagos hay gastos, pero también
-   * traslados y retiros; meterlos a todos en una sola categoría dejaría el
-   * reporte por categoría sin significado.
+   * La categoría es OPCIONAL: lo único que hay que decidir para importar es de
+   * qué cuenta salió la plata. Lo que se deje en blanco se deriva del concepto
+   * contable que ya trae Alegra —"Ingresos recibidos para terceros" queda como
+   * categoría propia, que es lo único que importaba poder distinguir—.
+   *
+   * Elegirla igual sigue sirviendo: además de mandar sobre el concepto, la
+   * decisión queda aprendida para los pagos siguientes con ese mismo concepto.
    */
-  const [categoriaPorPago, setCategoriaPorPago] = useState<Record<string, string>>(
-    // Arranca con lo que el concepto de Alegra ya permite deducir. Es lo que
-    // hace viable clasificar 244 pagos: se decide una vez por concepto y de
-    // ahí en más viene resuelto.
-    () =>
-      Object.fromEntries(
-        pendientes
-          .filter((p) => p.categoriaSugeridaId)
-          .map((p) => [p.paymentId, p.categoriaSugeridaId!])
-      )
-  )
+  const [categoriaPorPago, setCategoriaPorPago] = useState<Record<string, string>>({})
   /** Se aplica a los que todavía no tienen una elegida, no pisa lo ya decidido. */
   const [categoriaMasiva, setCategoriaMasiva] = useState('')
 
@@ -67,14 +61,32 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
       bolsilloId,
       pagos: ids.map((paymentId) => ({
         paymentId,
-        categoriaId: categoriaPorPago[paymentId]!,
+        categoriaId: categoriaPorPago[paymentId] || undefined,
       })),
     })
   )
 
   const elegidos = pendientes.filter((p) => seleccion.has(p.paymentId))
   const totalElegido = elegidos.reduce((a, p) => a + p.monto, 0)
-  const sinCategoria = elegidos.filter((p) => !categoriaPorPago[p.paymentId])
+  // No bloquea la importación: solo cuenta cuántos van a salir del concepto
+  // en vez de una elección explícita.
+  const derivados = elegidos.filter(
+    (p) => !categoriaPorPago[p.paymentId] && p.conceptos.length > 0
+  )
+  const sinConcepto = elegidos.filter(
+    (p) => !categoriaPorPago[p.paymentId] && p.conceptos.length === 0
+  )
+
+  const nombrePorCategoria = new Map(categorias.map((c) => [c.id, c.nombre]))
+
+  /** Qué categoría va a quedar si no se elige ninguna. Solo para mostrar. */
+  function categoriaAutomatica(p: (typeof datos.pagos)[number]): string {
+    if (p.categoriaSugeridaId) {
+      return `${nombrePorCategoria.get(p.categoriaSugeridaId) ?? 'la mapeada'} (aprendida)`
+    }
+    if (p.conceptos[0]) return `${p.conceptos[0]} (del concepto)`
+    return 'Otro'
+  }
 
   const opcionesCategoria = categorias
     .filter((c) => c.isActive)
@@ -167,19 +179,15 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
                   return copia
                 })
               }}
-              placeholder="Categoría para los que no tienen…"
+              placeholder="Forzar una categoría (opcional)…"
               searchPlaceholder="Buscar categoría…"
               disabled={enviando}
             />
           </div>
 
+          {/* Lo único obligatorio es la cuenta. */}
           <Button
-            disabled={
-              enviando ||
-              elegidos.length === 0 ||
-              !bolsilloId ||
-              sinCategoria.length > 0
-            }
+            disabled={enviando || elegidos.length === 0 || !bolsilloId}
             onClick={importar}
           >
             {enviando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -197,10 +205,16 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
               <span className="font-medium tabular-nums">
                 {formatearMonto(totalElegido)}
               </span>
-              {sinCategoria.length > 0 && (
-                <span className="text-red-600 dark:text-red-400">
+              {derivados.length > 0 && (
+                <span className="text-muted-foreground">
                   {' '}
-                  · {sinCategoria.length} sin categoría
+                  · {derivados.length} con la categoría del concepto de Alegra
+                </span>
+              )}
+              {sinConcepto.length > 0 && (
+                <span className="text-muted-foreground">
+                  {' '}
+                  · {sinConcepto.length} sin concepto, entran en &quot;Otro&quot;
                 </span>
               )}
             </>
@@ -301,7 +315,7 @@ export function PagosClient({ datos, bolsillos, categorias }: Props) {
                           [p.paymentId]: v ?? '',
                         }))
                       }
-                      placeholder="Elegir…"
+                      placeholder={categoriaAutomatica(p)}
                       searchPlaceholder="Buscar categoría…"
                       disabled={enviando}
                     />
