@@ -21,7 +21,13 @@ import { Monto } from '@/components/dashboard/control/monto'
 import { ControlStatsSkeleton, ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
 import { SelectorPeriodo } from '@/components/dashboard/control/selector-periodo'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -123,7 +129,10 @@ async function Kpis({ periodo }: { periodo: string }) {
       // Un consolidado negativo es la señal más importante de la pantalla.
       negativo: saldoConsolidado < 0,
       icono: Wallet,
-      nota: 'Suma calculada de todos los bolsillos',
+      // NO es del mes: es lo que hay al cerrar el mes, arrastrando todo lo
+      // anterior. Las otras tres tarjetas de la fila SÍ son del mes, y un
+      // acumulado sin avisar al lado de tres mensuales se lee como mensual.
+      nota: `Acumulado hasta el final de ${formatearPeriodo(periodo)}, no del mes`,
     },
     {
       titulo: 'Bolsillos cerrados',
@@ -185,6 +194,12 @@ async function SaldosPorBolsillo({ periodo }: { periodo: string }) {
     <Card>
       <CardHeader>
         <CardTitle>Saldo por bolsillo</CardTitle>
+        <CardDescription>
+          Saldos ACUMULADOS, no del mes. &quot;Inicial&quot; es lo que había al
+          empezar {formatearPeriodo(periodo)} arrastrando todo lo anterior;
+          &quot;Calculado&quot; es eso más los movimientos del mes.
+          &quot;Contado&quot; se llena al cerrar el periodo.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="rounded-md border overflow-x-auto">
@@ -192,8 +207,18 @@ async function SaldosPorBolsillo({ periodo }: { periodo: string }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Bolsillo</TableHead>
-                <TableHead className="text-right">Inicial</TableHead>
-                <TableHead className="text-right">Calculado</TableHead>
+                <TableHead className="text-right">
+                  Inicial
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    al empezar el mes
+                  </span>
+                </TableHead>
+                <TableHead className="text-right">
+                  Calculado
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    al cerrar el mes
+                  </span>
+                </TableHead>
                 <TableHead className="text-right">Contado</TableHead>
                 <TableHead className="text-right">Diferencia</TableHead>
                 <TableHead>Estado</TableHead>
