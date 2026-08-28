@@ -14,7 +14,7 @@
 --
 -- Ninguna factura tiene una sola línea. Poner una sola categoría obliga a
 -- elegir entre las dos y pierde el corte que importa. Y como `grupo` ya separa
--- cotización de factura, meter los 22 servicios en categorías obligaría a
+-- cotización de factura, meter los 21 servicios en categorías obligaría a
 -- duplicarlos por grupo — 44 filas mezclando dos dimensiones en una columna,
 -- que es el error del Excel que este módulo vino a corregir.
 --

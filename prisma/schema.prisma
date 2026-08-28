@@ -1154,7 +1154,7 @@ model TipoServicioReferenciado {
 //
 // Es el "qué se vendió": el nombre que aparece como línea en una cotización o
 // en una factura de venta — "Independiente 03", "Administracion", "Recaudo
-// para Terceros". Verificado contra la cuenta: 22 servicios, y las mismas
+// para Terceros". Verificado contra la cuenta: 21 servicios, y las mismas
 // filas alimentan tanto las cotizaciones (C) como las facturas (F), así que
 // un solo catálogo sirve para los dos.
 //
