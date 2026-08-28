@@ -28,6 +28,7 @@ const {
   alegraMock,
   facturasMock,
   itemsMock,
+  pagosMock,
   estimateDetalleMock,
   invoiceDetalleMock,
 } = vi.hoisted(() => ({
@@ -52,6 +53,7 @@ const {
   alegraMock: vi.fn(),
   facturasMock: vi.fn(),
   itemsMock: vi.fn(),
+  pagosMock: vi.fn(),
   estimateDetalleMock: vi.fn(),
   invoiceDetalleMock: vi.fn(),
 }))
@@ -70,6 +72,8 @@ vi.mock('@/lib/alegra/cache', () => ({
   getCachedEstimatesInRange: alegraMock,
   getCachedInvoices: facturasMock,
   getCachedItems: itemsMock,
+  getCachedPaymentsInRange: pagosMock,
+  ALEGRA_TTL: { company: 3600, kpis: 300, list: 30, detail: 30 },
   getCachedEstimate: estimateDetalleMock,
   getCachedInvoice: invoiceDetalleMock,
 }))
@@ -94,6 +98,8 @@ import {
   importarFacturasComoIngresos,
   sincronizarServiciosAlegra,
   getReporteAnual,
+  getPagosDelPeriodo,
+  importarPagosComoEgresos,
 } from '../control.actions'
 
 const SESSION = {
@@ -2144,5 +2150,150 @@ describe('reporte: contraste de lo que entra y sale', () => {
     const res = await getReporteAnual(2026)
 
     expect(res.data!.intermediados).toEqual([])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('pagos de Alegra como egresos', () => {
+  const PAGO = (id: string, monto: number, fecha = '2026-08-15') => ({
+    id,
+    date: fecha,
+    number: 714,
+    amount: monto,
+    type: 'out',
+    paymentMethod: 'transfer',
+    bankAccount: { id: '3', name: 'Banco 1' },
+    client: { id: '1170', name: 'FAWER SAS' },
+    associations: 'Facturas de compra: DOSE188',
+  })
+
+  beforeEach(() => {
+    pagosMock.mockResolvedValue({ items: [], truncated: false })
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.bolsillo.findUnique.mockResolvedValue({ id: IVONE, nombre: 'IVONE' })
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+  })
+
+  it('pide SOLO los pagos de salida', async () => {
+    // /payments no acepta filtro de fecha pero `type` sí es del servidor, y
+    // achica el recorrido a la cuarta parte.
+    await getPagosDelPeriodo('2026-08')
+
+    expect(pagosMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'out',
+        dateFrom: '2026-08-01',
+        dateTo: '2026-08-31',
+      }),
+      expect.any(Number)
+    )
+  })
+
+  it('marca los pagos que ya están registrados', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO('3579', 902_400)], truncated: false })
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      { id: 'cmovya0001', alegraPaymentId: '3579' },
+    ])
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.pagos[0]!.yaRegistrado).toBe(true)
+    expect(res.data!.cantidadPendiente).toBe(0)
+  })
+
+  it('propaga el aviso de búsqueda incompleta', async () => {
+    // Un total que miente por lo bajo es peor que no mostrarlo.
+    pagosMock.mockResolvedValue({ items: [], truncated: true })
+
+    const res = await getPagosDelPeriodo('2026-08')
+
+    expect(res.data!.posiblementeIncompleto).toBe(true)
+  })
+
+  it('registra el egreso con la categoría elegida PARA ESE pago', async () => {
+    // Entre estos pagos hay gastos, traslados y retiros. Una sola categoría
+    // para todos dejaría el reporte por categoría sin significado.
+    pagosMock.mockResolvedValue({ items: [PAGO('3579', 902_400)], truncated: false })
+
+    const res = await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3579', categoriaId: CATEGORIA }],
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.EGRESO,
+          monto: 902_400,
+          categoriaId: CATEGORIA,
+          bolsilloId: IVONE,
+          alegraPaymentId: '3579',
+        }),
+      })
+    )
+  })
+
+  it('exige categoría en todos los pagos elegidos', async () => {
+    const res = await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3579', categoriaId: '' }],
+    })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('categoría')
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('exige bolsillo', async () => {
+    const res = await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: '',
+      pagos: [{ paymentId: '3579', categoriaId: CATEGORIA }],
+    })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('NO vuelve a registrar un pago ya registrado', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO('3579', 902_400)], truncated: false })
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      { id: 'cmovya0001', alegraPaymentId: '3579' },
+    ])
+
+    const res = await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3579', categoriaId: CATEGORIA }],
+    })
+
+    expect(res.data!.creados).toBe(0)
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('no registra nada en un periodo cerrado', async () => {
+    pagosMock.mockResolvedValue({ items: [PAGO('3579', 902_400)], truncated: false })
+    prismaMock.cierreMensual.findUnique.mockResolvedValue({ cerrado: true })
+
+    const res = await importarPagosComoEgresos({
+      periodo: '2026-08',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '3579', categoriaId: CATEGORIA }],
+    })
+
+    expect(res.data!.creados).toBe(0)
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect((await getPagosDelPeriodo('2026-08')).success).toBe(false)
+    expect(pagosMock).not.toHaveBeenCalled()
   })
 })

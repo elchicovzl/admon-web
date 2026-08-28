@@ -32,12 +32,14 @@ import { hasControlAccess } from '@/lib/auth/rbac'
  * ingreso de plata que ese documento originó. La referencia queda guardada en
  * `Movimiento.alegraEstimateId`, que es un puntero, no una consolidación.
  */
+import { ALEGRA_TTL } from '@/lib/alegra/cache'
 import {
   getCachedEstimate,
   getCachedEstimatesInRange,
   getCachedInvoice,
   getCachedInvoices,
   getCachedItems,
+  getCachedPaymentsInRange,
 } from '@/lib/alegra/cache'
 import {
   GrupoCategoria,
@@ -66,6 +68,8 @@ import {
   type CotizacionesDelPeriodo,
   type FacturaParaIngreso,
   type FacturasDelPeriodo,
+  type PagoParaEgreso,
+  type PagosDelPeriodo,
 } from '@/lib/types/control.types'
 import {
   parseFechaCalendario,
@@ -2706,5 +2710,182 @@ export async function importarFacturasComoIngresos(input: {
       `${creados} ingreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}` +
       (sinDesglose > 0 ? `, ${sinDesglose} sin desglose por servicio` : ''),
     data: { creados, sinDesglose },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pagos de Alegra como egresos
+// ---------------------------------------------------------------------------
+
+/**
+ * Pagos `out` del periodo, marcando cuáles ya se registraron.
+ *
+ * POR QUÉ PAGOS Y NO FACTURAS DE COMPRA
+ *
+ * Control es un libro de CAJA. Alegra documenta como advertencia crítica que
+ * /bills (devengado) y /payments (caja) son el MISMO gasto en dos momentos y
+ * que nunca se suman. Una factura de compra sin pagar no sacó plata de ninguna
+ * caja, así que acá la fuente es el pago.
+ *
+ * /payments es el endpoint más restringido de Alegra: NO acepta ningún filtro
+ * de fecha, así que el rango se resuelve recorriendo páginas. `type: 'out'` sí
+ * es filtro del servidor y achica el recorrido a la cuarta parte, por eso va
+ * siempre.
+ */
+export const getPagosDelPeriodo = cache(
+  async (periodo: string): Promise<ActionResponse<PagosDelPeriodo>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const { desde, hasta } = rangoDelPeriodo(periodo)
+
+    let alegra
+    try {
+      alegra = await getCachedPaymentsInRange(
+        { dateFrom: desde, dateTo: hasta, type: 'out' },
+        // TTL más largo que el de una lista normal: la importación por tandas
+        // vuelve a pedir esto en cada tanda, y recorrer /payments de nuevo por
+        // cada una sería pagar el recorrido ocho veces.
+        ALEGRA_TTL.kpis
+      )
+    } catch (error) {
+      console.error('[control] getPagosDelPeriodo:', error)
+      return {
+        success: false,
+        error: 'No se pudo consultar Alegra. Volvé a intentar en un momento.',
+      }
+    }
+
+    const ids = alegra.items.map((p) => String(p.id))
+    const yaRegistrados = await prisma.movimiento.findMany({
+      where: { alegraPaymentId: { in: ids } },
+      select: { id: true, alegraPaymentId: true },
+    })
+    const porPago = new Map(yaRegistrados.map((m) => [m.alegraPaymentId!, m.id]))
+
+    const pagos: PagoParaEgreso[] = alegra.items.map((p) => {
+      const paymentId = String(p.id)
+      const cuenta = p.bankAccount ?? p.account ?? null
+      // `associations` llega como TEXTO en esta cuenta, no como el array que
+      // describe la documentación. Se muestra tal cual: sirve para reconocer
+      // el pago al clasificarlo, no para calcular nada.
+      const aplicado = (p as { associations?: unknown }).associations
+      return {
+        paymentId,
+        numero: p.number === null || p.number === undefined ? paymentId : String(p.number),
+        fecha: p.date,
+        beneficiario: p.client?.name ?? 'Sin beneficiario',
+        cuenta: cuenta?.name ?? null,
+        metodo: p.paymentMethod ?? null,
+        monto: p.amount,
+        aplicadoA: typeof aplicado === 'string' && aplicado.trim() ? aplicado : null,
+        yaRegistrado: porPago.has(paymentId),
+        movimientoId: porPago.get(paymentId) ?? null,
+      }
+    })
+
+    const pendientes = pagos.filter((p) => !p.yaRegistrado)
+
+    return {
+      success: true,
+      data: {
+        periodo,
+        pagos,
+        totalPagado: sumarMontos(pagos.map((p) => p.monto)),
+        totalPendienteDeRegistrar: sumarMontos(pendientes.map((p) => p.monto)),
+        cantidadPendiente: pendientes.length,
+        posiblementeIncompleto: alegra.truncated,
+      },
+    }
+  }
+)
+
+/**
+ * Registra pagos de Alegra como egresos del libro.
+ *
+ * La categoría viene POR PAGO y no una sola para todos: entre esos pagos hay
+ * gastos, pero también traslados y retiros. Meterlos todos en una categoría
+ * dejaría el reporte por categoría sin significado, que es lo que este módulo
+ * vino a arreglar.
+ */
+export async function importarPagosComoEgresos(input: {
+  periodo: string
+  bolsilloId: string
+  /** Qué pago va con qué categoría. */
+  pagos: Array<{ paymentId: string; categoriaId: string }>
+}): Promise<ActionResponse<{ creados: number; salteados: number }>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  if (!input.pagos?.length) {
+    return { success: false, error: 'No seleccionaste ningún pago' }
+  }
+  if (!input.bolsilloId) {
+    return { success: false, error: 'Indicá de qué bolsillo sale la plata' }
+  }
+  if (input.pagos.some((p) => !p.categoriaId)) {
+    return { success: false, error: 'Todos los pagos elegidos necesitan una categoría' }
+  }
+
+  const [bolsillo, resumen] = await Promise.all([
+    prisma.bolsillo.findUnique({
+      where: { id: input.bolsilloId },
+      select: { id: true, nombre: true },
+    }),
+    getPagosDelPeriodo(input.periodo),
+  ])
+
+  if (!bolsillo) return { success: false, error: 'El bolsillo no existe' }
+  if (!resumen.success || !resumen.data) {
+    return { success: false, error: resumen.error ?? 'No se pudo leer Alegra' }
+  }
+
+  const categoriaPorPago = new Map(input.pagos.map((p) => [p.paymentId, p.categoriaId]))
+  const elegidos = resumen.data.pagos.filter(
+    (p) => categoriaPorPago.has(p.paymentId) && !p.yaRegistrado
+  )
+
+  let creados = 0
+  for (const p of elegidos) {
+    const fecha = parseFechaCalendario(p.fecha.slice(0, 10))
+    const periodo = periodoDeFecha(fecha)
+
+    if (await periodoEstaCerrado(periodo, bolsillo.id)) continue
+
+    try {
+      await prisma.movimiento.create({
+        data: {
+          fecha,
+          periodo,
+          tipo: TipoMovimiento.EGRESO,
+          monto: p.monto,
+          concepto: `Pago #${p.numero} — ${p.beneficiario}`.slice(0, 200),
+          bolsilloId: bolsillo.id,
+          categoriaId: categoriaPorPago.get(p.paymentId)!,
+          notas: [
+            p.cuenta ? `Cuenta en Alegra: ${p.cuenta}.` : null,
+            p.metodo ? `Método: ${p.metodo}.` : null,
+            p.aplicadoA ? `Aplicado a ${p.aplicadoA}.` : null,
+          ]
+            .filter(Boolean)
+            .join(' ') || null,
+          alegraPaymentId: p.paymentId,
+          createdById: auth.userId,
+        },
+      })
+      creados++
+    } catch (error) {
+      // El índice único de alegraPaymentId rebota una carrera entre dos
+      // importaciones simultáneas. Significa que ya está registrado.
+      console.warn('[control] pago ya registrado:', p.paymentId, error)
+    }
+  }
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: `${creados} egreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
+    data: { creados, salteados: input.pagos.length - creados },
   }
 }

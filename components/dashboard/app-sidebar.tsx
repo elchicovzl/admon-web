@@ -63,6 +63,7 @@ import {
   TrendingDown,
   Banknote,
   ArrowDownCircle,
+  ArrowUpCircle,
   Coins,
   ArrowLeftRight,
   HandCoins,
@@ -374,6 +375,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           title: 'Cobros',
           href: '/dashboard/control/cobros',
           icon: ArrowDownCircle,
+        },
+        {
+          title: 'Pagos',
+          href: '/dashboard/control/pagos',
+          icon: ArrowUpCircle,
         },
         {
           title: 'Préstamos',

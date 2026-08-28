@@ -455,3 +455,50 @@ export interface FacturasDelPeriodo {
   totalPendienteDeRegistrar: number
   cantidadPendiente: number
 }
+
+// ---------------------------------------------------------------------------
+// Pagos de Alegra como egresos
+// ---------------------------------------------------------------------------
+//
+// Control es un libro de CAJA, así que el egreso sale del PAGO y no de la
+// factura de compra. Alegra documenta como advertencia crítica que /bills
+// (devengado) y /payments (caja) son el mismo gasto en dos momentos y que
+// nunca se suman; una factura sin pagar no sacó plata de ninguna caja.
+
+export interface PagoParaEgreso {
+  paymentId: string
+  /** Consecutivo del pago en Alegra. */
+  numero: string
+  fecha: string
+  /** A quién se le pagó. En un pago `out` Alegra lo devuelve en `client`. */
+  beneficiario: string
+  /** Cuenta bancaria de Alegra. Es una PISTA del bolsillo, no el bolsillo. */
+  cuenta: string | null
+  metodo: string | null
+  monto: number
+  /**
+   * Documentos a los que se aplicó el pago, como texto.
+   *
+   * Sirve para reconocerlo al clasificar: un pago aplicado a una factura de
+   * compra suele ser un gasto, y uno suelto puede ser un traslado.
+   */
+  aplicadoA: string | null
+  yaRegistrado: boolean
+  movimientoId: string | null
+}
+
+export interface PagosDelPeriodo {
+  periodo: string
+  pagos: PagoParaEgreso[]
+  totalPagado: number
+  totalPendienteDeRegistrar: number
+  cantidadPendiente: number
+  /**
+   * True si la búsqueda en Alegra quedó corta.
+   *
+   * /payments no acepta NINGÚN filtro de fecha, así que el rango se resuelve
+   * recorriendo páginas. Un total que miente por lo bajo es peor que no
+   * mostrarlo.
+   */
+  posiblementeIncompleto: boolean
+}

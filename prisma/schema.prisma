@@ -1294,6 +1294,19 @@ model Movimiento {
    */
   alegraInvoiceId String? @unique
 
+  /**
+   * Pago de Alegra que originó este EGRESO.
+   *
+   * Control es un libro de CAJA, así que el egreso se toma del pago y no de la
+   * factura de compra: una factura sin pagar no sacó plata de ninguna caja.
+   * Alegra documenta como advertencia crítica que /bills (devengado) y
+   * /payments (caja) son el mismo gasto en dos momentos y nunca se suman.
+   *
+   * Único, por la misma razón que los otros dos: importar dos veces el mismo
+   * pago tiene que ser imposible a nivel de base.
+   */
+  alegraPaymentId String? @unique
+
   createdAt   DateTime @default(now())
   createdById String
   createdBy   User     @relation("MovimientoCreatedBy", fields: [createdById], references: [id])
