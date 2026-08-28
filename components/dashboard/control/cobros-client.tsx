@@ -22,6 +22,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useImportarPorTandas, BarraDeProgreso } from './importar-por-tandas'
 
 export function CobrosClient({ datos }: { datos: CotizacionesDelPeriodo }) {
   const pendientes = datos.cotizaciones.filter((c) => !c.yaRegistrada)
@@ -30,7 +31,10 @@ export function CobrosClient({ datos }: { datos: CotizacionesDelPeriodo }) {
     // entero, y desmarcar dos es menos trabajo que marcar veinte.
     () => new Set(pendientes.map((c) => c.estimateId))
   )
-  const [enviando, setEnviando] = useState(false)
+  const { progreso, enviando, importar: correrTandas } = useImportarPorTandas(
+    (estimateIds) =>
+      importarCotizacionesComoIngresos({ periodo: datos.periodo, estimateIds })
+  )
 
   const elegidas = datos.cotizaciones.filter(
     (c) => !c.yaRegistrada && seleccion.has(c.estimateId)
@@ -47,21 +51,38 @@ export function CobrosClient({ datos }: { datos: CotizacionesDelPeriodo }) {
   }
 
   async function importar() {
-    setEnviando(true)
-    try {
-      const r = await importarCotizacionesComoIngresos({
-        periodo: datos.periodo,
-        estimateIds: [...seleccion],
+    const { completados, error, resumen } = await correrTandas(
+      elegidas.map((c) => c.estimateId)
+    )
+
+    // Se desmarcan SOLO las que se procesaron: si la tanda cuatro falló, las
+    // de la cinco en adelante siguen pendientes y tienen que quedar marcadas
+    // para poder reintentar sin volver a elegirlas una por una.
+    if (completados.length > 0) {
+      setSeleccion((actual) => {
+        const copia = new Set(actual)
+        for (const id of completados) copia.delete(id)
+        return copia
       })
-      if (r.success) {
-        toast.success(r.message ?? 'Ingresos registrados')
-        setSeleccion(new Set())
-      } else {
-        toast.error(r.error ?? 'No se pudo importar')
-      }
-    } finally {
-      setEnviando(false)
     }
+
+    if (error) {
+      toast.error(
+        resumen.creados > 0
+          ? `${error}. Alcanzaron a registrarse ${resumen.creados}; volvé a intentar con las que quedaron.`
+          : error
+      )
+      return
+    }
+
+    toast.success(
+      `${resumen.creados} ingreso${resumen.creados === 1 ? '' : 's'} registrado${
+        resumen.creados === 1 ? '' : 's'
+      }` +
+        (resumen.sinDesglose > 0
+          ? `, ${resumen.sinDesglose} sin desglose por servicio`
+          : '')
+    )
   }
 
   if (datos.cotizaciones.length === 0) {
@@ -101,6 +122,8 @@ export function CobrosClient({ datos }: { datos: CotizacionesDelPeriodo }) {
           Registrar como ingresos
         </Button>
       </div>
+
+      <BarraDeProgreso progreso={progreso} />
 
       <div className="rounded-md border overflow-x-auto">
         <Table>

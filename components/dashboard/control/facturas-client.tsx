@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { useImportarPorTandas, BarraDeProgreso } from './importar-por-tandas'
 
 interface Props {
   datos: FacturasDelPeriodo
@@ -52,28 +53,46 @@ export function FacturasClient({ datos, bolsillos }: Props) {
   const [bolsilloId, setBolsilloId] = useState(
     () => bolsillos.find((b) => b.nombre === 'ADMON')?.id ?? ''
   )
-  const [enviando, setEnviando] = useState(false)
+  const { progreso, enviando, importar: correrTandas } = useImportarPorTandas(
+    (invoiceIds) =>
+      importarFacturasComoIngresos({ periodo: datos.periodo, invoiceIds, bolsilloId })
+  )
 
   const elegidas = registrables.filter((f) => seleccion.has(f.invoiceId))
   const totalElegido = elegidas.reduce((a, f) => a + f.totalPagado, 0)
 
   async function importar() {
-    setEnviando(true)
-    try {
-      const r = await importarFacturasComoIngresos({
-        periodo: datos.periodo,
-        invoiceIds: [...seleccion],
-        bolsilloId,
+    const { completados, error, resumen } = await correrTandas(
+      elegidas.map((f) => f.invoiceId)
+    )
+
+    // Solo las procesadas: si una tanda falló, las siguientes tienen que
+    // quedar marcadas para reintentar sin volver a elegirlas.
+    if (completados.length > 0) {
+      setSeleccion((actual) => {
+        const copia = new Set(actual)
+        for (const id of completados) copia.delete(id)
+        return copia
       })
-      if (r.success) {
-        toast.success(r.message ?? 'Ingresos registrados')
-        setSeleccion(new Set())
-      } else {
-        toast.error(r.error ?? 'No se pudo importar')
-      }
-    } finally {
-      setEnviando(false)
     }
+
+    if (error) {
+      toast.error(
+        resumen.creados > 0
+          ? `${error}. Alcanzaron a registrarse ${resumen.creados}; volvé a intentar con las que quedaron.`
+          : error
+      )
+      return
+    }
+
+    toast.success(
+      `${resumen.creados} ingreso${resumen.creados === 1 ? '' : 's'} registrado${
+        resumen.creados === 1 ? '' : 's'
+      }` +
+        (resumen.sinDesglose > 0
+          ? `, ${resumen.sinDesglose} sin desglose por servicio`
+          : '')
+    )
   }
 
   if (datos.facturas.length === 0) {
@@ -131,6 +150,8 @@ export function FacturasClient({ datos, bolsillos }: Props) {
           Registrar como ingresos
         </Button>
       </div>
+
+      <BarraDeProgreso progreso={progreso} />
 
       <div className="rounded-md border overflow-x-auto">
         <Table>
