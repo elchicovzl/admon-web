@@ -2770,7 +2770,20 @@ export const getPagosDelPeriodo = cache(
      */
     let conceptoPorFactura = new Map<string, string>()
     try {
-      const facturas = await getCachedBillsInRange({ dateFrom: desde, dateTo: hasta })
+      const facturas = await getCachedBillsInRange({
+        dateFrom: desde,
+        dateTo: hasta,
+        /**
+         * `all` NO ES OPCIONAL ACÁ.
+         *
+         * El default de Alegra es `bill` y deja afuera los documentos soporte
+         * sin avisar: 171 documentos contra 271. Los honorarios de esta
+         * empresa se cargan como documento soporte (prefijo DOSE), así que
+         * omitir esto esconde justo la nómina — y los pagos se quedan sin
+         * concepto.
+         */
+        type: 'all',
+      })
       conceptoPorFactura = new Map(
         facturas.items.flatMap((b) => {
           const compras = (b as { purchases?: { categories?: Array<{ name?: string }>; items?: Array<{ name?: string }> } }).purchases
@@ -2852,6 +2865,21 @@ export const getPagosDelPeriodo = cache(
 )
 
 /**
+ * Categoría donde caen los pagos cuyo concepto no se pudo resolver.
+ *
+ * Existe porque el fallback anterior —"la primera categoría del grupo OTRO por
+ * orden alfabético"— fue un desastre silencioso: 60 pagos por 78 millones
+ * quedaron dentro de "Alcantarillado/ Acueducto", "Aportes fondo de pensiones"
+ * y "Dotación a trabajadores" según qué categoría existiera en ese momento.
+ * Ni siquiera era determinista: el destino cambiaba a medida que la propia
+ * importación iba creando categorías.
+ *
+ * Un fallback tiene que ser IMPOSIBLE de confundir con una clasificación real.
+ * Este grita lo que es.
+ */
+const CATEGORIA_SIN_CLASIFICAR = 'Sin clasificar (pago de Alegra)'
+
+/**
  * La categoría de un pago, sin obligar al operador a elegirla.
  *
  * En pagos la categoría es OPCIONAL: lo único que hay que decidir es de qué
@@ -2868,8 +2896,9 @@ export const getPagosDelPeriodo = cache(
  *      Así "Ingresos recibidos para terceros" queda como categoría propia y
  *      se puede atar al recaudo en Catálogos, que es lo único que importaba
  *      distinguir.
- *   4. Sin concepto —un pago que salda una factura de otro mes—, cae en el
- *      grupo OTRO para que nada quede sin registrar.
+ *   4. Sin concepto —un pago que salda una factura de otro mes—, cae en una
+ *      categoría "Sin clasificar" que se ve a la legua. NUNCA en "la primera
+ *      del grupo OTRO": ese fallback sepultó 78 millones en categorías ajenas.
  *
  * El grupo de las categorías nuevas es OTRO a propósito: la máquina no puede
  * saber si "Otros honorarios" es un gasto operativo o una comisión, así que no
@@ -2902,7 +2931,20 @@ async function categoriaParaPago(
     return creada.id
   }
 
-  return resolverCategoria(GrupoCategoria.OTRO)
+  // Sin concepto no se adivina: cae en una categoría que dice a la cara que
+  // nadie la clasificó. Antes esto tomaba "la primera del grupo OTRO por orden
+  // alfabético" y sepultó 78 millones en categorías ajenas.
+  const sinClasificar = await prisma.categoriaMovimiento.findFirst({
+    where: { nombre: CATEGORIA_SIN_CLASIFICAR },
+    select: { id: true },
+  })
+  if (sinClasificar) return sinClasificar.id
+
+  const creada = await prisma.categoriaMovimiento.create({
+    data: { nombre: CATEGORIA_SIN_CLASIFICAR, grupo: GrupoCategoria.OTRO },
+    select: { id: true },
+  })
+  return creada.id
 }
 
 /**

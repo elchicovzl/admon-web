@@ -2510,3 +2510,91 @@ describe('el concepto del pago decide la categoría', () => {
     expect(args.data.notas).toContain('Otros gastos generales')
   })
 })
+
+
+// ---------------------------------------------------------------------------
+
+describe('el fallback de categoría no puede disfrazarse de clasificación', () => {
+  const PAGO_A_DOC_SOPORTE = {
+    id: '2893',
+    date: '2026-03-31',
+    number: 567,
+    amount: 950_000,
+    type: 'out',
+    bankAccount: { id: '3', name: 'Banco 1' },
+    client: { id: '9', name: 'ANDREA BEDOYA' },
+    bills: [{ id: '185', number: '148' }],
+  }
+
+  beforeEach(() => {
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+    prismaMock.bolsillo.findUnique.mockResolvedValue({ id: IVONE, nombre: 'IVONE' })
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+    pagosMock.mockResolvedValue({ items: [PAGO_A_DOC_SOPORTE], truncated: false })
+  })
+
+  it('pide los documentos soporte además de las facturas de compra', async () => {
+    // El default de Alegra es `type: bill` y deja afuera los documentos
+    // soporte SIN AVISAR: 171 documentos contra 271. Los honorarios de esta
+    // empresa se cargan como documento soporte (prefijo DOSE), así que
+    // omitirlo esconde justo la nómina.
+    await getPagosDelPeriodo('2026-03')
+
+    expect(billsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'all' })
+    )
+  })
+
+  it('sin concepto NO cae en la primera categoría del grupo OTRO', async () => {
+    // Ese fallback sepultó 60 pagos por 78 millones dentro de
+    // "Alcantarillado/ Acueducto", "Aportes fondo de pensiones" y "Dotación a
+    // trabajadores", según qué categoría existiera en ese momento. Ni
+    // siquiera era determinista.
+    billsMock.mockResolvedValue({ items: [], truncated: false })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue(null)
+    prismaMock.categoriaMovimiento.create.mockResolvedValue({ id: 'ccatsinclas1' })
+
+    await importarPagosComoEgresos({
+      periodo: '2026-03',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '2893' }],
+    })
+
+    expect(prismaMock.categoriaMovimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ nombre: 'Sin clasificar (pago de Alegra)' }),
+      })
+    )
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ categoriaId: 'ccatsinclas1' }),
+      })
+    )
+  })
+
+  it('reusa la categoría "Sin clasificar" en vez de crear una por pago', async () => {
+    billsMock.mockResolvedValue({ items: [], truncated: false })
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatsinclas1' })
+
+    await importarPagosComoEgresos({
+      periodo: '2026-03',
+      bolsilloId: IVONE,
+      pagos: [{ paymentId: '2893' }],
+    })
+
+    expect(prismaMock.categoriaMovimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('con el documento soporte en la lista, el concepto SÍ se resuelve', async () => {
+    // El caso real: pago 567 → documento soporte DOSE148 (id 185) →
+    // "Otros honorarios / ASESORIAS MES DE MARZO".
+    billsMock.mockResolvedValue({
+      items: [{ id: '185', purchases: { categories: [{ name: 'Otros honorarios' }] } }],
+      truncated: false,
+    })
+
+    const res = await getPagosDelPeriodo('2026-03')
+
+    expect(res.data!.pagos[0]!.conceptos).toEqual(['Otros honorarios'])
+  })
+})

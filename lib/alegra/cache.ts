@@ -295,6 +295,15 @@ export interface BillsRangeQuery {
   /** Substring match handed to Alegra's `provider_name` (server-side). */
   providerName?: string | null
   status?: string | null
+  /**
+   * `bill` | `supportDocument` | `all`.
+   *
+   * OJO: el DEFAULT DE ALEGRA ES `bill`, y deja afuera los documentos
+   * soporte sin avisar. Medido contra la cuenta: 171 sin `type` contra 271
+   * con `type: 'all'` — cien documentos invisibles. Quien necesite TODO lo
+   * comprado tiene que pedir 'all' explícitamente.
+   */
+  type?: 'bill' | 'supportDocument' | 'all' | null
 }
 
 /**
@@ -305,10 +314,10 @@ export interface BillsRangeQuery {
  * filters, so passing them narrows the walk rather than widening it.
  */
 export function getCachedBillsInRange(
-  { dateFrom, dateTo, providerName = null, status = null }: BillsRangeQuery,
+  { dateFrom, dateTo, providerName = null, status = null, type = null }: BillsRangeQuery,
   ttl: number = ALEGRA_TTL.kpis,
 ): Promise<DateRangeResult<BillListItem>> {
-  const key = stableKey({ from: dateFrom, to: dateTo, provider: providerName, status })
+  const key = stableKey({ from: dateFrom, to: dateTo, provider: providerName, status, type })
 
   return unstable_cache(
     async () =>
@@ -319,6 +328,7 @@ export function getCachedBillsInRange(
             limit,
             provider_name: providerName ?? undefined,
             status: status ?? undefined,
+            type: type ?? undefined,
           }),
         // 'fecha': /bills no acepta order_field: 'id', así que acá el corte
         // temprano sigue siendo válido y la paginación sigue siendo inestable.
