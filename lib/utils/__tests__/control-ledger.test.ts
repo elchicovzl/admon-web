@@ -30,6 +30,7 @@ import {
   repartirEntreServicios,
   ingresoPorServicio,
   ingresosPorNaturaleza,
+  contrastarIntermediados,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -719,5 +720,132 @@ describe('ingresosPorNaturaleza', () => {
     ])
 
     expect(sumarMontos(r.otros.porCategoria.map((c) => c.monto))).toBe(r.otros.bruto)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('contrastarIntermediados', () => {
+  const MENSAJERIA = {
+    id: 'csrvmensaje1',
+    nombre: 'Servicios de Mensajería',
+    categoriaEgresoId: 'ccatmensaje1',
+    categoriaEgreso: 'Servicio de mensajería',
+  }
+
+  const entrada = (periodo: string, monto: number, servicioAlegraId = MENSAJERIA.id) => ({
+    periodo,
+    tipo: TipoMovimiento.INGRESO,
+    monto,
+    categoriaId: 'ccatcobro0001',
+    detalles: [{ servicioAlegraId, monto }],
+  })
+
+  const salida = (periodo: string, monto: number, categoriaId = 'ccatmensaje1') => ({
+    periodo,
+    tipo: TipoMovimiento.EGRESO,
+    monto,
+    categoriaId,
+    detalles: [],
+  })
+
+  it('contrasta lo que entró contra lo que salió, mes a mes', () => {
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-08', 1_752_000), salida('2026-08', 4_839_000)]
+    )
+
+    expect(r!.meses).toEqual([
+      { periodo: '2026-08', entro: 1_752_000, salio: 4_839_000, margen: -3_087_000 },
+    ])
+    expect(r!.totalMargen).toBe(-3_087_000)
+  })
+
+  it('un margen negativo NO se esconde: es el hallazgo', () => {
+    // Con números reales de 2026: entraron 15.942.000 por mensajería y
+    // salieron 48.151.660 a Fawer. Todos los meses en rojo.
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-01', 1_040_000), salida('2026-01', 3_885_360)]
+    )
+
+    expect(r!.totalMargen).toBeLessThan(0)
+  })
+
+  it('ignora los egresos de otras categorías', () => {
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-08', 1_000_000), salida('2026-08', 500_000, 'ccatpapeler1')]
+    )
+
+    expect(r!.totalSalio).toBe(0)
+  })
+
+  it('ignora los ingresos de otros servicios', () => {
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-08', 1_000_000, 'csrvotro00001')]
+    )
+
+    expect(r!.totalEntro).toBe(0)
+  })
+
+  it('un servicio SIN categoría de egreso aparece igual, con salió en cero', () => {
+    // Es el caso de "Recaudo para Terceros": entraron 453.881.429 y su salida
+    // nunca se registró. Esconderlo sería esconder que esa plata está
+    // inflando el saldo de los bolsillos.
+    const [r] = contrastarIntermediados(
+      [
+        {
+          id: 'csrvrecaudo1',
+          nombre: 'Recaudo para Terceros',
+          categoriaEgresoId: null,
+          categoriaEgreso: null,
+        },
+      ],
+      [
+        { ...entrada('2026-08', 43_695_716), detalles: [{ servicioAlegraId: 'csrvrecaudo1', monto: 43_695_716 }] },
+        salida('2026-08', 4_839_000),
+      ]
+    )
+
+    expect(r!.categoriaEgreso).toBeNull()
+    expect(r!.totalEntro).toBe(43_695_716)
+    expect(r!.totalSalio).toBe(0)
+    expect(r!.totalMargen).toBe(43_695_716)
+  })
+
+  it('incluye los meses en los que solo hubo pago, sin cobro', () => {
+    // Un mes en el que se pagó sin haber cobrado importa tanto como el inverso.
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-07', 1_860_000), salida('2026-08', 4_839_000)]
+    )
+
+    expect(r!.meses.map((m) => m.periodo)).toEqual(['2026-07', '2026-08'])
+    expect(r!.meses[1]!.entro).toBe(0)
+  })
+
+  it('los meses salen ordenados', () => {
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-08', 100), entrada('2026-01', 100), entrada('2026-05', 100)]
+    )
+
+    expect(r!.meses.map((m) => m.periodo)).toEqual(['2026-01', '2026-05', '2026-08'])
+  })
+
+  it('suma varias líneas del mismo servicio en el mismo mes', () => {
+    const [r] = contrastarIntermediados(
+      [MENSAJERIA],
+      [entrada('2026-08', 700_000), entrada('2026-08', 1_052_000)]
+    )
+
+    expect(r!.meses[0]!.entro).toBe(1_752_000)
+  })
+
+  it('sin servicios en tránsito no devuelve nada', () => {
+    expect(contrastarIntermediados([], [entrada('2026-08', 100)])).toEqual([])
   })
 })

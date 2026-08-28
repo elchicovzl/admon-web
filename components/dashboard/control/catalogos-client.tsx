@@ -21,6 +21,7 @@ import {
   sincronizarServiciosAlegra,
   setServicioAlegraActivo,
   setServicioAlegraEnTransito,
+  setCategoriaEgresoDeServicio,
 } from '@/lib/actions/control.actions'
 import type {
   BolsilloListItem,
@@ -521,6 +522,7 @@ export function CatalogosClient({
                 <TableHead>Servicio</TableHead>
                 <TableHead className="w-24">Ref.</TableHead>
                 <TableHead className="w-40">En tránsito</TableHead>
+                <TableHead className="w-56">Sale por</TableHead>
                 <TableHead className="w-32">Sincronizado</TableHead>
                 <TableHead className="w-24">Activo</TableHead>
               </TableRow>
@@ -528,7 +530,7 @@ export function CatalogosClient({
             <TableBody>
               {listaAlegra.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     Todavía no se sincronizó el catálogo.
                   </TableCell>
                 </TableRow>
@@ -576,6 +578,55 @@ export function CatalogosClient({
                       )}
                     </div>
                   </TableCell>
+                  {/* Solo tiene sentido en un servicio en tránsito: es por
+                      dónde vuelve a salir esa plata. Sin el vínculo, "entra y
+                      sale" no se puede verificar contra nada. */}
+                  <TableCell>
+                    {servicio.enTransito ? (
+                      <SearchableSelect
+                        options={[
+                          { value: '__ninguna__', label: 'Sin registrar la salida' },
+                          ...listaCategorias
+                            .filter((c) => c.isActive)
+                            .map((c) => ({
+                              value: c.id,
+                              label: `${c.nombre} · ${ETIQUETA_GRUPO[c.grupo] ?? c.grupo}`,
+                            })),
+                        ]}
+                        value={servicio.categoriaEgreso?.id ?? '__ninguna__'}
+                        onValueChange={async (v) => {
+                          const categoriaEgresoId = !v || v === '__ninguna__' ? null : v
+                          const r = await setCategoriaEgresoDeServicio({
+                            id: servicio.id,
+                            categoriaEgresoId,
+                          })
+                          if (r.success) {
+                            const cat = listaCategorias.find((c) => c.id === categoriaEgresoId)
+                            setListaAlegra((a) =>
+                              a.map((x) =>
+                                x.id === servicio.id
+                                  ? {
+                                      ...x,
+                                      categoriaEgreso: cat
+                                        ? { id: cat.id, nombre: cat.nombre }
+                                        : null,
+                                    }
+                                  : x
+                              )
+                            )
+                            toast.success(r.message ?? 'Listo')
+                          } else {
+                            toast.error(r.error ?? 'No se pudo asignar')
+                          }
+                        }}
+                        placeholder="Sin registrar la salida"
+                        searchPlaceholder="Buscar categoría…"
+                      />
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+
                   <TableCell className="text-sm text-muted-foreground">
                     {servicio.sincronizadoEn ? formatearFecha(servicio.sincronizadoEn) : '—'}
                   </TableCell>

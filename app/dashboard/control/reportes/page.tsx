@@ -8,9 +8,15 @@ import { formatearMonto, formatearPeriodo } from '@/lib/utils/control-format'
 import { ETIQUETA_GRUPO } from '@/components/dashboard/control/etiquetas'
 import { Monto } from '@/components/dashboard/control/monto'
 import { ControlStatsSkeleton, ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
-import type { FilaAgrupada } from '@/lib/types/control.types'
+import type { FilaAgrupada, ContrasteIntermediado } from '@/lib/types/control.types'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -32,6 +38,91 @@ export const metadata: Metadata = {
 
 interface PageProps {
   searchParams: Promise<{ anio?: string }>
+}
+
+/**
+ * Lo que entró contra lo que salió, para un servicio en tránsito.
+ *
+ * Es la única vista del libro que puede DESMENTIR un "entra y vuelve a salir".
+ * Por eso el margen no se maquilla: si da negativo todos los meses, se ve.
+ */
+function ContrasteDeServicio({ c }: { c: ContrasteIntermediado }) {
+  const noCierra = c.totalMargen !== 0
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{c.servicio}</CardTitle>
+        <CardDescription>
+          {c.categoriaEgreso
+            ? `Sale por la categoría "${c.categoriaEgreso}".`
+            : 'No tiene categoría de egreso configurada: a esta plata no se le registró la salida, así que está inflando el saldo de los bolsillos.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {noCierra && (
+          <Alert variant={c.totalMargen < 0 ? 'destructive' : 'default'}>
+            <AlertTitle>
+              {c.totalMargen < 0
+                ? 'Salió más de lo que entró'
+                : 'Entró más de lo que salió'}
+            </AlertTitle>
+            <AlertDescription>
+              <p>
+                Entraron {formatearMonto(c.totalEntro)} y salieron{' '}
+                {formatearMonto(c.totalSalio)}: una diferencia de{' '}
+                <strong>{formatearMonto(Math.abs(c.totalMargen))}</strong>. Si esta
+                plata solo pasa, el contraste debería dar cerca de cero.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mes</TableHead>
+                <TableHead className="text-right">Entró</TableHead>
+                <TableHead className="text-right">Salió</TableHead>
+                <TableHead className="text-right">Diferencia</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {c.meses.map((m) => (
+                <TableRow key={m.periodo}>
+                  <TableCell className="font-medium">
+                    {formatearPeriodo(m.periodo)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                    {m.entro === 0 ? '—' : formatearMonto(m.entro)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-red-600 dark:text-red-400">
+                    {m.salio === 0 ? '—' : formatearMonto(m.salio)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Monto valor={m.margen} />
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="border-t-2 font-medium">
+                <TableCell>Total</TableCell>
+                <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {formatearMonto(c.totalEntro)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-red-600 dark:text-red-400">
+                  {formatearMonto(c.totalSalio)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <Monto valor={c.totalMargen} />
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 /** Tabla de un corte del año: categorías, contrapartes o bolsillos. */
@@ -357,6 +448,7 @@ async function Reporte({ anio }: { anio: number }) {
           <TabsTrigger value="contrapartes">Por contraparte</TabsTrigger>
           <TabsTrigger value="bolsillos">Por bolsillo</TabsTrigger>
           <TabsTrigger value="servicios">Por servicio</TabsTrigger>
+          <TabsTrigger value="intermediados">Entra y sale</TabsTrigger>
         </TabsList>
 
         <TabsContent value="categorias" className="space-y-2">
@@ -398,6 +490,26 @@ async function Reporte({ anio }: { anio: number }) {
             </div>
           ) : (
             <TablaAgrupada filas={r.porServicio} encabezado="Servicio" mostrarGrupo />
+          )}
+        </TabsContent>
+
+        <TabsContent value="intermediados" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Los servicios marcados <strong>en tránsito</strong>: su plata entra y
+            vuelve a salir, así que no es ingreso de Admon. Acá se contrasta un
+            lado contra el otro. Si la diferencia no da cerca de cero, algo no
+            está registrado — y eso es información, no un error de la app.
+          </p>
+
+          {r.intermediados.length === 0 ? (
+            <div className="rounded-md border p-12 text-center text-muted-foreground">
+              Ningún servicio está marcado como plata en tránsito. Se marcan en
+              Catálogos → Servicios Alegra.
+            </div>
+          ) : (
+            r.intermediados.map((c) => (
+              <ContrasteDeServicio key={c.servicioId} c={c} />
+            ))
           )}
         </TabsContent>
       </Tabs>

@@ -128,6 +128,20 @@ export const toggleServicioEnTransitoSchema = z.object({
 
 export type ToggleServicioEnTransitoInput = z.infer<typeof toggleServicioEnTransitoSchema>
 
+/**
+ * Ata un servicio en tránsito con la categoría por la que su plata sale.
+ *
+ * `null` es un valor válido y significativo: desatar el vínculo deja el
+ * contraste sin lado de egreso, que es exactamente lo que hay que ver cuando a
+ * esa plata no se le registra la salida.
+ */
+export const asignarCategoriaEgresoSchema = z.object({
+  id: cuid('Servicio inválido'),
+  categoriaEgresoId: cuid('Categoría inválida').nullable(),
+})
+
+export type AsignarCategoriaEgresoInput = z.infer<typeof asignarCategoriaEgresoSchema>
+
 export type CreateBolsilloInput = z.infer<typeof createBolsilloSchema>
 export type CreateCategoriaInput = z.infer<typeof createCategoriaSchema>
 export type CreateTipoServicioInput = z.infer<typeof createTipoServicioSchema>

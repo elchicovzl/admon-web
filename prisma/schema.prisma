@@ -1118,6 +1118,8 @@ model CategoriaMovimiento {
 
   movimientos    Movimiento[]
   tiposServicio  TipoServicioReferenciado[]
+  // Servicios de Alegra cuya plata en tránsito sale por esta categoría.
+  serviciosEnTransito ServicioAlegra[] @relation("ServicioAlegraEgreso")
 
   @@map("categorias_movimiento")
   @@index([grupo, isActive])
@@ -1186,6 +1188,22 @@ model ServicioAlegra {
    */
   enTransito Boolean @default(false)
 
+  /**
+   * Categoría por la que ESA plata vuelve a salir.
+   *
+   * Sin este vínculo, "entra y vuelve a salir" es una afirmación que nadie
+   * puede verificar: el ingreso vive en el desglose por servicio y el egreso
+   * en una categoría, y son dos dimensiones distintas que no se tocan.
+   * Atándolas se puede contrastar mes a mes lo que entró contra lo que salió
+   * — y descubrir cuando NO cierra.
+   *
+   * Es opcional a propósito. Un servicio marcado en tránsito sin categoría de
+   * egreso NO es un error de configuración: es el hallazgo de que esa plata
+   * entró al libro y nunca se registró su salida.
+   */
+  categoriaEgresoId String?
+  categoriaEgreso   CategoriaMovimiento? @relation("ServicioAlegraEgreso", fields: [categoriaEgresoId], references: [id])
+
   // Se desactiva, nunca se borra: el desglose histórico apunta acá. Si un
   // servicio desaparece de Alegra, la sincronización lo apaga.
   isActive Boolean @default(true)
@@ -1200,6 +1218,7 @@ model ServicioAlegra {
 
   @@map("servicios_alegra")
   @@index([isActive, nombre])
+  @@index([categoriaEgresoId])
 }
 
 // ───────────────────────────────────────────────────────────────────────────

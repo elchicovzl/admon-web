@@ -579,3 +579,114 @@ export function ingresosPorNaturaleza(
     otros: cerrar(cubos.otros),
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Servicios intermediados: lo que entra contra lo que sale
+// ---------------------------------------------------------------------------
+//
+// Un servicio marcado "en tránsito" dice que su plata entra y vuelve a salir.
+// Eso era, hasta ahora, una afirmación que nadie podía verificar: el ingreso
+// vive en el desglose por servicio y el egreso en una categoría de movimiento,
+// dos dimensiones que no se tocan. Atándolas se puede contrastar mes a mes.
+//
+// Medido contra los datos reales de 2026, el contraste no cierra ni de lejos:
+// entraron 15.942.000 por mensajería y salieron 48.151.660 a Fawer. Por eso
+// esta vista existe — un margen negativo todos los meses es información, no un
+// error de la app.
+
+export interface ServicioIntermediado {
+  id: string
+  nombre: string
+  /** Categoría por la que sale. `null` = nunca se registró la salida. */
+  categoriaEgresoId: string | null
+  categoriaEgreso: string | null
+}
+
+export interface MovimientoParaContraste {
+  periodo: string
+  tipo: TipoMovimiento
+  monto: number
+  categoriaId: string
+  /** Desglose por servicio del movimiento, si lo tiene. */
+  detalles: Array<{ servicioAlegraId: string; monto: number }>
+}
+
+export interface MesIntermediado {
+  periodo: string
+  entro: number
+  salio: number
+  /** `entro` menos `salio`. Negativo = salió más de lo que entró. */
+  margen: number
+}
+
+export interface ContrasteIntermediado {
+  servicioId: string
+  servicio: string
+  /** `null` cuando el servicio no tiene categoría de egreso configurada. */
+  categoriaEgreso: string | null
+  meses: MesIntermediado[]
+  totalEntro: number
+  totalSalio: number
+  totalMargen: number
+}
+
+/**
+ * Contrasta, por mes, lo que entró por cada servicio en tránsito contra lo que
+ * salió por su categoría de egreso.
+ *
+ * Un servicio SIN categoría de egreso igual aparece, con `salio` en cero y
+ * `categoriaEgreso` en `null`. Esconderlo sería esconder el hallazgo: esa
+ * plata entró al libro y su salida nunca se registró, así que está inflando el
+ * saldo de los bolsillos.
+ *
+ * Los meses que salen son los que tuvieron movimiento de UNO de los dos lados.
+ * Un mes en el que se pagó sin haber cobrado importa tanto como el inverso.
+ */
+export function contrastarIntermediados(
+  servicios: ServicioIntermediado[],
+  movimientos: MovimientoParaContraste[]
+): ContrasteIntermediado[] {
+  return servicios.map((servicio) => {
+    const entroPorMes = new Map<string, number[]>()
+    const salioPorMes = new Map<string, number[]>()
+
+    for (const m of movimientos) {
+      if (m.tipo === TipoMovimiento.INGRESO) {
+        for (const d of m.detalles) {
+          if (d.servicioAlegraId !== servicio.id) continue
+          entroPorMes.set(m.periodo, [...(entroPorMes.get(m.periodo) ?? []), d.monto])
+        }
+      } else if (
+        m.tipo === TipoMovimiento.EGRESO &&
+        servicio.categoriaEgresoId !== null &&
+        m.categoriaId === servicio.categoriaEgresoId
+      ) {
+        salioPorMes.set(m.periodo, [...(salioPorMes.get(m.periodo) ?? []), m.monto])
+      }
+    }
+
+    const periodos = [
+      ...new Set([...entroPorMes.keys(), ...salioPorMes.keys()]),
+    ].sort()
+
+    const meses = periodos.map((periodo) => {
+      const entro = sumarMontos(entroPorMes.get(periodo) ?? [])
+      const salio = sumarMontos(salioPorMes.get(periodo) ?? [])
+      return { periodo, entro, salio, margen: sumarMontos([entro, -salio]) }
+    })
+
+    const totalEntro = sumarMontos(meses.map((m) => m.entro))
+    const totalSalio = sumarMontos(meses.map((m) => m.salio))
+
+    return {
+      servicioId: servicio.id,
+      servicio: servicio.nombre,
+      categoriaEgreso: servicio.categoriaEgreso,
+      meses,
+      totalEntro,
+      totalSalio,
+      totalMargen: sumarMontos([totalEntro, -totalSalio]),
+    }
+  })
+}

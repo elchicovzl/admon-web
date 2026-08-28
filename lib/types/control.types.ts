@@ -17,6 +17,7 @@ import type {
   Prisma,
 } from '@prisma/client'
 import type {
+  ContrasteIntermediado,
   EstadoPrestamo,
   EstadoServicio,
   IngresoDeNaturaleza,
@@ -24,6 +25,7 @@ import type {
 } from '@/lib/utils/control-ledger'
 
 export type {
+  ContrasteIntermediado,
   EstadoPrestamo,
   EstadoServicio,
   IngresoDeNaturaleza,
@@ -90,6 +92,12 @@ export interface ServicioAlegraListItem {
    * "Recaudo para Terceros" es el caso.
    */
   enTransito: boolean
+  /**
+   * Categoría por la que esa plata vuelve a salir. `null` en un servicio en
+   * tránsito NO es un error de configuración: es el hallazgo de que su salida
+   * nunca se registró.
+   */
+  categoriaEgreso: { id: string; nombre: string } | null
   isActive: boolean
   sincronizadoEn: Date | null
 }
@@ -336,6 +344,14 @@ export interface ReporteAnual {
    * tienen desglose. `ingresoNeto.sinDesglose` dice cuánto queda afuera.
    */
   porServicio: FilaAgrupada[]
+  /**
+   * Lo que entró contra lo que salió, por cada servicio en tránsito.
+   *
+   * Es la única vista del libro que puede desmentir un "entra y vuelve a
+   * salir": si el margen da negativo todos los meses, o si un servicio no
+   * tiene categoría de egreso, algo no está registrado.
+   */
+  intermediados: ContrasteIntermediado[]
   ingresoNeto: IngresoNeto
   /** Los ingresos del año abiertos en C, F y el resto. */
   ingresos: IngresosPorNaturaleza

@@ -78,12 +78,14 @@ import {
   margenServicio,
   estadoServicio,
   contraMovimiento,
+  contrastarIntermediados,
   ingresoPorServicio,
   ingresosPorNaturaleza,
   repartirEntreServicios,
   sumarMontos,
   type LineaDeDocumento,
   type DetalleParaReporte,
+  type MovimientoParaContraste,
   type MovimientoParaNaturaleza,
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
@@ -93,6 +95,7 @@ import {
   createTipoServicioSchema,
   toggleCatalogoSchema,
   toggleServicioEnTransitoSchema,
+  asignarCategoriaEgresoSchema,
   createContraparteSchema,
   createMovimientoSchema,
   anularMovimientoSchema,
@@ -109,6 +112,7 @@ import {
   type CreateTipoServicioInput,
   type ToggleCatalogoInput,
   type ToggleServicioEnTransitoInput,
+  type AsignarCategoriaEgresoInput,
   type CreateContraparteInput,
   type CreateMovimientoInput,
   type AnularMovimientoInput,
@@ -333,6 +337,7 @@ const servicioAlegraSelect = {
   referencia: true,
   descripcion: true,
   enTransito: true,
+  categoriaEgreso: { select: { id: true, nombre: true } },
   isActive: true,
   sincronizadoEn: true,
 } satisfies Prisma.ServicioAlegraSelect
@@ -363,7 +368,10 @@ export const getServiciosAlegra = cache(
  * al CREAR, nunca al actualizar, así que si alguien lo cambia desde la UI la
  * sincronización siguiente respeta esa decisión.
  */
-const REFERENCIAS_EN_TRANSITO = new Set(['02'])
+const REFERENCIAS_EN_TRANSITO = new Set([
+  '02', // Recaudo para Terceros — se cobra y se gira a la EPS / pensión.
+  '19', // Servicios de Mensajería — se cobra y se le paga a Fawer.
+])
 
 /**
  * Sincroniza el catálogo local contra /items de Alegra.
@@ -493,6 +501,37 @@ export async function sincronizarServiciosAlegra(): Promise<
       descartados,
       servicios: catalogo,
     },
+  }
+}
+
+/**
+ * Dice por qué categoría sale la plata de un servicio en tránsito.
+ *
+ * Es lo que permite contrastar, mes a mes, lo que entró contra lo que salió.
+ * Sin el vínculo, "entra y vuelve a salir" es una afirmación que nadie puede
+ * verificar.
+ */
+export async function setCategoriaEgresoDeServicio(
+  data: AsignarCategoriaEgresoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = asignarCategoriaEgresoSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.servicioAlegra.update({
+    where: { id: validado.data.id },
+    data: { categoriaEgresoId: validado.data.categoriaEgresoId },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: validado.data.categoriaEgresoId
+      ? 'Categoría de egreso asignada'
+      : 'Vínculo quitado',
   }
 }
 
@@ -1935,7 +1974,7 @@ export const getReporteAnual = cache(
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
-    const [movimientos, todosLosPeriodos] = await Promise.all([
+    const [movimientos, todosLosPeriodos, enTransito] = await Promise.all([
       prisma.movimiento.findMany({
         where: { periodo: { startsWith: `${anio}-` } },
         select: {
@@ -1948,6 +1987,7 @@ export const getReporteAnual = cache(
           // Por qué entró la plata. Solo lo tienen los movimientos importados
           // (o cargados) con desglose; el resto queda fuera de este corte y se
           // informa en `ingresoNeto.sinDesglose`.
+          categoriaId: true,
           detalleServicios: {
             select: {
               monto: true,
@@ -1962,6 +2002,19 @@ export const getReporteAnual = cache(
         distinct: ['periodo'],
         select: { periodo: true },
         orderBy: { periodo: 'asc' },
+      }),
+      // Los servicios cuya plata "entra y vuelve a salir". Se leen aunque
+      // estén inactivos: un servicio que se dejó de vender igual tuvo
+      // movimiento en el año que se está mirando.
+      prisma.servicioAlegra.findMany({
+        where: { enTransito: true },
+        select: {
+          id: true,
+          nombre: true,
+          categoriaEgresoId: true,
+          categoriaEgreso: { select: { nombre: true } },
+        },
+        orderBy: { nombre: 'asc' },
       }),
     ])
 
@@ -1991,6 +2044,7 @@ export const getReporteAnual = cache(
     // ese no distingue naturaleza: solo suma ingresos contra egresos.
     const naturalezaPorMes = new Map<string, MovimientoParaNaturaleza[]>()
     const paraNaturaleza: MovimientoParaNaturaleza[] = []
+    const paraContraste: MovimientoParaContraste[] = []
 
     function acumular(
       mapa: Map<string, Acumulador>,
@@ -2021,6 +2075,16 @@ export const getReporteAnual = cache(
         })),
       }
       paraNaturaleza.push(paraM)
+      paraContraste.push({
+        periodo: m.periodo,
+        tipo: m.tipo,
+        monto,
+        categoriaId: m.categoriaId,
+        detalles: m.detalleServicios.map((d) => ({
+          servicioAlegraId: d.servicio.id,
+          monto: decimalANumero(d.monto),
+        })),
+      })
       naturalezaPorMes.set(m.periodo, [...(naturalezaPorMes.get(m.periodo) ?? []), paraM])
 
       acumular(porMes, m.periodo, m.periodo, m.tipo, monto)
@@ -2103,6 +2167,15 @@ export const getReporteAnual = cache(
         porContraparte: aFilas(porContraparte),
         porBolsillo: aFilas(porBolsillo),
         porServicio: aFilas(porServicio),
+        intermediados: contrastarIntermediados(
+          enTransito.map((s) => ({
+            id: s.id,
+            nombre: s.nombre,
+            categoriaEgresoId: s.categoriaEgresoId,
+            categoriaEgreso: s.categoriaEgreso?.nombre ?? null,
+          })),
+          paraContraste
+        ),
         ingresoNeto: ingresoPorServicio(
           sumarMontos(meses.map((m) => m.ingresos)),
           detalles

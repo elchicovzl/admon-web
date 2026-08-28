@@ -1721,6 +1721,7 @@ describe('reporte: separar lo ganado de lo que solo pasó', () => {
       monto: dec(monto),
       periodo: '2026-08',
       bolsillo: { id: IVONE, nombre: 'IVONE' },
+      categoriaId: CATEGORIA,
       categoria: { id: CATEGORIA, nombre: 'Cobro de factura', grupo: GrupoCategoria.COBRO_FACTURA },
       contraparte: null,
       detalleServicios: detalles.map((d) => ({
@@ -2038,5 +2039,110 @@ describe('getMovimientos — filtro por préstamo', () => {
       { where: Record<string, unknown> },
     ]
     expect(args.where.prestamoId).toBeUndefined()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('reporte: contraste de lo que entra y sale', () => {
+  const MENSAJERIA = 'csrvmensaje1'
+  const CAT_EGRESO = 'ccatmensaje1'
+
+  function mov(
+    tipo: TipoMovimiento,
+    monto: number,
+    categoriaId: string,
+    detalles: Array<{ id: string; monto: number }> = []
+  ) {
+    return {
+      tipo,
+      monto: dec(monto),
+      periodo: '2026-08',
+      categoriaId,
+      bolsillo: { id: IVONE, nombre: 'IVONE' },
+      categoria: {
+        id: categoriaId,
+        nombre: 'Categoría',
+        grupo:
+          categoriaId === CAT_EGRESO
+            ? GrupoCategoria.SERVICIO_REFERENCIADO
+            : GrupoCategoria.COBRO_FACTURA,
+      },
+      contraparte: null,
+      detalleServicios: detalles.map((d) => ({
+        monto: dec(d.monto),
+        servicio: { id: d.id, nombre: 'Servicios de Mensajería', referencia: '19', enTransito: true },
+      })),
+    }
+  }
+
+  function preparar(movimientos: unknown[], servicios: unknown[]) {
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) =>
+      args?.distinct ? [{ periodo: '2026-08' }] : movimientos
+    )
+    prismaMock.servicioAlegra.findMany.mockResolvedValue(servicios)
+  }
+
+  it('contrasta lo que entró por el servicio contra lo que salió por su categoría', async () => {
+    // Los números reales de agosto-2026.
+    preparar(
+      [
+        mov(TipoMovimiento.INGRESO, 1_752_000, CATEGORIA, [
+          { id: MENSAJERIA, monto: 1_752_000 },
+        ]),
+        mov(TipoMovimiento.EGRESO, 4_839_000, CAT_EGRESO),
+      ],
+      [
+        {
+          id: MENSAJERIA,
+          nombre: 'Servicios de Mensajería',
+          categoriaEgresoId: CAT_EGRESO,
+          categoriaEgreso: { nombre: 'Servicio de mensajería' },
+        },
+      ]
+    )
+
+    const res = await getReporteAnual(2026)
+    const [c] = res.data!.intermediados
+
+    expect(c!.totalEntro).toBe(1_752_000)
+    expect(c!.totalSalio).toBe(4_839_000)
+    expect(c!.totalMargen).toBe(-3_087_000)
+  })
+
+  it('un servicio sin categoría de egreso aparece con la salida en cero', async () => {
+    // Es el caso de "Recaudo para Terceros": entró y su salida nunca se
+    // registró. No mostrarlo sería esconder que infla el saldo.
+    preparar(
+      [
+        mov(TipoMovimiento.INGRESO, 43_695_716, CATEGORIA, [
+          { id: 'csrvrecaudo1', monto: 43_695_716 },
+        ]),
+      ],
+      [
+        {
+          id: 'csrvrecaudo1',
+          nombre: 'Recaudo para Terceros',
+          categoriaEgresoId: null,
+          categoriaEgreso: null,
+        },
+      ]
+    )
+
+    const res = await getReporteAnual(2026)
+    const [c] = res.data!.intermediados
+
+    expect(c!.categoriaEgreso).toBeNull()
+    expect(c!.totalSalio).toBe(0)
+    expect(c!.totalMargen).toBe(43_695_716)
+  })
+
+  it('sin servicios en tránsito, la vista queda vacía', async () => {
+    preparar([mov(TipoMovimiento.INGRESO, 100_000, CATEGORIA)], [])
+
+    const res = await getReporteAnual(2026)
+
+    expect(res.data!.intermediados).toEqual([])
   })
 })
