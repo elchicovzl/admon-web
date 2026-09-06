@@ -5,6 +5,7 @@ import {
   TrendingUp,
   TrendingDown,
   Users,
+  Receipt,
   Wallet,
   AlertTriangle,
   ArrowRight,
@@ -73,11 +74,21 @@ async function Kpis({ periodo }: { periodo: string }) {
   } = resultado.data
 
   /**
-   * Lo que entró de verdad: los cobros netos de plata en tránsito, más lo que
-   * no viene ni de una cotización ni de una factura.
+   * Lo que entró de verdad: los cobros netos de plata en tránsito y de IVA,
+   * más lo que no viene ni de una cotización ni de una factura.
    */
   const ingresoReal =
     ingresos.cotizacion.neto + ingresos.factura.neto + ingresos.otros.neto
+
+  /**
+   * El IVA cobrado en el mes.
+   *
+   * Se muestra en vez de solo restarse: es plata que pasó por la caja y que
+   * hay que girar. Descontarla en silencio dejaría al operador sin saber
+   * cuánto debe, y ese número no está en ningún otro lado del libro.
+   */
+  const ivaCobrado =
+    ingresos.cotizacion.impuesto + ingresos.factura.impuesto + ingresos.otros.impuesto
 
   const tarjetas = [
     // C y F van en tarjetas separadas porque para el negocio son cosas
@@ -167,6 +178,18 @@ async function Kpis({ periodo }: { periodo: string }) {
           ? `${Math.round((egresoReal.nomina / egresoReal.neto) * 100)}% de lo que gastó la empresa`
           : 'Por arriba y por debajo',
     },
+    // El IVA cobrado, visible y no solo descontado: es plata que pasó por la
+    // caja y hay que girarla a la DIAN. Solo se muestra si hubo.
+    ...(ivaCobrado > 0
+      ? [
+          {
+            titulo: 'IVA cobrado del mes',
+            valor: formatearMonto(ivaCobrado),
+            icono: Receipt,
+            nota: 'Se cobra para girarlo a la DIAN. No es ingreso de la empresa',
+          },
+        ]
+      : []),
     // El número que resume el mes: lo que entró de verdad contra lo que se
     // gastó de verdad, las dos puntas ya sin la plata que solo pasa.
     {
@@ -310,13 +333,13 @@ async function DesgloseDelPeriodo({ periodo }: { periodo: string }) {
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <ListaDesglose
         titulo="Ingresos por cotización (C)"
-        descripcion="Por qué servicio entró"
+        descripcion="Por qué servicio entró. Las cotizaciones no llevan IVA"
         filas={d.cotizacion}
         vacio="No se registraron cobros por cotización."
       />
       <ListaDesglose
         titulo="Ingreso real por factura (F)"
-        descripcion="Por servicio, ya sin la plata en tránsito"
+        descripcion="Por servicio, sin IVA ni plata en tránsito"
         filas={d.factura}
         vacio="No se registraron cobros por factura."
       />
