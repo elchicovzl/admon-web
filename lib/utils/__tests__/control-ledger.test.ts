@@ -35,6 +35,7 @@ import {
   egresoRealDelPeriodo,
   desglosarPeriodo,
   SIN_DESGLOSE,
+  itemsDelCorte,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -1404,5 +1405,162 @@ describe('el IVA no es ingreso', () => {
     )
 
     expect(r.factura).toEqual([{ nombre: 'Administracion', monto: 126_050, movs: 1 }])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('itemsDelCorte', () => {
+  const RECAUDO = 'ccatrecaudo1'
+  const EN_TRANSITO = new Set([RECAUDO])
+
+  const mov = (over: Record<string, unknown> = {}) => ({
+    id: 'cmov1',
+    fecha: new Date('2026-07-15'),
+    concepto: 'Cobro',
+    bolsillo: 'ADMON',
+    contraparte: null,
+    tipo: TipoMovimiento.INGRESO,
+    grupo: GrupoCategoria.COBRO_FACTURA,
+    categoriaId: 'ccatcobro001',
+    categoria: 'Cobro de factura',
+    esNomina: false,
+    persona: '—',
+    monto: 0,
+    detalles: [] as Array<{
+      servicio: string
+      monto: number
+      enTransito: boolean
+      impuesto: number
+    }>,
+    ...over,
+  })
+
+  it('aporta solo la parte del servicio pedido, ya sin IVA', () => {
+    // Un cobro que se desglosa en tres servicios aporta solo la parte de uno.
+    const [item] = itemsDelCorte(
+      [
+        mov({
+          monto: 729_000,
+          detalles: [
+            { servicio: 'Administracion', monto: 150_000, enTransito: false, impuesto: 23_950 },
+            { servicio: 'Recaudo para Terceros', monto: 579_000, enTransito: true, impuesto: 0 },
+          ],
+        }),
+      ],
+      'factura',
+      'Administracion',
+      EN_TRANSITO
+    )
+
+    expect(item!.aporta).toBe(126_050)
+    // El monto completo se conserva, para poder ubicar el movimiento.
+    expect(item!.monto).toBe(729_000)
+  })
+
+  it('suma las líneas repetidas del mismo servicio en un solo item', () => {
+    const [item] = itemsDelCorte(
+      [
+        mov({
+          monto: 300_000,
+          detalles: [
+            { servicio: 'Administracion', monto: 100_000, enTransito: false, impuesto: 0 },
+            { servicio: 'Administracion', monto: 200_000, enTransito: false, impuesto: 0 },
+          ],
+        }),
+      ],
+      'factura',
+      'Administracion',
+      EN_TRANSITO
+    )
+
+    expect(item!.aporta).toBe(300_000)
+  })
+
+  it('no mezcla cotizaciones con facturas', () => {
+    const movs = [
+      mov({ grupo: GrupoCategoria.COBRO_COTIZACION, monto: 100_000,
+            detalles: [{ servicio: 'Independiente 03', monto: 100_000, enTransito: false, impuesto: 0 }] }),
+    ]
+
+    expect(itemsDelCorte(movs, 'factura', 'Independiente 03', EN_TRANSITO)).toEqual([])
+    expect(itemsDelCorte(movs, 'cotizacion', 'Independiente 03', EN_TRANSITO)).toHaveLength(1)
+  })
+
+  it('los cobros sin desglose se encuentran por su fila propia', () => {
+    const [item] = itemsDelCorte(
+      [mov({ monto: 2_431_617 })],
+      'factura',
+      SIN_DESGLOSE,
+      EN_TRANSITO
+    )
+
+    expect(item!.aporta).toBe(2_431_617)
+  })
+
+  it('los egresos salen por categoría, sin los que solo pasan', () => {
+    const movs = [
+      mov({ tipo: TipoMovimiento.EGRESO, monto: 12_761_900, categoria: 'Otros honorarios' }),
+      mov({ tipo: TipoMovimiento.EGRESO, monto: 63_875_000, categoriaId: RECAUDO,
+            categoria: 'Ingresos recibidos para terceros' }),
+    ]
+
+    expect(itemsDelCorte(movs, 'egresos', 'Otros honorarios', EN_TRANSITO)).toHaveLength(1)
+    expect(
+      itemsDelCorte(movs, 'egresos', 'Ingresos recibidos para terceros', EN_TRANSITO)
+    ).toEqual([])
+  })
+
+  it('la nómina sale por persona', () => {
+    const movs = [
+      mov({ tipo: TipoMovimiento.EGRESO, monto: 1_600_000, esNomina: true,
+            categoria: 'Otros honorarios', persona: 'LINA TATIANA' }),
+      mov({ tipo: TipoMovimiento.EGRESO, monto: 1_200_000, esNomina: true,
+            categoria: 'Otros honorarios', persona: 'HECTOR' }),
+    ]
+
+    const items = itemsDelCorte(movs, 'nomina', 'LINA TATIANA', EN_TRANSITO)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]!.aporta).toBe(1_600_000)
+  })
+
+  it('un egreso que no es nómina no aparece en el corte de nómina', () => {
+    const movs = [
+      mov({ tipo: TipoMovimiento.EGRESO, monto: 500_000, esNomina: false, persona: 'LINA' }),
+    ]
+
+    expect(itemsDelCorte(movs, 'nomina', 'LINA', EN_TRANSITO)).toEqual([])
+  })
+
+  it('ordena de más reciente a más viejo', () => {
+    // Al abrir una fila lo primero que se busca es el último movimiento.
+    const movs = [
+      mov({ id: 'a', fecha: new Date('2026-07-01'), tipo: TipoMovimiento.EGRESO, monto: 1, categoria: 'X' }),
+      mov({ id: 'b', fecha: new Date('2026-07-20'), tipo: TipoMovimiento.EGRESO, monto: 1, categoria: 'X' }),
+      mov({ id: 'c', fecha: new Date('2026-07-10'), tipo: TipoMovimiento.EGRESO, monto: 1, categoria: 'X' }),
+    ]
+
+    expect(itemsDelCorte(movs, 'egresos', 'X', EN_TRANSITO).map((i) => i.movimientoId)).toEqual([
+      'b', 'c', 'a',
+    ])
+  })
+
+  it('lo que suma el corte coincide con lo que dice el desglose', () => {
+    // Es la razón de que las dos vistas usen la misma entrada: si el detalle
+    // se consultara aparte, podrían divergir sin que nadie se entere.
+    const movs = [
+      mov({ id: 'a', tipo: TipoMovimiento.EGRESO, monto: 900_000, categoria: 'Otros honorarios' }),
+      mov({ id: 'b', tipo: TipoMovimiento.EGRESO, monto: 100_000, categoria: 'Otros honorarios' }),
+      mov({ id: 'c', tipo: TipoMovimiento.EGRESO, monto: 500_000, categoria: 'Papelería' }),
+    ]
+
+    const delDesglose = desglosarPeriodo(movs, EN_TRANSITO).egresos.find(
+      (f) => f.nombre === 'Otros honorarios'
+    )!
+    const delCorte = itemsDelCorte(movs, 'egresos', 'Otros honorarios', EN_TRANSITO)
+
+    expect(sumarMontos(delCorte.map((i) => i.aporta))).toBe(delDesglose.monto)
   })
 })

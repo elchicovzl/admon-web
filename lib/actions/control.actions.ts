@@ -87,6 +87,7 @@ import {
   contrastarIntermediados,
   desglosarPeriodo,
   egresoRealDelPeriodo,
+  itemsDelCorte,
   resumirNomina,
   ingresoPorServicio,
   ingresosPorNaturaleza,
@@ -95,7 +96,10 @@ import {
   type LineaDeDocumento,
   type DetalleParaReporte,
   type MovimientoDeNomina,
+  type CorteDelDesglose,
+  type ItemDelCorte,
   type MovimientoParaContraste,
+  type MovimientoParaCorte,
   type MovimientoParaDesglose,
   type MovimientoParaEgreso,
   type MovimientoParaNaturaleza,
@@ -3246,3 +3250,88 @@ function personaDelMovimiento(m: {
   const beneficiario = m.concepto.match(/^Pago #\S+ — (.+)$/)
   return beneficiario?.[1]?.trim() || m.concepto
 }
+
+/**
+ * Los movimientos que componen una fila del desglose del mes.
+ *
+ * Se vuelve a leer el periodo entero y se filtra con `itemsDelCorte`, la MISMA
+ * función que arma el resumen. Podría hacerse con un SQL más chico y directo,
+ * pero entonces habría dos lugares donde vive la regla —qué se descarta por
+ * estar en tránsito, cuánto IVA se resta, cómo se identifica a una persona— y
+ * el día que una cambie, la otra vista quedaría mintiendo en silencio.
+ */
+export const getDetalleDelCorte = cache(
+  async (input: {
+    periodo: string
+    corte: CorteDelDesglose
+    clave: string
+  }): Promise<ActionResponse<{ items: ItemDelCorte[]; total: number }>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    if (!input.clave) return { success: false, error: 'Falta indicar la fila' }
+
+    const [movimientos, enTransito] = await Promise.all([
+      prisma.movimiento.findMany({
+        where: { periodo: input.periodo },
+        select: {
+          id: true,
+          fecha: true,
+          tipo: true,
+          monto: true,
+          concepto: true,
+          categoriaId: true,
+          categoria: { select: { nombre: true, grupo: true, esNomina: true } },
+          bolsillo: { select: { nombre: true } },
+          contraparte: { select: { nombre: true } },
+          detalleServicios: {
+            select: {
+              monto: true,
+              impuesto: true,
+              servicio: { select: { nombre: true, enTransito: true } },
+            },
+          },
+        },
+      }),
+      prisma.servicioAlegra.findMany({
+        where: { enTransito: true, categoriaEgresoId: { not: null } },
+        select: { categoriaEgresoId: true },
+      }),
+    ])
+
+    const paraCorte: MovimientoParaCorte[] = movimientos.map((m) => ({
+      id: m.id,
+      fecha: m.fecha,
+      concepto: m.concepto,
+      bolsillo: m.bolsillo.nombre,
+      contraparte: m.contraparte?.nombre ?? null,
+      tipo: m.tipo,
+      monto: decimalANumero(m.monto),
+      grupo: m.categoria.grupo,
+      categoriaId: m.categoriaId,
+      categoria: m.categoria.nombre,
+      esNomina: m.categoria.esNomina,
+      persona: personaDelMovimiento(m),
+      detalles: m.detalleServicios.map((d) => ({
+        servicio: d.servicio.nombre,
+        monto: decimalANumero(d.monto),
+        enTransito: d.servicio.enTransito,
+        impuesto: decimalANumero(d.impuesto),
+      })),
+    }))
+
+    const items = itemsDelCorte(
+      paraCorte,
+      input.corte,
+      input.clave,
+      new Set(
+        enTransito.map((s) => s.categoriaEgresoId).filter((id): id is string => id !== null)
+      )
+    )
+
+    return {
+      success: true,
+      data: { items, total: sumarMontos(items.map((i) => i.aporta)) },
+    }
+  }
+)

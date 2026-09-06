@@ -18,9 +18,11 @@ import type {
 } from '@prisma/client'
 import type {
   ContrasteIntermediado,
+  CorteDelDesglose,
   DesgloseDelMes,
   EgresoReal,
   FilaDesglose,
+  ItemDelCorte,
   EstadoPrestamo,
   ResumenNomina,
   EstadoServicio,
@@ -30,9 +32,11 @@ import type {
 
 export type {
   ContrasteIntermediado,
+  CorteDelDesglose,
   DesgloseDelMes,
   EgresoReal,
   FilaDesglose,
+  ItemDelCorte,
   EstadoPrestamo,
   ResumenNomina,
   EstadoServicio,

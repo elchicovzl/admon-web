@@ -103,6 +103,7 @@ import {
   sincronizarServiciosAlegra,
   getReporteAnual,
   getNominaDelAnio,
+  getDetalleDelCorte,
   getPagosDelPeriodo,
   importarPagosComoEgresos,
 } from '../control.actions'
@@ -2907,5 +2908,114 @@ describe('getResumenPeriodo — desglose del mes', () => {
 
     expect(suma).toBe(res.data!.egresoReal.neto)
     expect(suma).toBe(20_557_347)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('getDetalleDelCorte', () => {
+  const RECAUDO = 'ccatrecaudo1'
+
+  const fila = (over: Record<string, unknown>) => ({
+    id: 'cmov0000001',
+    fecha: new Date('2026-07-15'),
+    tipo: TipoMovimiento.EGRESO,
+    monto: dec(0),
+    concepto: 'X',
+    categoriaId: CATEGORIA,
+    categoria: { nombre: 'Gasto', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false },
+    bolsillo: { nombre: 'ADMON' },
+    contraparte: null,
+    detalleServicios: [],
+    ...over,
+  })
+
+  function preparar(movimientos: unknown[], enTransito: string[] = []) {
+    prismaMock.movimiento.findMany.mockResolvedValue(movimientos)
+    prismaMock.servicioAlegra.findMany.mockResolvedValue(
+      enTransito.map((id) => ({ categoriaEgresoId: id }))
+    )
+  }
+
+  it('devuelve los movimientos de una categoría de egreso', async () => {
+    preparar([
+      fila({ monto: dec(900_000), categoria: { nombre: 'Otros honorarios', grupo: GrupoCategoria.OTRO, esNomina: true } }),
+      fila({ id: 'otro', monto: dec(500_000) }),
+    ])
+
+    const res = await getDetalleDelCorte({
+      periodo: '2026-07', corte: 'egresos', clave: 'Otros honorarios',
+    })
+
+    expect(res.data!.items).toHaveLength(1)
+    expect(res.data!.total).toBe(900_000)
+  })
+
+  it('en un cobro desglosado aporta SOLO la parte del servicio, sin IVA', async () => {
+    // Es lo que hace que el sheet cuadre con la fila que se abrió.
+    preparar([
+      fila({
+        tipo: TipoMovimiento.INGRESO,
+        monto: dec(729_000),
+        categoria: { nombre: 'Cobro de factura', grupo: GrupoCategoria.COBRO_FACTURA, esNomina: false },
+        detalleServicios: [
+          { monto: dec(150_000), impuesto: dec(23_950), servicio: { nombre: 'Administracion', enTransito: false } },
+          { monto: dec(579_000), impuesto: dec(0), servicio: { nombre: 'Recaudo para Terceros', enTransito: true } },
+        ],
+      }),
+    ])
+
+    const res = await getDetalleDelCorte({
+      periodo: '2026-07', corte: 'factura', clave: 'Administracion',
+    })
+
+    expect(res.data!.items[0]!.aporta).toBe(126_050)
+    expect(res.data!.items[0]!.monto).toBe(729_000)
+  })
+
+  it('no devuelve los egresos que solo pasan', async () => {
+    preparar(
+      [fila({ monto: dec(63_875_000), categoriaId: RECAUDO,
+              categoria: { nombre: 'Ingresos recibidos para terceros', grupo: GrupoCategoria.OTRO, esNomina: false } })],
+      [RECAUDO]
+    )
+
+    const res = await getDetalleDelCorte({
+      periodo: '2026-07', corte: 'egresos', clave: 'Ingresos recibidos para terceros',
+    })
+
+    expect(res.data!.items).toEqual([])
+  })
+
+  it('la nómina sale por persona, con la contraparte cuando existe', async () => {
+    preparar([
+      fila({
+        monto: dec(923_000),
+        concepto: 'YUDY',
+        contraparte: { nombre: 'Yudy' },
+        categoria: { nombre: 'Pago mensual fijo', grupo: GrupoCategoria.NOMINA_FIJA, esNomina: true },
+      }),
+    ])
+
+    const res = await getDetalleDelCorte({ periodo: '2026-07', corte: 'nomina', clave: 'Yudy' })
+
+    expect(res.data!.items).toHaveLength(1)
+  })
+
+  it('sin fila indicada no consulta nada', async () => {
+    const res = await getDetalleDelCorte({ periodo: '2026-07', corte: 'egresos', clave: '' })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect(
+      (await getDetalleDelCorte({ periodo: '2026-07', corte: 'egresos', clave: 'X' })).success
+    ).toBe(false)
+    expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
   })
 })

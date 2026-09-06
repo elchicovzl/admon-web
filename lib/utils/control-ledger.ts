@@ -1055,3 +1055,110 @@ export function desglosarPeriodo(
     nomina: aFilas(nomina),
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Abrir una fila del desglose: qué movimientos la componen
+// ---------------------------------------------------------------------------
+//
+// El detalle se calcula con LAS MISMAS REGLAS que el resumen —el mismo
+// descarte de la plata en tránsito, el mismo IVA restado, la misma persona—
+// porque son la misma función leyendo la misma entrada. Si el detalle se
+// consultara aparte, con su propio SQL, el día que cambie una regla una de las
+// dos vistas quedaría mintiendo y nadie se enteraría hasta que los números no
+// dieran.
+
+export type CorteDelDesglose = 'cotizacion' | 'factura' | 'egresos' | 'nomina'
+
+export interface ItemDelCorte {
+  movimientoId: string
+  fecha: Date
+  concepto: string
+  /**
+   * Lo que este movimiento aporta a la fila.
+   *
+   * No siempre es su monto: un cobro que se desglosa en tres servicios aporta
+   * solo la parte de uno, y ya sin IVA.
+   */
+  aporta: number
+  /** El monto completo del movimiento, para poder ubicarlo. */
+  monto: number
+  categoria: string
+  bolsillo: string
+  contraparte: string | null
+}
+
+export interface MovimientoParaCorte extends MovimientoParaDesglose {
+  id: string
+  fecha: Date
+  concepto: string
+  bolsillo: string
+  contraparte: string | null
+}
+
+/**
+ * Los movimientos que componen una fila del desglose.
+ *
+ * `clave` es el nombre de la fila: un servicio en los cobros, una categoría en
+ * los egresos, una persona en la nómina.
+ */
+export function itemsDelCorte(
+  movimientos: MovimientoParaCorte[],
+  corte: CorteDelDesglose,
+  clave: string,
+  categoriasEnTransito: Set<string>
+): ItemDelCorte[] {
+  const items: ItemDelCorte[] = []
+
+  const agregar = (m: MovimientoParaCorte, aporta: number) =>
+    items.push({
+      movimientoId: m.id,
+      fecha: m.fecha,
+      concepto: m.concepto,
+      aporta,
+      monto: m.monto,
+      categoria: m.categoria,
+      bolsillo: m.bolsillo,
+      contraparte: m.contraparte,
+    })
+
+  for (const m of movimientos) {
+    if (corte === 'cotizacion' || corte === 'factura') {
+      if (m.tipo !== TipoMovimiento.INGRESO) continue
+      const grupoEsperado =
+        corte === 'cotizacion'
+          ? GrupoCategoria.COBRO_COTIZACION
+          : GrupoCategoria.COBRO_FACTURA
+      if (m.grupo !== grupoEsperado) continue
+
+      if (m.detalles.length === 0) {
+        if (clave === SIN_DESGLOSE) agregar(m, m.monto)
+        continue
+      }
+
+      // Un mismo servicio puede venir en varias líneas del documento: se
+      // suman antes de mostrar una fila, igual que en el resumen.
+      const aporta = sumarMontos(
+        m.detalles
+          .filter((d) => !d.enTransito && d.servicio === clave)
+          .map((d) => redondearMonto(d.monto - d.impuesto))
+      )
+      if (aporta !== 0) agregar(m, aporta)
+      continue
+    }
+
+    if (m.tipo !== TipoMovimiento.EGRESO) continue
+    if (categoriasEnTransito.has(m.categoriaId)) continue
+
+    if (corte === 'egresos') {
+      if (m.categoria === clave) agregar(m, m.monto)
+      continue
+    }
+
+    if (m.esNomina && m.persona === clave) agregar(m, m.monto)
+  }
+
+  // De más reciente a más viejo: al abrir una fila lo primero que se busca es
+  // el último movimiento, no el primero.
+  return items.sort((a, b) => b.fecha.getTime() - a.fecha.getTime())
+}
