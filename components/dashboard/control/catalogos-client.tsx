@@ -22,6 +22,7 @@ import {
   setServicioAlegraActivo,
   setServicioAlegraEnTransito,
   setCategoriaEgresoDeServicio,
+  setCategoriaEsNomina,
 } from '@/lib/actions/control.actions'
 import type {
   BolsilloListItem,
@@ -339,6 +340,7 @@ export function CatalogosClient({
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Grupo</TableHead>
+                <TableHead className="w-[130px]">Es nómina</TableHead>
                 <TableHead className="w-[90px] text-right">Activa</TableHead>
               </TableRow>
             </TableHeader>
@@ -349,6 +351,33 @@ export function CatalogosClient({
                   <TableCell>
                     <Badge variant="outline">{ETIQUETA_GRUPO[c.grupo]}</Badge>
                   </TableCell>
+
+                  {/* Lo decide el negocio, no el nombre: el contador externo
+                      cobra por honorarios y cuenta como nómina, y una dotación
+                      comprada en una tienda también es costo del equipo aunque
+                      el beneficiario sea la tienda. */}
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <SwitchActivo
+                        activo={c.esNomina}
+                        onCambiar={async (valor) => {
+                          const r = await setCategoriaEsNomina({ id: c.id, esNomina: valor })
+                          if (r.success) {
+                            setListaCategorias((a) =>
+                              a.map((x) => (x.id === c.id ? { ...x, esNomina: valor } : x))
+                            )
+                            toast.success(r.message ?? 'Listo')
+                          } else toast.error(r.error ?? 'No se pudo')
+                        }}
+                      />
+                      {c.esNomina && (
+                        <Badge variant="secondary" className="text-xs">
+                          Nómina
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+
                   <TableCell className="text-right">
                     <SwitchActivo
                       activo={c.isActive}

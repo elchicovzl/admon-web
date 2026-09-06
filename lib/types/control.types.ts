@@ -19,6 +19,7 @@ import type {
 import type {
   ContrasteIntermediado,
   EstadoPrestamo,
+  ResumenNomina,
   EstadoServicio,
   IngresoDeNaturaleza,
   IngresosPorNaturaleza,
@@ -27,6 +28,7 @@ import type {
 export type {
   ContrasteIntermediado,
   EstadoPrestamo,
+  ResumenNomina,
   EstadoServicio,
   IngresoDeNaturaleza,
   IngresosPorNaturaleza,
@@ -65,6 +67,8 @@ export interface CategoriaListItem {
   nombre: string
   grupo: GrupoCategoria
   isActive: boolean
+  /** Esta categoría es costo de nómina. Ver la pantalla de Nómina. */
+  esNomina: boolean
 }
 
 export interface TipoServicioListItem {

@@ -129,6 +129,20 @@ export const toggleServicioEnTransitoSchema = z.object({
 export type ToggleServicioEnTransitoInput = z.infer<typeof toggleServicioEnTransitoSchema>
 
 /**
+ * Marca una categoría como costo de nómina.
+ *
+ * Va aparte del toggle genérico por lo mismo que `enTransito`: apagar un
+ * registro es higiene de catálogo, declarar que algo es nómina cambia lo que
+ * la empresa cree que le cuesta su equipo.
+ */
+export const toggleEsNominaSchema = z.object({
+  id: cuid('Categoría inválida'),
+  esNomina: z.boolean(),
+})
+
+export type ToggleEsNominaInput = z.infer<typeof toggleEsNominaSchema>
+
+/**
  * Ata un servicio en tránsito con la categoría por la que su plata sale.
  *
  * `null` es un valor válido y significativo: desatar el vínculo deja el

@@ -102,6 +102,7 @@ import {
   importarFacturasComoIngresos,
   sincronizarServiciosAlegra,
   getReporteAnual,
+  getNominaDelAnio,
   getPagosDelPeriodo,
   importarPagosComoEgresos,
 } from '../control.actions'
@@ -2596,5 +2597,106 @@ describe('el fallback de categoría no puede disfrazarse de clasificación', () 
     const res = await getPagosDelPeriodo('2026-03')
 
     expect(res.data!.pagos[0]!.conceptos).toEqual(['Otros honorarios'])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('getNominaDelAnio', () => {
+  const mov = (
+    concepto: string,
+    monto: number,
+    alegraPaymentId: string | null,
+    contraparte: { nombre: string } | null = null,
+    categoria = 'Otros honorarios',
+    periodo = '2026-07'
+  ) => ({
+    periodo,
+    monto: dec(monto),
+    concepto,
+    alegraPaymentId,
+    categoria: { nombre: categoria },
+    contraparte,
+  })
+
+  it('pide SOLO los egresos de categorías marcadas como nómina', async () => {
+    // El flag lo decide el negocio: el contador externo cobra por honorarios y
+    // cuenta como nómina. Deducirlo del nombre sería adivinar.
+    prismaMock.movimiento.findMany.mockResolvedValue([])
+
+    await getNominaDelAnio(2026)
+
+    expect(prismaMock.movimiento.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tipo: TipoMovimiento.EGRESO,
+          categoria: { esNomina: true },
+          periodo: { startsWith: '2026-' },
+        }),
+      })
+    )
+  })
+
+  it('separa lo de Alegra de lo que se paga por debajo', async () => {
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      mov('Pago #708 — YUDY MILENA JARAMILLO QUIROGA', 1_356_800, '3579'),
+      mov('YUDY', 923_000, null, { nombre: 'Yudy' }, 'Pago mensual fijo', '2026-04'),
+    ])
+
+    const res = await getNominaDelAnio(2026)
+
+    expect(res.data!.totalPorArriba).toBe(1_356_800)
+    expect(res.data!.totalPorDebajo).toBe(923_000)
+  })
+
+  it('"por arriba" es exactamente tener alegraPaymentId', async () => {
+    // No es un campo aparte: un flag se desincronizaría con el hecho.
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      mov('cargado a mano', 500_000, null),
+    ])
+
+    const res = await getNominaDelAnio(2026)
+
+    expect(res.data!.totalPorDebajo).toBe(500_000)
+    expect(res.data!.totalPorArriba).toBe(0)
+  })
+
+  it('la contraparte manda sobre el nombre del concepto', async () => {
+    // Es la única identidad que el negocio eligió a propósito.
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      mov('Pago #708 — YUDY MILENA JARAMILLO QUIROGA', 1_000, '3579', { nombre: 'Yudy' }),
+    ])
+
+    const res = await getNominaDelAnio(2026)
+
+    expect(res.data!.personas[0]!.persona).toBe('Yudy')
+  })
+
+  it('sin contraparte, saca el beneficiario del concepto del pago', async () => {
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      mov('Pago #567 — ANDREA BEDOYA', 950_000, '2893'),
+    ])
+
+    const res = await getNominaDelAnio(2026)
+
+    expect(res.data!.personas[0]!.persona).toBe('ANDREA BEDOYA')
+  })
+
+  it('un concepto que no tiene la forma "Pago #n — X" se usa entero', async () => {
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      mov('CESANTIAS JACKE POR DEBAJO', 673_458, null),
+    ])
+
+    const res = await getNominaDelAnio(2026)
+
+    expect(res.data!.personas[0]!.persona).toBe('CESANTIAS JACKE POR DEBAJO')
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect((await getNominaDelAnio(2026)).success).toBe(false)
+    expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
   })
 })

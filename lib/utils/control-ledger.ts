@@ -690,3 +690,125 @@ export function contrastarIntermediados(
     }
   })
 }
+
+
+// ---------------------------------------------------------------------------
+// Nómina: la de arriba y la de abajo, juntas
+// ---------------------------------------------------------------------------
+//
+// Alegra NO expone nómina en su API —no hay endpoints de empleados, contratos
+// ni desprendibles—, así que la nómina se reconstruye desde los EGRESOS ya
+// registrados. Eso tiene una ventaja que el endpoint no daría: junta las dos
+// vías por las que esta empresa paga a su gente.
+//
+//   "Por arriba"  el pago está en Alegra (tiene alegraPaymentId)
+//   "Por debajo"  no está en Alegra: viene del Excel o se cargó a mano
+//
+// La distinción NO es un campo aparte: es exactamente "¿este movimiento vino
+// de un pago de Alegra?". Un flag separado se desincronizaría con el hecho.
+
+export interface MovimientoDeNomina {
+  periodo: string
+  monto: number
+  /** Nombre con el que se identifica a quien cobró. */
+  persona: string
+  /** El pago vive en Alegra. Si no, es "por debajo". */
+  porArriba: boolean
+  categoria: string
+}
+
+export interface FilaDeNomina {
+  /** Persona o proveedor al que se le pagó. */
+  persona: string
+  porArriba: number
+  porDebajo: number
+  total: number
+  movs: number
+}
+
+export interface MesDeNomina {
+  periodo: string
+  porArriba: number
+  porDebajo: number
+  total: number
+}
+
+export interface ResumenNomina {
+  meses: MesDeNomina[]
+  personas: FilaDeNomina[]
+  categorias: FilaDeNomina[]
+  totalPorArriba: number
+  totalPorDebajo: number
+  total: number
+}
+
+/**
+ * Arma el resumen de nómina desde los movimientos ya registrados.
+ *
+ * Las personas NO se fusionan por parecido de nombre. En estos datos conviven
+ * "ANDREA" (del Excel) y "ANDREA BEDOYA" (de Alegra), y también existe
+ * "DANIELA ARANGO BEDOYA": adivinar cuál es cuál mezclaría el sueldo de dos
+ * personas distintas. Aparecen como filas separadas hasta que alguien las una
+ * a propósito asignándoles la misma contraparte, y la pantalla lo dice.
+ */
+export function resumirNomina(movimientos: MovimientoDeNomina[]): ResumenNomina {
+  const porMes = new Map<string, { arriba: number[]; abajo: number[] }>()
+  const porPersona = new Map<string, { arriba: number[]; abajo: number[]; movs: number }>()
+  const porCategoria = new Map<string, { arriba: number[]; abajo: number[]; movs: number }>()
+
+  const vacio = () => ({ arriba: [] as number[], abajo: [] as number[], movs: 0 })
+
+  for (const m of movimientos) {
+    const mes = porMes.get(m.periodo) ?? { arriba: [], abajo: [] }
+    const persona = porPersona.get(m.persona) ?? vacio()
+    const categoria = porCategoria.get(m.categoria) ?? vacio()
+
+    const lado = m.porArriba ? 'arriba' : 'abajo'
+    mes[lado].push(m.monto)
+    persona[lado].push(m.monto)
+    categoria[lado].push(m.monto)
+    persona.movs += 1
+    categoria.movs += 1
+
+    porMes.set(m.periodo, mes)
+    porPersona.set(m.persona, persona)
+    porCategoria.set(m.categoria, categoria)
+  }
+
+  const aFilas = (
+    mapa: Map<string, { arriba: number[]; abajo: number[]; movs: number }>
+  ): FilaDeNomina[] =>
+    [...mapa.entries()]
+      .map(([persona, v]) => {
+        const porArriba = sumarMontos(v.arriba)
+        const porDebajo = sumarMontos(v.abajo)
+        return {
+          persona,
+          porArriba,
+          porDebajo,
+          total: sumarMontos([porArriba, porDebajo]),
+          movs: v.movs,
+        }
+      })
+      .sort((a, b) => b.total - a.total)
+
+  const meses = [...porMes.entries()]
+    .map(([periodo, v]) => {
+      const porArriba = sumarMontos(v.arriba)
+      const porDebajo = sumarMontos(v.abajo)
+      return { periodo, porArriba, porDebajo, total: sumarMontos([porArriba, porDebajo]) }
+    })
+    .sort((a, b) => a.periodo.localeCompare(b.periodo))
+
+  const totalPorArriba = sumarMontos(meses.map((m) => m.porArriba))
+  const totalPorDebajo = sumarMontos(meses.map((m) => m.porDebajo))
+
+  return {
+    meses,
+    personas: aFilas(porPersona),
+    categorias: aFilas(porCategoria),
+    totalPorArriba,
+    totalPorDebajo,
+    total: sumarMontos([totalPorArriba, totalPorDebajo]),
+  }
+}

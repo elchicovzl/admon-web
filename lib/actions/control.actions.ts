@@ -63,6 +63,7 @@ import {
   type CierreMensualView,
   type ResumenPeriodo,
   type ReporteAnual,
+  type ResumenNomina,
   type MovimientosPaginados,
   type FilaAgrupada,
   type CotizacionParaIngreso,
@@ -84,12 +85,14 @@ import {
   estadoServicio,
   contraMovimiento,
   contrastarIntermediados,
+  resumirNomina,
   ingresoPorServicio,
   ingresosPorNaturaleza,
   repartirEntreServicios,
   sumarMontos,
   type LineaDeDocumento,
   type DetalleParaReporte,
+  type MovimientoDeNomina,
   type MovimientoParaContraste,
   type MovimientoParaNaturaleza,
   type MovimientoParaSaldo,
@@ -100,6 +103,7 @@ import {
   createTipoServicioSchema,
   toggleCatalogoSchema,
   toggleServicioEnTransitoSchema,
+  toggleEsNominaSchema,
   asignarCategoriaEgresoSchema,
   createContraparteSchema,
   createMovimientoSchema,
@@ -117,6 +121,7 @@ import {
   type CreateTipoServicioInput,
   type ToggleCatalogoInput,
   type ToggleServicioEnTransitoInput,
+  type ToggleEsNominaInput,
   type AsignarCategoriaEgresoInput,
   type CreateContraparteInput,
   type CreateMovimientoInput,
@@ -298,7 +303,7 @@ export const getCategorias = cache(
     const categorias = await prisma.categoriaMovimiento.findMany({
       where: incluirInactivas ? undefined : { isActive: true },
       orderBy: [{ grupo: 'asc' }, { nombre: 'asc' }],
-      select: { id: true, nombre: true, grupo: true, isActive: true },
+      select: { id: true, nombre: true, grupo: true, isActive: true, esNomina: true },
     })
 
     return { success: true, data: categorias }
@@ -713,6 +718,35 @@ export async function setTipoServicioActivo(
   return { success: true, message: 'Listo' }
 }
 
+/**
+ * Declara si una categoría es costo de nómina.
+ *
+ * Lo decide el negocio y no el nombre: el contador externo cobra por
+ * honorarios y cuenta como nómina en esta empresa, y una dotación comprada en
+ * una tienda también es costo del equipo aunque el beneficiario sea la tienda.
+ */
+export async function setCategoriaEsNomina(
+  data: ToggleEsNominaInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = toggleEsNominaSchema.safeParse(data)
+  if (!validado.success) return { success: false, error: 'Datos inválidos' }
+
+  await prisma.categoriaMovimiento.update({
+    where: { id: validado.data.id },
+    data: { esNomina: validado.data.esNomina },
+  })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return {
+    success: true,
+    message: validado.data.esNomina ? 'Cuenta como nómina' : 'Ya no cuenta como nómina',
+  }
+}
+
 export async function setCategoriaActiva(
   data: ToggleCatalogoInput
 ): Promise<ActionResponse> {
@@ -777,7 +811,7 @@ export async function createCategoria(
 
   const existente = await prisma.categoriaMovimiento.findFirst({
     where: { nombre: { equals: nombre, mode: 'insensitive' } },
-    select: { id: true, nombre: true, grupo: true, isActive: true },
+    select: { id: true, nombre: true, grupo: true, isActive: true, esNomina: true },
   })
 
   if (existente) {
@@ -792,7 +826,7 @@ export async function createCategoria(
 
   const categoria = await prisma.categoriaMovimiento.create({
     data: { nombre, grupo },
-    select: { id: true, nombre: true, grupo: true, isActive: true },
+    select: { id: true, nombre: true, grupo: true, isActive: true, esNomina: true },
   })
 
   revalidatePath(RUTA_CONTROL)
@@ -3076,4 +3110,80 @@ export async function importarPagosComoEgresos(input: {
     message: `${creados} egreso${creados === 1 ? '' : 's'} registrado${creados === 1 ? '' : 's'}`,
     data: { creados, salteados: input.pagos.length - creados },
   }
+}
+
+// ---------------------------------------------------------------------------
+// Nómina
+// ---------------------------------------------------------------------------
+
+/**
+ * La nómina del año, juntando las dos vías por las que se paga a la gente.
+ *
+ * NO SALE DE UN ENDPOINT DE NÓMINA DE ALEGRA, PORQUE NO EXISTE. Verificado:
+ * /payrolls, /employees, /payslips y /contracts devuelven el mismo 403 que una
+ * ruta inventada, y el índice oficial de la documentación no lista ningún
+ * recurso de nómina. Lo único que hay es la API de proveedor electrónico, que
+ * sirve para EMITIR a la DIAN con otro token.
+ *
+ * Así que la nómina se reconstruye desde los EGRESOS ya registrados, y eso
+ * tiene una ventaja que el endpoint no daría: junta la nómina de Alegra con la
+ * "por debajo" del Excel, que es la única forma de ver cuánto cobra alguien de
+ * verdad.
+ */
+export const getNominaDelAnio = cache(
+  async (anio: number): Promise<ActionResponse<ResumenNomina>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const movimientos = await prisma.movimiento.findMany({
+      where: {
+        periodo: { startsWith: `${anio}-` },
+        tipo: TipoMovimiento.EGRESO,
+        categoria: { esNomina: true },
+      },
+      select: {
+        periodo: true,
+        monto: true,
+        concepto: true,
+        alegraPaymentId: true,
+        categoria: { select: { nombre: true } },
+        contraparte: { select: { nombre: true } },
+      },
+    })
+
+    const paraResumen: MovimientoDeNomina[] = movimientos.map((m) => ({
+      periodo: m.periodo,
+      monto: decimalANumero(m.monto),
+      persona: personaDelMovimiento(m),
+      // "Por arriba" es exactamente "el pago está en Alegra". No es un campo
+      // aparte porque un flag se desincronizaría con el hecho.
+      porArriba: m.alegraPaymentId !== null,
+      categoria: m.categoria.nombre,
+    }))
+
+    return { success: true, data: resumirNomina(paraResumen) }
+  }
+)
+
+/**
+ * Con qué nombre se identifica a quien cobró.
+ *
+ * La contraparte manda cuando existe: es la única identidad que el negocio
+ * eligió a propósito. Si no, se usa el beneficiario que quedó escrito en el
+ * concepto del pago de Alegra ("Pago #708 — YUDY MILENA JARAMILLO QUIROGA"),
+ * y como último recurso el concepto entero.
+ *
+ * NO se intenta emparejar nombres parecidos. En estos datos conviven "ANDREA"
+ * y "ANDREA BEDOYA", y además existe "DANIELA ARANGO BEDOYA": adivinar cuál es
+ * cuál mezclaría el sueldo de dos personas distintas. Aparecen separadas hasta
+ * que alguien las una a propósito con una contraparte.
+ */
+function personaDelMovimiento(m: {
+  concepto: string
+  contraparte: { nombre: string } | null
+}): string {
+  if (m.contraparte) return m.contraparte.nombre
+
+  const beneficiario = m.concepto.match(/^Pago #\S+ — (.+)$/)
+  return beneficiario?.[1]?.trim() || m.concepto
 }

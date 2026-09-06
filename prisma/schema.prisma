@@ -1113,6 +1113,21 @@ model CategoriaMovimiento {
   grupo     GrupoCategoria
   isActive  Boolean        @default(true)
 
+  /**
+   * Esta categoría es COSTO DE NÓMINA.
+   *
+   * Va como flag y no como grupo porque la nómina llega por dos vías que ya
+   * tienen su propio grupo y no se pueden fusionar: la de Alegra cae en
+   * categorías creadas desde su concepto contable ("Otros honorarios",
+   * "Aportes a EPS") que viven en OTRO, y la del Excel vive en NOMINA_FIJA y
+   * NOMINA_COMPLEMENTARIA. Un flag las cruza sin tocar los grupos, que el
+   * resto del código usa para otras cosas.
+   *
+   * Es editable: quién es nómina y quién no lo decide el negocio. El contador
+   * externo cuenta como nómina en esta empresa, por ejemplo.
+   */
+  esNomina  Boolean        @default(false)
+
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 

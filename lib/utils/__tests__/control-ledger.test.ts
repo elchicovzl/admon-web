@@ -31,6 +31,7 @@ import {
   ingresoPorServicio,
   ingresosPorNaturaleza,
   contrastarIntermediados,
+  resumirNomina,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -847,5 +848,114 @@ describe('contrastarIntermediados', () => {
 
   it('sin servicios en tránsito no devuelve nada', () => {
     expect(contrastarIntermediados([], [entrada('2026-08', 100)])).toEqual([])
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('resumirNomina', () => {
+  const mov = (
+    persona: string,
+    monto: number,
+    porArriba: boolean,
+    periodo = '2026-07',
+    categoria = 'Otros honorarios'
+  ) => ({ periodo, monto, persona, porArriba, categoria })
+
+  it('separa lo que se paga por arriba de lo que se paga por debajo', () => {
+    const r = resumirNomina([
+      mov('YUDY MILENA JARAMILLO QUIROGA', 1_356_800, true),
+      mov('YUDY', 923_000, false, '2026-04', 'Pago mensual fijo'),
+    ])
+
+    expect(r.totalPorArriba).toBe(1_356_800)
+    expect(r.totalPorDebajo).toBe(923_000)
+    expect(r.total).toBe(2_279_800)
+  })
+
+  it('NO fusiona personas por parecido de nombre', () => {
+    // En estos datos conviven "ANDREA" (Excel) y "ANDREA BEDOYA" (Alegra), y
+    // además existe "DANIELA ARANGO BEDOYA". Adivinar cuál es cuál mezclaría
+    // el sueldo de dos personas distintas.
+    const r = resumirNomina([
+      mov('ANDREA BEDOYA', 8_741_700, true),
+      mov('ANDREA', 770_000, false),
+    ])
+
+    expect(r.personas).toHaveLength(2)
+    expect(r.personas.map((p) => p.persona)).toEqual(['ANDREA BEDOYA', 'ANDREA'])
+  })
+
+  it('una persona que cobra por los dos lados suma en una sola fila', () => {
+    const r = resumirNomina([
+      mov('ANDREA BEDOYA', 1_000_000, true),
+      mov('ANDREA BEDOYA', 500_000, false),
+    ])
+
+    expect(r.personas).toHaveLength(1)
+    expect(r.personas[0]).toEqual({
+      persona: 'ANDREA BEDOYA',
+      porArriba: 1_000_000,
+      porDebajo: 500_000,
+      total: 1_500_000,
+      movs: 2,
+    })
+  })
+
+  it('ordena las personas de mayor a menor', () => {
+    const r = resumirNomina([
+      mov('CHICO', 100_000, true),
+      mov('GRANDE', 900_000, true),
+      mov('MEDIANO', 500_000, true),
+    ])
+
+    expect(r.personas.map((p) => p.persona)).toEqual(['GRANDE', 'MEDIANO', 'CHICO'])
+  })
+
+  it('agrupa por mes y ordena cronológicamente', () => {
+    const r = resumirNomina([
+      mov('A', 100, true, '2026-07'),
+      mov('B', 200, false, '2026-01'),
+      mov('C', 300, true, '2026-04'),
+    ])
+
+    expect(r.meses.map((m) => m.periodo)).toEqual(['2026-01', '2026-04', '2026-07'])
+    expect(r.meses[0]!.porDebajo).toBe(200)
+    expect(r.meses[0]!.porArriba).toBe(0)
+  })
+
+  it('agrupa también por categoría', () => {
+    // Sirve para ver que los aportes a seguridad social no se le pagan a la
+    // persona sino al operador, aunque sean costo de nómina.
+    const r = resumirNomina([
+      mov('LINA', 1_000_000, true, '2026-07', 'Otros honorarios'),
+      mov('SIMPLE S.A.', 430_700, true, '2026-07', 'Aportes a EPS'),
+    ])
+
+    expect(r.categorias.map((c) => c.persona)).toEqual(['Otros honorarios', 'Aportes a EPS'])
+    expect(r.categorias[1]!.total).toBe(430_700)
+  })
+
+  it('la suma de los meses da el total', () => {
+    const r = resumirNomina([
+      mov('A', 10_745_500, true, '2026-01'),
+      mov('B', 11_158_594, false, '2026-02'),
+    ])
+
+    expect(sumarMontos(r.meses.map((m) => m.total))).toBe(r.total)
+  })
+
+  it('sin movimientos devuelve todo en cero', () => {
+    const r = resumirNomina([])
+
+    expect(r).toEqual({
+      meses: [],
+      personas: [],
+      categorias: [],
+      totalPorArriba: 0,
+      totalPorDebajo: 0,
+      total: 0,
+    })
   })
 })

@@ -382,6 +382,11 @@ export function AppSidebar({ user }: AppSidebarProps) {
           icon: ArrowUpCircle,
         },
         {
+          title: 'Nómina',
+          href: '/dashboard/control/nomina',
+          icon: Users,
+        },
+        {
           title: 'Préstamos',
           href: '/dashboard/control/prestamos',
           icon: HandCoins,
