@@ -19,6 +19,7 @@ import {
 } from '@/lib/utils/control-format'
 import { cn } from '@/lib/utils'
 import { Monto } from '@/components/dashboard/control/monto'
+import type { FilaDesglose } from '@/lib/types/control.types'
 import { ControlStatsSkeleton, ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
 import { SelectorPeriodo } from '@/components/dashboard/control/selector-periodo'
 
@@ -226,6 +227,103 @@ async function Kpis({ periodo }: { periodo: string }) {
   )
 }
 
+/**
+ * Una de las cuatro listas del desglose.
+ *
+ * Muestra el total arriba para que se pueda contrastar de un vistazo con la
+ * tarjeta de la que cuelga: si no coinciden, hay algo mal y se ve.
+ */
+function ListaDesglose({
+  titulo,
+  descripcion,
+  filas,
+  vacio,
+}: {
+  titulo: string
+  descripcion: string
+  filas: FilaDesglose[]
+  vacio: string
+}) {
+  const total = filas.reduce((a, f) => a + f.monto, 0)
+  const mayor = Math.max(...filas.map((f) => f.monto), 1)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <CardTitle className="text-sm font-medium">{titulo}</CardTitle>
+          <span className="text-sm font-bold tabular-nums">
+            {formatearMonto(total)}
+          </span>
+        </div>
+        <CardDescription className="text-xs">{descripcion}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {filas.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">{vacio}</p>
+        ) : (
+          <ul className="space-y-2">
+            {filas.map((f) => (
+              <li key={f.nombre} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="truncate" title={f.nombre}>
+                    {f.nombre}
+                  </span>
+                  <span className="shrink-0 tabular-nums">{formatearMonto(f.monto)}</span>
+                </div>
+                {/* La barra es para comparar de un vistazo, no para leer el
+                    valor: el número ya está al lado. */}
+                <div className="h-1.5 w-full rounded-full bg-muted">
+                  <div
+                    className="h-1.5 rounded-full bg-primary"
+                    style={{ width: `${Math.round((f.monto / mayor) * 100)}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+async function DesgloseDelPeriodo({ periodo }: { periodo: string }) {
+  const resultado = await getResumenPeriodo(periodo)
+  if (!resultado.success || !resultado.data) return null
+
+  const d = resultado.data.desglose
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <ListaDesglose
+        titulo="Ingresos por cotización (C)"
+        descripcion="Por qué servicio entró"
+        filas={d.cotizacion}
+        vacio="No se registraron cobros por cotización."
+      />
+      <ListaDesglose
+        titulo="Ingreso real por factura (F)"
+        descripcion="Por servicio, ya sin la plata en tránsito"
+        filas={d.factura}
+        vacio="No se registraron cobros por factura."
+      />
+      <ListaDesglose
+        titulo="Egresos reales"
+        descripcion="En qué se gastó, sin lo que solo pasó"
+        filas={d.egresos}
+        vacio="No se registraron egresos."
+      />
+      <ListaDesglose
+        titulo="Nómina"
+        descripcion="Cuánto cobró cada quien, por arriba y por debajo"
+        filas={d.nomina}
+        vacio="No se registró nómina en el mes."
+      />
+    </div>
+  )
+}
+
 async function SaldosPorBolsillo({ periodo }: { periodo: string }) {
   const resultado = await getResumenPeriodo(periodo)
   if (!resultado.success || !resultado.data) return null
@@ -386,6 +484,10 @@ export default async function ControlPage({ searchParams }: PageProps) {
 
       <Suspense fallback={<ControlStatsSkeleton />}>
         <Kpis periodo={periodo} />
+      </Suspense>
+
+      <Suspense fallback={<ControlTableSkeleton filas={6} columnas={4} />}>
+        <DesgloseDelPeriodo periodo={periodo} />
       </Suspense>
 
       <Suspense fallback={<ControlTableSkeleton filas={5} columnas={6} />}>

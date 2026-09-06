@@ -900,3 +900,114 @@ export function egresoRealDelPeriodo(
       .sort((a, b) => b.monto - a.monto),
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Desglose del mes: qué hay adentro de cada uno de los cuatro números
+// ---------------------------------------------------------------------------
+//
+// Las tarjetas del resumen dicen CUÁNTO. Esto dice DE QUÉ. Sin el desglose, un
+// "gastó 20.557.347" obliga a irse a Movimientos y filtrar a mano para saber si
+// el mes fue caro por la nómina, por un impuesto o por un arreglo de oficina.
+//
+// Cada lista suma exactamente el número de su tarjeta. Si no cerrara, el
+// desglose contradiría al total que tiene arriba.
+
+export interface FilaDesglose {
+  nombre: string
+  monto: number
+  movs: number
+}
+
+export interface DesgloseDelMes {
+  /** Ingresos por cotización, abiertos por servicio. */
+  cotizacion: FilaDesglose[]
+  /** Ingresos por factura, abiertos por servicio y ya sin la plata en tránsito. */
+  factura: FilaDesglose[]
+  /** El gasto real, abierto por categoría. */
+  egresos: FilaDesglose[]
+  /** La nómina del mes, abierta por persona. */
+  nomina: FilaDesglose[]
+}
+
+export interface MovimientoParaDesglose {
+  tipo: TipoMovimiento
+  monto: number
+  grupo: GrupoCategoria
+  categoriaId: string
+  categoria: string
+  esNomina: boolean
+  /** Con qué nombre se identifica a quien cobró. Solo se usa en la nómina. */
+  persona: string
+  detalles: Array<{ servicio: string; monto: number; enTransito: boolean }>
+}
+
+/** Etiqueta de los cobros que entraron sin desglose por servicio. */
+export const SIN_DESGLOSE = 'Sin desglose por servicio'
+
+/**
+ * Abre los cuatro números del resumen en sus componentes.
+ *
+ * Los cobros SIN desglose por servicio no se esconden: aparecen como una fila
+ * propia. Omitirlos haría que la lista sumara menos que la tarjeta, y una lista
+ * que no cuadra con su total no se puede usar para nada.
+ */
+export function desglosarPeriodo(
+  movimientos: MovimientoParaDesglose[],
+  categoriasEnTransito: Set<string>
+): DesgloseDelMes {
+  const cotizacion = new Map<string, number[]>()
+  const factura = new Map<string, number[]>()
+  const egresos = new Map<string, number[]>()
+  const nomina = new Map<string, number[]>()
+
+  const sumar = (mapa: Map<string, number[]>, clave: string, monto: number) =>
+    mapa.set(clave, [...(mapa.get(clave) ?? []), monto])
+
+  for (const m of movimientos) {
+    if (m.tipo === TipoMovimiento.INGRESO) {
+      const destino =
+        m.grupo === GrupoCategoria.COBRO_COTIZACION
+          ? cotizacion
+          : m.grupo === GrupoCategoria.COBRO_FACTURA
+            ? factura
+            : null
+      if (!destino) continue
+
+      if (m.detalles.length === 0) {
+        sumar(destino, SIN_DESGLOSE, m.monto)
+        continue
+      }
+      // La plata en tránsito se saca acá, no después: la tarjeta muestra el
+      // neto y la lista tiene que sumar lo mismo.
+      for (const d of m.detalles) {
+        if (!d.enTransito) sumar(destino, d.servicio, d.monto)
+      }
+      continue
+    }
+
+    if (m.tipo !== TipoMovimiento.EGRESO) continue
+    // Un egreso en tránsito no es gasto de la empresa ni nómina: solo pasó.
+    if (categoriasEnTransito.has(m.categoriaId)) continue
+
+    sumar(egresos, m.categoria, m.monto)
+    if (m.esNomina) sumar(nomina, m.persona, m.monto)
+  }
+
+  const aFilas = (mapa: Map<string, number[]>): FilaDesglose[] =>
+    [...mapa.entries()]
+      .map(([nombre, montos]) => ({
+        nombre,
+        monto: sumarMontos(montos),
+        movs: montos.length,
+      }))
+      .filter((f) => f.monto !== 0)
+      .sort((a, b) => b.monto - a.monto)
+
+  return {
+    cotizacion: aFilas(cotizacion),
+    factura: aFilas(factura),
+    egresos: aFilas(egresos),
+    nomina: aFilas(nomina),
+  }
+}

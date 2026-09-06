@@ -33,6 +33,8 @@ import {
   contrastarIntermediados,
   resumirNomina,
   egresoRealDelPeriodo,
+  desglosarPeriodo,
+  SIN_DESGLOSE,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -1076,6 +1078,156 @@ describe('egresoRealDelPeriodo', () => {
 
     expect(r).toEqual({
       bruto: 0, enTransito: 0, neto: 0, nomina: 0, porCategoriaEnTransito: [],
+    })
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('desglosarPeriodo', () => {
+  const RECAUDO = 'ccatrecaudo1'
+  const EN_TRANSITO = new Set([RECAUDO])
+
+  const base = {
+    categoriaId: 'ccatgasto001',
+    categoria: 'Gasto',
+    esNomina: false,
+    persona: '—',
+    detalles: [] as Array<{ servicio: string; monto: number; enTransito: boolean }>,
+  }
+
+  const ingreso = (
+    grupo: GrupoCategoria,
+    monto: number,
+    detalles: Array<{ servicio: string; monto: number; enTransito: boolean }> = []
+  ) => ({ ...base, tipo: TipoMovimiento.INGRESO, grupo, monto, detalles })
+
+  const egreso = (monto: number, categoria: string, extra: Partial<typeof base> = {}) => ({
+    ...base,
+    ...extra,
+    tipo: TipoMovimiento.EGRESO,
+    grupo: GrupoCategoria.GASTO_OPERATIVO,
+    monto,
+    categoria,
+  })
+
+  it('abre las cotizaciones por servicio', () => {
+    const r = desglosarPeriodo(
+      [
+        ingreso(GrupoCategoria.COBRO_COTIZACION, 250_000, [
+          { servicio: 'Independiente 03', monto: 150_000, enTransito: false },
+          { servicio: 'Afiliacion Dependiente', monto: 100_000, enTransito: false },
+        ]),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.cotizacion).toEqual([
+      { nombre: 'Independiente 03', monto: 150_000, movs: 1 },
+      { nombre: 'Afiliacion Dependiente', monto: 100_000, movs: 1 },
+    ])
+  })
+
+  it('en las facturas saca la plata en tránsito, para que sume el neto', () => {
+    // La tarjeta muestra el neto: si la lista mostrara el recaudo, sumaría
+    // otra cosa que el número que tiene arriba.
+    const r = desglosarPeriodo(
+      [
+        ingreso(GrupoCategoria.COBRO_FACTURA, 729_000, [
+          { servicio: 'Administracion', monto: 150_000, enTransito: false },
+          { servicio: 'Recaudo para Terceros', monto: 579_000, enTransito: true },
+        ]),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.factura).toEqual([{ nombre: 'Administracion', monto: 150_000, movs: 1 }])
+  })
+
+  it('los cobros sin desglose aparecen como fila propia, no se esconden', () => {
+    // Omitirlos haría que la lista sumara menos que la tarjeta.
+    const r = desglosarPeriodo(
+      [ingreso(GrupoCategoria.COBRO_COTIZACION, 500_000)],
+      EN_TRANSITO
+    )
+
+    expect(r.cotizacion).toEqual([{ nombre: SIN_DESGLOSE, monto: 500_000, movs: 1 }])
+  })
+
+  it('abre los egresos por categoría, sin la plata que solo pasa', () => {
+    const r = desglosarPeriodo(
+      [
+        egreso(15_983_588, 'Otros honorarios', { esNomina: true, persona: 'LINA' }),
+        egreso(4_573_759, 'Papelería y oficina'),
+        egreso(63_875_000, 'Ingresos recibidos para terceros', { categoriaId: RECAUDO }),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.egresos).toEqual([
+      { nombre: 'Otros honorarios', monto: 15_983_588, movs: 1 },
+      { nombre: 'Papelería y oficina', monto: 4_573_759, movs: 1 },
+    ])
+  })
+
+  it('abre la nómina por persona', () => {
+    const r = desglosarPeriodo(
+      [
+        egreso(11_200_000, 'Otros honorarios', { esNomina: true, persona: 'LINA TATIANA' }),
+        egreso(4_800_000, 'Otros honorarios', { esNomina: true, persona: 'HECTOR' }),
+        egreso(500_000, 'Papelería y oficina'),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.nomina).toEqual([
+      { nombre: 'LINA TATIANA', monto: 11_200_000, movs: 1 },
+      { nombre: 'HECTOR', monto: 4_800_000, movs: 1 },
+    ])
+  })
+
+  it('un egreso en tránsito no entra en la nómina aunque su categoría lo sea', () => {
+    const r = desglosarPeriodo(
+      [egreso(6_149_600, 'Servicio de mensajería', {
+        categoriaId: RECAUDO, esNomina: true, persona: 'Fawer',
+      })],
+      EN_TRANSITO
+    )
+
+    expect(r.nomina).toEqual([])
+    expect(r.egresos).toEqual([])
+  })
+
+  it('junta las filas repetidas y ordena de mayor a menor', () => {
+    const r = desglosarPeriodo(
+      [
+        egreso(100_000, 'Papelería y oficina'),
+        egreso(900_000, 'Otros honorarios'),
+        egreso(200_000, 'Papelería y oficina'),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.egresos).toEqual([
+      { nombre: 'Otros honorarios', monto: 900_000, movs: 1 },
+      { nombre: 'Papelería y oficina', monto: 300_000, movs: 2 },
+    ])
+  })
+
+  it('los ingresos que no son ni C ni F no entran en el desglose de cobros', () => {
+    const r = desglosarPeriodo(
+      [ingreso(GrupoCategoria.PRESTAMO_ABONO, 400_000)],
+      EN_TRANSITO
+    )
+
+    expect(r.cotizacion).toEqual([])
+    expect(r.factura).toEqual([])
+  })
+
+  it('sin movimientos devuelve las cuatro listas vacías', () => {
+    expect(desglosarPeriodo([], EN_TRANSITO)).toEqual({
+      cotizacion: [], factura: [], egresos: [], nomina: [],
     })
   })
 })

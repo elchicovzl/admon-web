@@ -18,7 +18,9 @@ import type {
 } from '@prisma/client'
 import type {
   ContrasteIntermediado,
+  DesgloseDelMes,
   EgresoReal,
+  FilaDesglose,
   EstadoPrestamo,
   ResumenNomina,
   EstadoServicio,
@@ -28,7 +30,9 @@ import type {
 
 export type {
   ContrasteIntermediado,
+  DesgloseDelMes,
   EgresoReal,
+  FilaDesglose,
   EstadoPrestamo,
   ResumenNomina,
   EstadoServicio,
@@ -291,6 +295,13 @@ export interface ResumenPeriodo {
    * un detalle de presentación.
    */
   egresoReal: EgresoReal
+  /**
+   * De qué se compone cada uno de los cuatro números del mes.
+   *
+   * Las tarjetas dicen CUÁNTO; esto dice DE QUÉ. Cada lista suma exactamente
+   * el número de su tarjeta.
+   */
+  desglose: DesgloseDelMes
   ingresoNeto: IngresoNeto
   /** Suma de los saldos finales de todos los bolsillos. */
   saldoConsolidado: number

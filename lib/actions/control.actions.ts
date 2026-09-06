@@ -85,6 +85,7 @@ import {
   estadoServicio,
   contraMovimiento,
   contrastarIntermediados,
+  desglosarPeriodo,
   egresoRealDelPeriodo,
   resumirNomina,
   ingresoPorServicio,
@@ -95,6 +96,7 @@ import {
   type DetalleParaReporte,
   type MovimientoDeNomina,
   type MovimientoParaContraste,
+  type MovimientoParaDesglose,
   type MovimientoParaEgreso,
   type MovimientoParaNaturaleza,
   type MovimientoParaSaldo,
@@ -1646,8 +1648,14 @@ export const getResumenPeriodo = cache(
           categoria: { select: { nombre: true, grupo: true, esNomina: true } },
           // Para separar lo ganado de lo que solo pasó. NO entra en el cálculo
           // del saldo: la plata en tránsito entró al bolsillo de verdad.
+          // Para el desglose: quién cobró y por qué servicio entró la plata.
+          concepto: true,
+          contraparte: { select: { nombre: true } },
           detalleServicios: {
-            select: { monto: true, servicio: { select: { enTransito: true } } },
+            select: {
+              monto: true,
+              servicio: { select: { nombre: true, enTransito: true } },
+            },
           },
         },
       }),
@@ -1788,6 +1796,21 @@ export const getResumenPeriodo = cache(
       enTransito.map((s) => s.categoriaEgresoId).filter((id): id is string => id !== null)
     )
 
+    const paraDesglose: MovimientoParaDesglose[] = movimientos.map((m) => ({
+      tipo: m.tipo,
+      monto: decimalANumero(m.monto),
+      grupo: m.categoria.grupo,
+      categoriaId: m.categoriaId,
+      categoria: m.categoria.nombre,
+      esNomina: m.categoria.esNomina,
+      persona: personaDelMovimiento(m),
+      detalles: m.detalleServicios.map((d) => ({
+        servicio: d.servicio.nombre,
+        monto: decimalANumero(d.monto),
+        enTransito: d.servicio.enTransito,
+      })),
+    }))
+
     const detallesDelPeriodo: DetalleParaReporte[] = movimientos.flatMap((m) =>
       m.detalleServicios.map((d) => ({
         tipo: m.tipo,
@@ -1807,6 +1830,7 @@ export const getResumenPeriodo = cache(
         ),
         ingresos: ingresosPorNaturaleza(paraNaturaleza),
         egresoReal: egresoRealDelPeriodo(paraEgreso, categoriasEnTransito),
+        desglose: desglosarPeriodo(paraDesglose, categoriasEnTransito),
         ingresoNeto: ingresoPorServicio(totalIngresos, detallesDelPeriodo),
         saldoConsolidado: sumarMontos(vistas.map((v) => v.saldoFinalCalculado)),
         tieneDescuadres: vistas.some(

@@ -424,6 +424,8 @@ describe('cerrarPeriodo', () => {
         bolsilloDestinoId: m.destino ?? null,
         categoriaId: CATEGORIA,
         categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false },
+        concepto: 'Gasto',
+        contraparte: null,
         detalleServicios: [],
       }))
     })
@@ -844,6 +846,8 @@ describe('getResumenPeriodo — saldo inicial acumulado', () => {
         bolsilloDestinoId: null,
         categoriaId: CATEGORIA,
         categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false },
+        concepto: 'Gasto',
+        contraparte: null,
         detalleServicios: [],
       }))
     })
@@ -1908,7 +1912,7 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
       grupo: GrupoCategoria
       categoria?: string
       monto: number
-      detalles?: Array<{ monto: number; enTransito: boolean }>
+      detalles?: Array<{ monto: number; enTransito: boolean; servicio?: string }>
     }>
   ) {
     prismaMock.bolsillo.findMany.mockResolvedValue([{ id: IVONE, nombre: 'IVONE' }])
@@ -1922,9 +1926,11 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
         bolsilloDestinoId: null,
         categoriaId: CATEGORIA,
         categoria: { nombre: m.categoria ?? 'Cobro', grupo: m.grupo, esNomina: false },
+        concepto: 'Cobro',
+        contraparte: null,
         detalleServicios: (m.detalles ?? []).map((d) => ({
           monto: dec(d.monto),
-          servicio: { enTransito: d.enTransito },
+          servicio: { nombre: d.servicio ?? 'Servicio', enTransito: d.enTransito },
         })),
       }))
     })
@@ -2732,6 +2738,8 @@ describe('getResumenPeriodo — egreso real', () => {
           grupo: GrupoCategoria.GASTO_OPERATIVO,
           esNomina: m.esNomina ?? false,
         },
+        concepto: 'Egreso',
+        contraparte: null,
         detalleServicios: [],
       }))
     })
@@ -2798,5 +2806,103 @@ describe('getResumenPeriodo — egreso real', () => {
     const res = await getResumenPeriodo('2026-07')
 
     expect(res.data!.saldoConsolidado).toBe(-63_875_000)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('getResumenPeriodo — desglose del mes', () => {
+  const RECAUDO = 'ccatrecaudo1'
+
+  function preparar(movimientos: unknown[], enTransito: string[] = []) {
+    prismaMock.bolsillo.findMany.mockResolvedValue([{ id: IVONE, nombre: 'IVONE' }])
+    prismaMock.cierreMensual.findMany.mockResolvedValue([])
+    prismaMock.servicioAlegra.findMany.mockResolvedValue(
+      enTransito.map((id) => ({ categoriaEgresoId: id }))
+    )
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) =>
+      args?.where?.periodo?.lt ? [] : movimientos
+    )
+  }
+
+  const fila = (over: Record<string, unknown>) => ({
+    tipo: TipoMovimiento.EGRESO,
+    monto: dec(0),
+    bolsilloId: IVONE,
+    bolsilloDestinoId: null,
+    categoriaId: CATEGORIA,
+    categoria: { nombre: 'Gasto', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false },
+    concepto: 'X',
+    contraparte: null,
+    detalleServicios: [],
+    ...over,
+  })
+
+  it('abre la factura por servicio, ya sin la plata en tránsito', async () => {
+    // La tarjeta muestra el neto: la lista tiene que sumar lo mismo.
+    preparar([
+      fila({
+        tipo: TipoMovimiento.INGRESO,
+        monto: dec(729_000),
+        categoria: { nombre: 'Cobro de factura', grupo: GrupoCategoria.COBRO_FACTURA, esNomina: false },
+        detalleServicios: [
+          { monto: dec(150_000), servicio: { nombre: 'Administracion', enTransito: false } },
+          { monto: dec(579_000), servicio: { nombre: 'Recaudo para Terceros', enTransito: true } },
+        ],
+      }),
+    ])
+
+    const res = await getResumenPeriodo('2026-07')
+
+    expect(res.data!.desglose.factura).toEqual([
+      { nombre: 'Administracion', monto: 150_000, movs: 1 },
+    ])
+    // Y coincide con la tarjeta.
+    expect(res.data!.ingresos.factura.neto).toBe(150_000)
+  })
+
+  it('abre la nómina por persona, usando la contraparte cuando existe', async () => {
+    preparar([
+      fila({
+        monto: dec(1_356_800),
+        categoria: { nombre: 'Otros honorarios', grupo: GrupoCategoria.OTRO, esNomina: true },
+        concepto: 'Pago #708 — YUDY MILENA JARAMILLO QUIROGA',
+      }),
+      fila({
+        monto: dec(923_000),
+        categoria: { nombre: 'Pago mensual fijo', grupo: GrupoCategoria.NOMINA_FIJA, esNomina: true },
+        concepto: 'YUDY',
+        contraparte: { nombre: 'Yudy' },
+      }),
+    ])
+
+    const res = await getResumenPeriodo('2026-07')
+
+    expect(res.data!.desglose.nomina).toEqual([
+      { nombre: 'YUDY MILENA JARAMILLO QUIROGA', monto: 1_356_800, movs: 1 },
+      { nombre: 'Yudy', monto: 923_000, movs: 1 },
+    ])
+  })
+
+  it('el desglose de egresos suma exactamente el egreso real', async () => {
+    // Una lista que no cuadra con su total no se puede usar para nada.
+    preparar(
+      [
+        fila({ monto: dec(63_875_000), categoriaId: RECAUDO,
+               categoria: { nombre: 'Ingresos recibidos para terceros', grupo: GrupoCategoria.OTRO, esNomina: false } }),
+        fila({ monto: dec(15_983_588),
+               categoria: { nombre: 'Otros honorarios', grupo: GrupoCategoria.OTRO, esNomina: true },
+               concepto: 'Pago #1 — LINA' }),
+        fila({ monto: dec(4_573_759), categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false } }),
+      ],
+      [RECAUDO]
+    )
+
+    const res = await getResumenPeriodo('2026-07')
+    const suma = res.data!.desglose.egresos.reduce((a, f) => a + f.monto, 0)
+
+    expect(suma).toBe(res.data!.egresoReal.neto)
+    expect(suma).toBe(20_557_347)
   })
 })
