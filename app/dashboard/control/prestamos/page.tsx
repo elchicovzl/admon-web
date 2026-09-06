@@ -1,14 +1,32 @@
 import { Suspense } from 'react'
 import type { Metadata } from 'next'
 
-import { getPrestamos, getBolsillos } from '@/lib/actions/control.actions'
+import {
+  getPrestamos,
+  getBolsillos,
+  getContrapartes,
+} from '@/lib/actions/control.actions'
 import { formatearMonto } from '@/lib/utils/control-format'
 import { PrestamosTable } from '@/components/dashboard/control/prestamos-table'
+import { PrestamoFormDialog } from '@/components/dashboard/control/prestamo-form-dialog'
 import { ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export const metadata: Metadata = {
   title: 'Préstamos | Control',
   description: 'Préstamos y anticipos del libro de caja interno',
+}
+
+/** El botón vive aparte para que no espere a que carguen los préstamos. */
+async function BotonNuevo() {
+  const [bolsillos, contrapartes] = await Promise.all([getBolsillos(), getContrapartes()])
+
+  return (
+    <PrestamoFormDialog
+      bolsillos={bolsillos.data ?? []}
+      contrapartes={contrapartes.data ?? []}
+    />
+  )
 }
 
 async function Listado() {
@@ -42,11 +60,16 @@ async function Listado() {
 export default function PrestamosPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Préstamos</h1>
-        <p className="text-muted-foreground">
-          El saldo y el estado se calculan desde los movimientos — no se digitan.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Préstamos</h1>
+          <p className="text-muted-foreground">
+            El saldo y el estado se calculan desde los movimientos — no se digitan.
+          </p>
+        </div>
+        <Suspense fallback={<Skeleton className="h-9 w-44" />}>
+          <BotonNuevo />
+        </Suspense>
       </div>
 
       <Suspense fallback={<ControlTableSkeleton filas={8} columnas={8} />}>

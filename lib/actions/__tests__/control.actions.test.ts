@@ -104,6 +104,7 @@ import {
   getReporteAnual,
   getNominaDelAnio,
   getDetalleDelCorte,
+  createPrestamo,
   getPagosDelPeriodo,
   importarPagosComoEgresos,
 } from '../control.actions'
@@ -3017,5 +3018,113 @@ describe('getDetalleDelCorte', () => {
       (await getDetalleDelCorte({ periodo: '2026-07', corte: 'egresos', clave: 'X' })).success
     ).toBe(false)
     expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('createPrestamo', () => {
+  const VALIDO = {
+    contraparteId: 'ccontra00001',
+    fechaDesembolso: '2026-09-05',
+    montoOriginal: 2_000_000,
+    concepto: 'Adelanto de sueldo',
+    bolsilloOrigenId: IVONE,
+    notas: null,
+  }
+
+  beforeEach(() => {
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatdesemb01' })
+    prismaMock.prestamo.create.mockResolvedValue({ id: 'cpre0000001' })
+    prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
+    prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
+      typeof fn === 'function' ? (fn as (tx: unknown) => Promise<unknown>)(prismaMock) : fn
+    )
+  })
+
+  it('crea el préstamo Y su movimiento de desembolso', async () => {
+    // Los dos juntos: un préstamo sin desembolso sería plata que se prestó y
+    // nunca salió de ninguna caja.
+    const res = await createPrestamo(VALIDO)
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.prestamo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          contraparteId: 'ccontra00001',
+          montoOriginal: 2_000_000,
+          bolsilloOrigenId: IVONE,
+        }),
+      })
+    )
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.EGRESO,
+          monto: 2_000_000,
+          prestamoId: 'cpre0000001',
+        }),
+      })
+    )
+  })
+
+  it('los dos van en la MISMA transacción', async () => {
+    // Si el desembolso fallara y el préstamo quedara, el saldo diría que
+    // alguien debe plata que nunca salió.
+    await createPrestamo(VALIDO)
+
+    expect(prismaMock.$transaction).toHaveBeenCalled()
+  })
+
+  it('usa la categoría del grupo PRESTAMO_DESEMBOLSO', async () => {
+    await createPrestamo(VALIDO)
+
+    expect(prismaMock.categoriaMovimiento.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ grupo: GrupoCategoria.PRESTAMO_DESEMBOLSO }),
+      })
+    )
+  })
+
+  it('avisa si falta la categoría en vez de inventar una', async () => {
+    prismaMock.categoriaMovimiento.findFirst.mockResolvedValue(null)
+
+    const res = await createPrestamo(VALIDO)
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('PRESTAMO_DESEMBOLSO')
+    expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
+  })
+
+  it('no registra nada en un periodo cerrado', async () => {
+    prismaMock.cierreMensual.findUnique.mockResolvedValue({ cerrado: true })
+
+    const res = await createPrestamo(VALIDO)
+
+    expect(res.success).toBe(false)
+    expect(res.error).toContain('cerrado')
+    expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
+  })
+
+  it('rechaza un monto que no sea positivo', async () => {
+    const res = await createPrestamo({ ...VALIDO, montoOriginal: 0 })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
+  })
+
+  it('exige un concepto: un préstamo sin motivo no se puede auditar', async () => {
+    const res = await createPrestamo({ ...VALIDO, concepto: 'ab' })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect((await createPrestamo(VALIDO)).success).toBe(false)
+    expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
   })
 })
