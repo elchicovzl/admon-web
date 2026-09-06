@@ -82,11 +82,49 @@ export function SearchableSelect({
             ref={inputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            /**
+             * Enter elige la primera coincidencia.
+             *
+             * Si alguien escribe "burbuja" y ve una sola opción, apretar Enter
+             * y que no pase nada es el tipo de detalle que hace que la gente
+             * deje de usar el buscador.
+             */
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && filtered.length > 0) {
+                // El popover puede vivir dentro de un <form>: sin esto, Enter
+                // lo envía.
+                e.preventDefault()
+                onValueChange(filtered[0].value)
+                setOpen(false)
+              }
+            }}
             placeholder={searchPlaceholder}
             className="flex h-8 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
         <div
+          /**
+           * Scroll a mano con la rueda.
+           *
+           * Radix Dialog bloquea el scroll del fondo con react-remove-scroll,
+           * que escucha `wheel` en document con capture y hace preventDefault
+           * sobre todo lo que no esté dentro del contenido del diálogo. Este
+           * popover se renderiza en un portal —fuera del diálogo—, así que la
+           * rueda dejaba de funcionar y solo se podía arrastrar la barrita.
+           *
+           * No se arregla sacando el portal: DialogContent se centra con
+           * `translate-x-[-50%]`, y un transform convierte al diálogo en bloque
+           * contenedor de los `position: fixed`, con lo cual el popover
+           * quedaría mal ubicado.
+           *
+           * react-remove-scroll solo llama preventDefault, nunca
+           * stopPropagation, así que el evento igual llega hasta acá: alcanza
+           * con mover scrollTop a mano. El navegador ya recorta el valor en los
+           * extremos.
+           */
+          onWheel={(e) => {
+            e.currentTarget.scrollTop += e.deltaY
+          }}
           className="max-h-[200px] overflow-y-auto p-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
         >
           {filtered.length === 0 ? (

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+  AlegraItemListResponseSchema,
+  AlegraItemSchema,
   CompanySchema,
   EstimateDetailSchema,
   EstimateListItemSchema,
@@ -660,5 +662,114 @@ describe('EstimateDetailSchema', () => {
     expect(result.items![0]!.quantity).toBe(3)
     expect(result.items![0]!.discount).toBe(0)
     expect(result.items![0]!.tax![0]!.percentage).toBe(16)
+  })
+})
+
+
+// -----------------------------------------------------------------------------
+// Items (catálogo de productos y servicios)
+// -----------------------------------------------------------------------------
+
+describe('AlegraItemSchema', () => {
+  /**
+   * Recorte de una respuesta REAL de /items (item id 2, cuenta de producción).
+   *
+   * Se guarda casi entero a propósito: el payload trae `category`, `tax`,
+   * `inventory`, `customFields` y varios más que el schema no declara. Si el
+   * `.passthrough()` se cayera, esto lo detecta.
+   */
+  const ITEM_REAL = {
+    id: '2',
+    category: { id: '5148', name: 'Ventas' },
+    hasNoIvaDays: false,
+    name: 'Administracion',
+    description: 'Cobro de servicio prestados con iva',
+    reference: '01',
+    status: 'active',
+    calculationScale: 6,
+    price: [
+      {
+        idPriceList: '1',
+        name: 'General',
+        type: 'amount',
+        price: 0,
+        currency: { code: 'COP', symbol: '$' },
+        main: true,
+        edited: false,
+      },
+    ],
+    inventory: { unit: 'service' },
+    tax: [{ id: '4', name: 'IVA', percentage: '19.00' }],
+    customFields: [],
+    productKey: null,
+    type: 'service',
+    itemType: null,
+  }
+
+  it('parsea el payload real sin perder los campos no declarados', () => {
+    const result = AlegraItemSchema.parse(ITEM_REAL)
+
+    expect(result.name).toBe('Administracion')
+    expect(result.reference).toBe('01')
+    expect(result.type).toBe('service')
+    // passthrough: `category` no está en el schema y tiene que sobrevivir.
+    expect((result as Record<string, unknown>).category).toEqual({
+      id: '5148',
+      name: 'Ventas',
+    })
+  })
+
+  it('normaliza el id a string', () => {
+    // Alegra devuelve el id como número o como string según el endpoint, y el
+    // catálogo local empareja por ese valor: si no se normaliza, la
+    // sincronización crea duplicados.
+    const result = AlegraItemSchema.parse({ ...ITEM_REAL, id: 2 })
+
+    expect(result.id).toBe('2')
+  })
+
+  it('acepta price como número suelto y como lista de precios', () => {
+    expect(AlegraItemSchema.parse({ ...ITEM_REAL, price: 80000 }).price).toBe(80000)
+    expect(Array.isArray(AlegraItemSchema.parse(ITEM_REAL).price)).toBe(true)
+  })
+
+  it('tolera reference y description nulos', () => {
+    // Los productos de la cuenta vienen sin referencia.
+    const result = AlegraItemSchema.parse({
+      ...ITEM_REAL,
+      reference: null,
+      description: null,
+    })
+
+    expect(result.reference).toBeNull()
+    expect(result.description).toBeNull()
+  })
+
+  it('exige name: sin nombre el item no sirve para nada', () => {
+    const { name: _omitido, ...sinNombre } = ITEM_REAL
+    expect(() => AlegraItemSchema.parse(sinNombre)).toThrow()
+  })
+})
+
+describe('AlegraItemListResponseSchema', () => {
+  const ITEM = { id: '3', name: 'Independiente 03', type: 'service', status: 'active' }
+
+  it('normaliza la forma con metadata', () => {
+    const result = AlegraItemListResponseSchema.parse({
+      metadata: { total: 30 },
+      data: [ITEM],
+    })
+
+    expect(result.total).toBe(30)
+    expect(result.data).toHaveLength(1)
+  })
+
+  it('normaliza la forma de array pelado', () => {
+    // Alegra devuelve un array cuando no se pide metadata; el consumidor no
+    // debería tener que saber cuál de las dos formas llegó.
+    const result = AlegraItemListResponseSchema.parse([ITEM, { ...ITEM, id: '4' }])
+
+    expect(result.total).toBe(2)
+    expect(result.data).toHaveLength(2)
   })
 })

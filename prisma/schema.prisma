@@ -27,6 +27,16 @@ model User {
   image         String?
   role          UserRole  @default(MANAGER)
   isActive      Boolean   @default(true)
+
+  // Acceso al módulo Control (caja interna: movimientos, préstamos, cierres).
+  // Es un permiso ORTOGONAL al rol, no un rol nuevo: `role` es un campo único,
+  // así que un UserRole.CONTROL le quitaría al usuario todo lo demás (clientes,
+  // procesos, incapacidades). Con este flag un MANAGER puede llevar la caja sin
+  // perder el resto del dashboard.
+  //
+  // SUPER_ADMIN entra siempre, tenga el flag en false o no — ver lib/auth/rbac.ts.
+  canAccessControl Boolean @default(false)
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -64,6 +74,17 @@ model User {
   // Novedades relations (vacaciones, permisos, calamidades)
   novedades                      Novedad[]                @relation("UserNovedades")
   createdNovedades               Novedad[]                @relation("NovedadCreatedBy")
+
+  // Módulo Control (caja interna)
+  // Un usuario puede tener una contraparte cuando además de operar el sistema
+  // recibe plata del libro (nómina complementaria, préstamos).
+  contraparte                    Contraparte?             @relation("ContraparteUser")
+  createdContrapartes            Contraparte[]            @relation("ContraparteCreatedBy")
+  createdMovimientos             Movimiento[]             @relation("MovimientoCreatedBy")
+  createdPrestamos               Prestamo[]               @relation("PrestamoCreatedBy")
+  createdServiciosReferenciados  ServicioReferenciado[]   @relation("ServicioCreatedBy")
+  createdCierres                 CierreMensual[]          @relation("CierreCreatedBy")
+  cierresCerrados                CierreMensual[]          @relation("CierreCerradoBy")
 
   @@map("users")
 }
@@ -228,6 +249,10 @@ model Client {
   // Employment join table back-relations (Phase 1 additive; legacy CompanyEmployees stays)
   employmentsAsEmployee Employment[] @relation("EmploymentEmployee")
   employmentsAsCompany  Employment[] @relation("EmploymentCompany")
+
+  // Módulo Control — un cliente puede ser contraparte del libro de caja
+  // (ej. A&A Moda Circular y Mompossina, clientes de mensajería).
+  contraparte Contraparte? @relation("ContraparteClient")
 
   @@map("clients")
   @@index([companyId])
@@ -934,4 +959,633 @@ model BlogPost {
   @@index([publishedAt])
   @@index([authorId])
   @@map("blog_posts")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MÓDULO CONTROL — libro de caja interno
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Reemplaza el Excel de contabilidad (hojas PAGOS POR DEBAJO, CUENTAS,
+// PRESTAMOS, PAGOS FAWER, EXAMENES MEDICOS).
+//
+// Este libro es INDEPENDIENTE de Alegra (/dashboard/finances), que es la
+// contabilidad formal y es de solo lectura. Los dos libros NUNCA se suman ni
+// se consolidan; a lo sumo se referencian por id (ver alegraEstimateId).
+//
+// Reglas que el modelo hace cumplir:
+//   1. Ningún movimiento sin bolsillo, categoría, fecha y monto > 0.
+//   2. Los movimientos son INMUTABLES: no se editan ni se borran. Para
+//      corregir se crea un contra-movimiento (`anulaMovimientoId`).
+//   3. Los saldos NUNCA se digitan. `saldoFinalCalculado` sale de los
+//      movimientos; el valor que venía del Excel entra como `saldoFinalReal`
+//      solo para comparar contra el cálculo.
+//   4. Los saldos de préstamo y el margen de los servicios son DERIVADOS —
+//      no existen como columna, justamente para que no puedan desincronizarse.
+//
+// Acceso: SUPER_ADMIN o User.canAccessControl (ver lib/auth/rbac.ts).
+
+enum TipoBolsillo {
+  BANCARIA    // cuenta de banco usada como operativa (ej. IVONE)
+  EFECTIVO    // caja en efectivo
+  CAJA_MENOR  // caja chica para gastos menores
+  AHORRO      // efectivo guardado
+}
+
+enum TipoContraparte {
+  EMPLEADO   // equipo interno; puede o no tener usuario del sistema
+  PROVEEDOR  // a quien se le paga (Fawer, laboratorio, don Luis)
+  CLIENTE    // quien paga (A&A Moda Circular, Mompossina, pacientes)
+  OTRO
+}
+
+enum TipoMovimiento {
+  INGRESO
+  EGRESO
+  TRASLADO  // entre dos bolsillos; exige bolsilloDestinoId
+}
+
+// Agrupación para reportes. La categoría concreta vive en un catálogo
+// editable (CategoriaMovimiento) para no necesitar migración cada vez que
+// aparece un concepto nuevo.
+enum GrupoCategoria {
+  // Lo que ENTRA, separado en dos porque para el negocio son cosas distintas:
+  //
+  //   COBRO_COTIZACION — "por debajo". El documento es una cotización de
+  //     Alegra, que es informativa: no tiene estado ni saldo.
+  //   COBRO_FACTURA    — "por arriba". El documento es una factura de venta,
+  //     con estado y `totalPaid`, así que se sabe cuánto se cobró de verdad.
+  //
+  // Poder mirarlos por separado es media razón de ser de este módulo, así que
+  // la distinción va en el grupo y no en la categoría: un reporte por grupo
+  // los mezclaría.
+  COBRO_COTIZACION
+  COBRO_FACTURA
+
+  NOMINA_COMPLEMENTARIA  // los pagos "por debajo"
+  NOMINA_FIJA            // recurrentes mensuales del equipo
+  COMISION
+  SERVICIO_REFERENCIADO  // patas de un ServicioReferenciado
+  GASTO_OPERATIVO        // papelería, transporte, arreglos de oficina
+  GASTO_BIENESTAR        // almuerzos, regalos, celebraciones
+  PRESTAMO_DESEMBOLSO
+  PRESTAMO_ABONO
+  TRASLADO
+  DEVOLUCION
+  OTRO
+}
+
+// Bolsillo: de dónde sale y a dónde entra la plata.
+// El catálogo es editable — el Excel muestra IVONE, EFECTIVO, CAJA MENOR,
+// ADMON, AHORRO EFECTIVO y JOSE Q (cerrado en enero-2026), pero hay más
+// cuentas en uso.
+model Bolsillo {
+  id        String       @id @default(cuid())
+  nombre    String       @unique
+  tipo      TipoBolsillo
+  orden     Int          @default(0) // orden de despliegue en la UI
+
+  // Un bolsillo que se deja de usar se cierra, no se borra: sus movimientos
+  // históricos tienen que seguir existiendo.
+  isActive  Boolean      @default(true)
+  cerradoEn DateTime?    @db.Date
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  movimientos       Movimiento[]    @relation("MovimientoBolsillo")
+  movimientosComoDestino Movimiento[] @relation("MovimientoBolsilloDestino")
+  prestamosOriginados    Prestamo[]  @relation("PrestamoBolsilloOrigen")
+  cierres           CierreMensual[]
+
+  @@map("bolsillos")
+  @@index([isActive, orden])
+}
+
+// Contraparte: quién recibe o entrega plata en este libro.
+//
+// Un solo catálogo para empleados, proveedores, clientes y pacientes, con
+// enlaces OPCIONALES a User y Client. Se hizo así a propósito: con entidades
+// separadas (persona / tercero), cada Movimiento cargaría dos FK nullables y
+// nada garantizaría que exactamente una esté llena.
+//
+// NO se extiende User: `email` es único y hay `password`, así que un
+// proveedor informal exigiría un email falso y quedaría como fila capaz de
+// iniciar sesión. Además Novedad ya trata a User como empleado interno.
+model Contraparte {
+  id        String          @id @default(cuid())
+  nombre    String
+  tipo      TipoContraparte
+
+  // Si es del equipo y tiene usuario del sistema
+  userId    String?         @unique
+  user      User?           @relation("ContraparteUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  // Si es un cliente ya registrado en el sistema
+  clientId  String?         @unique
+  client    Client?         @relation("ContraparteClient", fields: [clientId], references: [id], onDelete: SetNull)
+
+  // Solo dígitos, sin dígito de verificación (el DV se calcula con el
+  // algoritmo DIAN). Ej: NIT 901485874-1 se guarda como "901485874".
+  documento String?         @unique
+
+  notas     String?         @db.Text
+  isActive  Boolean         @default(true)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  createdById String
+  createdBy   User          @relation("ContraparteCreatedBy", fields: [createdById], references: [id])
+
+  movimientos          Movimiento[]
+  prestamos            Prestamo[]
+  serviciosComoCliente   ServicioReferenciado[] @relation("ServicioCliente")
+  serviciosComoProveedor ServicioReferenciado[] @relation("ServicioProveedor")
+
+  @@map("contrapartes")
+  @@index([tipo, isActive])
+  @@index([nombre])
+}
+
+// Catálogo editable de categorías. `grupo` es lo que se usa para reportes.
+model CategoriaMovimiento {
+  id        String         @id @default(cuid())
+  nombre    String         @unique
+  grupo     GrupoCategoria
+  isActive  Boolean        @default(true)
+
+  /**
+   * Esta categoría es COSTO DE NÓMINA.
+   *
+   * Va como flag y no como grupo porque la nómina llega por dos vías que ya
+   * tienen su propio grupo y no se pueden fusionar: la de Alegra cae en
+   * categorías creadas desde su concepto contable ("Otros honorarios",
+   * "Aportes a EPS") que viven en OTRO, y la del Excel vive en NOMINA_FIJA y
+   * NOMINA_COMPLEMENTARIA. Un flag las cruza sin tocar los grupos, que el
+   * resto del código usa para otras cosas.
+   *
+   * Es editable: quién es nómina y quién no lo decide el negocio. El contador
+   * externo cuenta como nómina en esta empresa, por ejemplo.
+   */
+  esNomina  Boolean        @default(false)
+
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  movimientos    Movimiento[]
+  tiposServicio  TipoServicioReferenciado[]
+  // Servicios de Alegra cuya plata en tránsito sale por esta categoría.
+  serviciosEnTransito ServicioAlegra[] @relation("ServicioAlegraEgreso")
+  conceptosPago       ConceptoPagoAlegra[]
+
+  @@map("categorias_movimiento")
+  @@index([grupo, isActive])
+}
+
+// Catálogo de tipos de servicio referenciado (mensajería, exámenes médicos…).
+// Es tabla y no enum a propósito: van a aparecer más servicios y no debería
+// hacer falta una migración para agregarlos.
+model TipoServicioReferenciado {
+  id       String  @id @default(cuid())
+  nombre   String  @unique
+  isActive Boolean @default(true)
+
+  // Categoría con la que se registran las dos patas de movimiento de este
+  // servicio. Es obligatoria y explícita: antes se resolvía por coincidencia
+  // de nombre entre el tipo y la categoría, lo que fallaba en silencio en
+  // cuanto los nombres no coincidían exactamente ("Mensajería" vs "Servicio
+  // de mensajería") y caía en un fallback que elegía cualquiera del grupo.
+  categoriaId String
+  categoria   CategoriaMovimiento @relation(fields: [categoriaId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  servicios ServicioReferenciado[]
+
+  @@map("tipos_servicio_referenciado")
+  @@index([categoriaId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ServicioAlegra — espejo del catálogo /items de Alegra.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Es el "qué se vendió": el nombre que aparece como línea en una cotización o
+// en una factura de venta — "Independiente 03", "Administracion", "Recaudo
+// para Terceros". Verificado contra la cuenta: 21 servicios, y las mismas
+// filas alimentan tanto las cotizaciones (C) como las facturas (F), así que
+// un solo catálogo sirve para los dos.
+//
+// NO es una CategoriaMovimiento, y la distinción importa. La categoría
+// responde "¿qué naturaleza de plata es esta?" y es un FK único en Movimiento;
+// el servicio responde "¿qué se vendió?" y un mismo documento puede tener
+// varios.
+model ServicioAlegra {
+  id String @id @default(cuid())
+
+  // La identidad real es el id del item en Alegra, no el nombre: el nombre se
+  // corrige desde allá ("Administracion" → "Administración") y el vínculo no
+  // debe romperse por una tilde.
+  alegraItemId String @unique
+
+  nombre      String
+  // "01", "02", "05" — el código corto con el que el negocio los nombra.
+  // Opcional porque no todos los items lo tienen cargado.
+  referencia  String?
+  descripcion String?
+
+  /**
+   * El dinero de este servicio NO es ingreso de Admon: entra y vuelve a salir.
+   *
+   * El caso es "Recaudo para Terceros". Medido contra producción: de las 25
+   * facturas más recientes, NINGUNA tiene una sola línea — todas son
+   * `Administracion` + `Recaudo para Terceros`, y solo la primera es lo que
+   * gana la empresa.
+   */
+  enTransito Boolean @default(false)
+
+  /**
+   * Categoría por la que ESA plata vuelve a salir.
+   *
+   * Sin este vínculo, "entra y vuelve a salir" es una afirmación que nadie
+   * puede verificar: el ingreso vive en el desglose por servicio y el egreso
+   * en una categoría, y son dos dimensiones distintas que no se tocan.
+   * Atándolas se puede contrastar mes a mes lo que entró contra lo que salió
+   * — y descubrir cuando NO cierra.
+   *
+   * Es opcional a propósito. Un servicio marcado en tránsito sin categoría de
+   * egreso NO es un error de configuración: es el hallazgo de que esa plata
+   * entró al libro y nunca se registró su salida.
+   */
+  categoriaEgresoId String?
+  categoriaEgreso   CategoriaMovimiento? @relation("ServicioAlegraEgreso", fields: [categoriaEgresoId], references: [id])
+
+  // Se desactiva, nunca se borra: el desglose histórico apunta acá. Si un
+  // servicio desaparece de Alegra, la sincronización lo apaga.
+  isActive Boolean @default(true)
+
+  // Última vez que la sincronización lo confirmó contra Alegra.
+  sincronizadoEn DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  detalles MovimientoDetalleServicio[]
+
+  @@map("servicios_alegra")
+  @@index([isActive, nombre])
+  @@index([categoriaEgresoId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Movimiento — la tabla central. Las cuatro hojas de dinero del Excel
+// colapsan acá; todo lo demás es una vista sobre esto.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// INMUTABLE. No hay updatedAt ni isActive porque no se edita ni se borra: un
+// movimiento equivocado se corrige creando otro que lo anula. Esto es lo que
+// evita el error silencioso del Excel, donde alguien pisó un saldo y el
+// descuadre desapareció de la vista.
+model Movimiento {
+  id       String         @id @default(cuid())
+
+  // Fecha de calendario, no timestamp: todo el libro es America/Bogotá y un
+  // pago no debe poder correrse de día por zona horaria.
+  fecha    DateTime       @db.Date
+  // "2026-08" — denormalizado para agrupar y cerrar por periodo.
+  periodo  String
+  tipo     TipoMovimiento
+  monto    Decimal        @db.Decimal(14, 2)
+  concepto String
+
+  // De dónde salió / a dónde entró. Obligatorio, siempre.
+  bolsilloId String
+  bolsillo   Bolsillo @relation("MovimientoBolsillo", fields: [bolsilloId], references: [id])
+
+  // Solo para TRASLADO. Hay un CHECK en la migración que lo exige para
+  // TRASLADO, lo prohíbe para el resto, e impide que sea igual al origen.
+  bolsilloDestinoId String?
+  bolsilloDestino   Bolsillo? @relation("MovimientoBolsilloDestino", fields: [bolsilloDestinoId], references: [id])
+
+  categoriaId String
+  categoria   CategoriaMovimiento @relation(fields: [categoriaId], references: [id])
+
+  contraparteId String?
+  contraparte   Contraparte? @relation(fields: [contraparteId], references: [id])
+
+  // Si es desembolso o abono de un préstamo
+  prestamoId String?
+  prestamo   Prestamo? @relation(fields: [prestamoId], references: [id])
+
+  // Anulación: este movimiento revierte a otro. Único, para que un
+  // movimiento no pueda anularse dos veces.
+  anulaMovimientoId String?     @unique
+  anulaMovimiento   Movimiento? @relation("MovimientoAnulacion", fields: [anulaMovimientoId], references: [id])
+  anuladoPor        Movimiento? @relation("MovimientoAnulacion")
+
+  notas        String? @db.Text
+  // Trazabilidad de la migración: "PAGOS POR DEBAJO!K168"
+  origenImport String?
+
+  /**
+   * Cotización de Alegra que originó este movimiento.
+   *
+   * Los ingresos del libro vienen de cobrar cotizaciones, y esas viven en
+   * Alegra. Guardar el id acá es una REFERENCIA, no una consolidación: sigue
+   * habiendo dos libros separados, pero se puede saltar de un ingreso al
+   * documento que lo originó.
+   *
+   * Es único para que importar dos veces la misma cotización sea imposible a
+   * nivel de base, no solo a nivel de código.
+   */
+  alegraEstimateId String? @unique
+
+  /**
+   * Factura de venta de Alegra que originó este movimiento.
+   *
+   * Va aparte de `alegraEstimateId` en vez de un campo genérico con tipo:
+   * son dos documentos distintos, con dos ciclos distintos, y un id de
+   * factura no puede confundirse con uno de cotización si viven en columnas
+   * separadas. También único, por la misma razón.
+   */
+  alegraInvoiceId String? @unique
+
+  /**
+   * Pago de Alegra que originó este EGRESO.
+   *
+   * Control es un libro de CAJA, así que el egreso se toma del pago y no de la
+   * factura de compra: una factura sin pagar no sacó plata de ninguna caja.
+   * Alegra documenta como advertencia crítica que /bills (devengado) y
+   * /payments (caja) son el mismo gasto en dos momentos y nunca se suman.
+   *
+   * Único, por la misma razón que los otros dos: importar dos veces el mismo
+   * pago tiene que ser imposible a nivel de base.
+   */
+  alegraPaymentId String? @unique
+
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation("MovimientoCreatedBy", fields: [createdById], references: [id])
+
+  servicioComoIngreso ServicioReferenciado? @relation("ServicioMovimientoIngreso")
+  servicioComoEgreso  ServicioReferenciado? @relation("ServicioMovimientoEgreso")
+
+  // Desglose por servicio de Alegra. Ver MovimientoDetalleServicio.
+  detalleServicios MovimientoDetalleServicio[]
+
+  @@map("movimientos")
+  @@index([periodo, bolsilloId])
+  @@index([fecha])
+  @@index([contraparteId, fecha])
+  @@index([categoriaId])
+  @@index([prestamoId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ConceptoPagoAlegra — traduce el concepto contable de Alegra a una categoría.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Un pago de Alegra dice POR QUÉ se pagó: "Aportes a EPS", "Otros honorarios",
+// "Ingresos recibidos para terceros". Medido sobre 150 pagos de salida reales,
+// el concepto está SIEMPRE: 61 lo traen en `payment.categories` y los otros 89
+// en la factura de compra a la que se aplicaron (`bill.purchases.categories`).
+// Ninguno se quedó sin concepto.
+//
+// Esta tabla guarda la equivalencia con las categorías del libro. Sin ella,
+// clasificar 244 pagos a mano es un trabajo que nadie va a hacer dos veces
+// —y un reporte por categoría que nadie mantiene deja de servir—. Con ella,
+// se clasifica UNA vez por concepto y el resto sale solo.
+//
+// El vínculo se aprende solo: cuando alguien importa un pago eligiendo una
+// categoría, la equivalencia queda guardada para la próxima.
+model ConceptoPagoAlegra {
+  id String @id @default(cuid())
+
+  // El nombre tal como lo devuelve Alegra. Es la clave natural: no hay un id
+  // estable de concepto que venga en los dos lados (pago y factura).
+  nombre String @unique
+
+  categoriaId String
+  categoria   CategoriaMovimiento @relation(fields: [categoriaId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("conceptos_pago_alegra")
+  @@index([categoriaId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// MovimientoDetalleServicio — de qué servicios se compone un cobro.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Un cobro no es de una sola cosa. La factura FEAD10134 son 729.000 que se
+// descomponen en 150.000 de `Administracion` y 579.000 de `Recaudo para
+// Terceros` — y solo la primera es ingreso de Admon. Sin este desglose la
+// única forma de etiquetar el movimiento es elegir uno de los dos servicios,
+// que es perder justo el corte que interesa.
+//
+// POR QUÉ UNA TABLA HIJA Y NO UN CAMPO EN MOVIMIENTO
+//
+// Un campo `servicioAlegraId` alcanzaría para un cobro manual de una sola
+// cosa, pero no para un documento de Alegra: la cotización 1191 tiene diez
+// líneas. Tener las dos cosas — un FK para lo manual y una tabla para lo
+// importado — dejaría dos caminos que hay que mantener sincronizados, y el día
+// que alguien toque uno solo el reporte miente. Así que hay un solo mecanismo:
+// un cobro manual escribe UNA fila acá, que es el caso particular del general.
+//
+// La suma de los montos de un movimiento da su `monto` exacto. Se garantiza en
+// código (`repartirEntreServicios`, con tests) y no con un CHECK, porque un
+// CHECK no puede mirar la tabla padre.
+model MovimientoDetalleServicio {
+  id String @id @default(cuid())
+
+  movimientoId String
+  // En cascada: el desglose no tiene vida propia. Nunca se borra en la
+  // práctica — los movimientos son inmutables y se anulan con un
+  // contra-movimiento, que trae su propio desglose para que las dos filas se
+  // neteen al reportar.
+  movimiento   Movimiento @relation(fields: [movimientoId], references: [id], onDelete: Cascade)
+
+  servicioAlegraId String
+  servicio         ServicioAlegra @relation(fields: [servicioAlegraId], references: [id])
+
+  // Parte del monto del movimiento que le toca a este servicio. Siempre
+  // positivo: el signo lo pone el `tipo` del movimiento, igual que en el resto
+  // del libro.
+  monto Decimal @db.Decimal(14, 2)
+
+  /**
+   * La parte de `monto` que es IVA.
+   *
+   * El IVA no es ingreso: se cobra para girarlo a la DIAN, igual que el
+   * recaudo para terceros. Se guarda acá y no como propiedad del servicio
+   * porque NO es una propiedad del servicio — medido contra la cuenta,
+   * "Afiliacion Dependiente" aparece con 19% en unas facturas y sin impuesto
+   * en otras. La mensajería y el recaudo van exentos.
+   *
+   * Va incluido en `monto` a propósito: eso es lo que entró a la caja, y el
+   * saldo del bolsillo tiene que seguir cuadrando contra el extracto.
+   */
+  impuesto Decimal @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  // Un servicio aparece una sola vez por movimiento: las líneas repetidas del
+  // mismo item se fusionan antes de guardar.
+  @@map("movimiento_detalle_servicio")
+  @@unique([movimientoId, servicioAlegraId])
+  @@index([servicioAlegraId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Préstamo — desembolso a una contraparte, con abonos.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// `saldoActual` y `estado` NO son columnas: se derivan de los movimientos
+// ligados por prestamoId. Guardarlos sería repetir el error del Excel, donde
+// el estado es texto libre con 178 variantes ("DESCONTADO 30/04", "ok",
+// "RESTA 100,000") y no hay forma de saber cuánto debe alguien sin leer 240
+// filas.
+//
+// La única parte del estado que no se puede derivar es la decisión de dar un
+// préstamo por perdido, y por eso es un flag explícito.
+model Prestamo {
+  id              String   @id @default(cuid())
+  contraparteId   String
+  contraparte     Contraparte @relation(fields: [contraparteId], references: [id])
+
+  fechaDesembolso DateTime @db.Date
+  montoOriginal   Decimal  @db.Decimal(14, 2)
+  concepto        String
+
+  bolsilloOrigenId String
+  bolsilloOrigen   Bolsillo @relation("PrestamoBolsilloOrigen", fields: [bolsilloOrigenId], references: [id])
+
+  // Decisión manual, no derivable. Un préstamo activo NO se archiva: si
+  // desaparece de la vista vuelve el problema que teníamos en el Excel.
+  marcadoIncobrable Boolean @default(false)
+  incobrableMotivo  String? @db.Text
+
+  notas        String? @db.Text
+  origenImport String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("PrestamoCreatedBy", fields: [createdById], references: [id])
+
+  // Desembolso + abonos
+  movimientos Movimiento[]
+
+  @@map("prestamos")
+  @@index([contraparteId])
+  @@index([fechaDesembolso])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ServicioReferenciado — servicio que Admon intermedia entre un cliente y un
+// tercero, atando las dos patas de movimiento.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Mensajería y exámenes médicos son el mismo animal:
+//
+//   mensajería  cotiza 520.000 → entrega 520.000 a Fawer        → margen 0
+//   exámenes    cobra   45.000 → entrega  30.000 al consultorio → margen 15.000
+//
+// Registrar solo el egreso — que es lo que hace el Excel hoy — infla el gasto
+// del mes con plata que no es de Admon, y es un error que nunca se detecta
+// porque se ve como un gasto más.
+//
+// `margen` NO es columna: es valorFacturado - valorEntregado. En junio-2026 la
+// comisión de exámenes fue 10.000 en dos casos y 15.000 en otros dos, así que
+// tampoco puede ser una constante de configuración.
+model ServicioReferenciado {
+  id             String @id @default(cuid())
+
+  tipoServicioId String
+  tipoServicio   TipoServicioReferenciado @relation(fields: [tipoServicioId], references: [id])
+
+  fecha   DateTime @db.Date
+  periodo String
+
+  // Quién paga
+  clienteId String
+  cliente   Contraparte @relation("ServicioCliente", fields: [clienteId], references: [id])
+  // A quién se le entrega (Fawer, el consultorio)
+  proveedorId String
+  proveedor   Contraparte @relation("ServicioProveedor", fields: [proveedorId], references: [id])
+
+  valorFacturado Decimal @db.Decimal(14, 2)
+  valorEntregado Decimal @db.Decimal(14, 2)
+
+  // null = facturado/cotizado pero todavía sin cobrar
+  movimientoIngresoId String?     @unique
+  movimientoIngreso   Movimiento? @relation("ServicioMovimientoIngreso", fields: [movimientoIngresoId], references: [id])
+  // null = cobrado pero todavía sin entregar al tercero
+  movimientoEgresoId  String?     @unique
+  movimientoEgreso    Movimiento? @relation("ServicioMovimientoEgreso", fields: [movimientoEgresoId], references: [id])
+
+  // Referencia a la cotización en Alegra. Es un puntero para poder saltar a
+  // /dashboard/finances/estimates/[id], NO una consolidación de los dos libros.
+  alegraEstimateId String?
+
+  notas        String? @db.Text
+  origenImport String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("ServicioCreatedBy", fields: [createdById], references: [id])
+
+  @@map("servicios_referenciados")
+  @@index([periodo])
+  @@index([tipoServicioId, fecha])
+  @@index([clienteId])
+  @@index([proveedorId])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// CierreMensual — saldo por bolsillo y periodo. Reemplaza la hoja CUENTAS.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// `saldoFinalCalculado` NUNCA se digita: sale de saldoInicial + movimientos
+// del periodo. `saldoFinalReal` es el conteo físico o el extracto, y existe
+// para COMPARAR contra el cálculo — no para reemplazarlo.
+//
+// Cuando difieren, la diferencia queda registrada y exige justificación. En el
+// Excel esto no se validaba: ADMON cerró noviembre-2025 en 8.000.000 y abrió
+// diciembre en 6.067.340, y esos 1.932.660 no dejaron rastro.
+model CierreMensual {
+  id         String @id @default(cuid())
+  periodo    String // "2026-08"
+  bolsilloId String
+  bolsillo   Bolsillo @relation(fields: [bolsilloId], references: [id])
+
+  // Debe ser igual al saldo final del periodo anterior. La única excepción es
+  // el arranque del módulo, marcado con esAperturaInicial.
+  saldoInicial        Decimal  @db.Decimal(14, 2)
+  saldoFinalCalculado Decimal  @db.Decimal(14, 2)
+  saldoFinalReal      Decimal? @db.Decimal(14, 2)
+  diferencia          Decimal? @db.Decimal(14, 2)
+  justificacion       String?  @db.Text
+
+  // Saldo semilla al arrancar el módulo: es el único que se digita.
+  esAperturaInicial Boolean @default(false)
+
+  // Un periodo cerrado no admite movimientos nuevos sin reabrirlo.
+  cerrado     Boolean   @default(false)
+  cerradoEn   DateTime?
+  cerradoById String?
+  cerradoBy   User?     @relation("CierreCerradoBy", fields: [cerradoById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("CierreCreatedBy", fields: [createdById], references: [id])
+
+  @@unique([periodo, bolsilloId])
+  @@map("cierres_mensuales")
+  @@index([periodo])
+  @@index([bolsilloId, periodo])
 }

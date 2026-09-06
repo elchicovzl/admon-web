@@ -18,6 +18,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
@@ -43,6 +45,7 @@ export function EditUserForm({ open, onOpenChange, user, onUserUpdated }: EditUs
     defaultValues: {
       name: user.name || '',
       email: user.email,
+      canAccessControl: user.canAccessControl,
     },
   })
 
@@ -125,6 +128,32 @@ export function EditUserForm({ open, onOpenChange, user, onUserUpdated }: EditUs
                     />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <Separator />
+
+            <FormField
+              control={form.control}
+              name="canAccessControl"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start justify-between gap-4 rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <FormLabel>Acceso a Control</FormLabel>
+                    <FormDescription>
+                      Permite ver y registrar la caja interna: movimientos,
+                      préstamos y cierres mensuales.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value ?? false}
+                      onCheckedChange={field.onChange}
+                      disabled={isLoading}
+                      aria-label="Acceso al módulo Control"
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />

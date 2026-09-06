@@ -134,12 +134,41 @@ enum UserRole {
 }
 ```
 
+### Permisos ortogonales al rol
+
+`User.role` es un campo **único**: un rol nuevo le quita al usuario todo lo demás.
+Cuando un módulo necesita acceso restringido pero el usuario debe conservar el
+resto del dashboard, se agrega un **flag booleano**, no un valor al enum.
+
+```prisma
+model User {
+  role             UserRole @default(MANAGER)
+  canAccessControl Boolean  @default(false)  // módulo Control (caja interna)
+}
+```
+
+```typescript
+// Regla de acceso: SUPER_ADMIN entra por rol; el resto, por flag explícito
+session.user.role === UserRole.SUPER_ADMIN || user.canAccessControl
+```
+
 ### Protección de Rutas (middleware.ts)
 ```typescript
 const protectedRoutes = ['/dashboard']
 const superAdminRoutes = ['/dashboard/users']
+const controlRoutes = ['/dashboard/control']
 
-// Flujo: Check auth → Check role → Allow/Deny
+// Flujo: Check auth → Check role/flag → Allow/Deny
+```
+
+⚠️ **El middleware lee el JWT, que vive 30 días** (`session.maxAge`). Sirve como
+gate barato para que un usuario sin permiso no vea la UI, pero **un permiso
+revocado sigue diciendo `true` en el token hasta que expire**. Para módulos
+sensibles la verificación real va contra la base de datos:
+
+```typescript
+// lib/auth/rbac.ts — lee de la DB, ignora el token
+await requireControlAccess()   // throws si no está autorizado
 ```
 
 ### Validación Backend SIEMPRE

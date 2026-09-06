@@ -39,6 +39,7 @@ import {
   type DateRangeResult,
 } from './date-range-walk'
 import type {
+  AlegraItemListResponse,
   BillDetail,
   BillListItem,
   BillListResponse,
@@ -51,6 +52,7 @@ import type {
   ListBillsParams,
   ListEstimatesParams,
   ListInvoicesParams,
+  ListItemsParams,
   ListPaymentsParams,
   PaymentDetail,
   PaymentListItem,
@@ -153,6 +155,27 @@ export function getCachedInvoices(
   )()
 }
 
+/**
+ * Catálogo de productos y servicios de Alegra.
+ *
+ * TTL largo: un catálogo de servicios cambia cuando alguien agrega un servicio
+ * nuevo, no cada cinco minutos.
+ */
+export function getCachedItems(
+  params: ListItemsParams = {},
+): Promise<AlegraItemListResponse> {
+  const key = stableKey(params)
+
+  return unstable_cache(
+    async () => getAlegraClient().listItems(params),
+    ['alegra', 'items', 'list', key],
+    {
+      revalidate: ALEGRA_TTL.company,
+      tags: [ALEGRA_TAGS.all],
+    },
+  )()
+}
+
 /** Single invoice detail. */
 export function getCachedInvoice(id: string): Promise<InvoiceDetail> {
   return unstable_cache(
@@ -220,7 +243,9 @@ export function getCachedEstimatesInRange(
             limit,
             client_name: clientName ?? undefined,
           }),
-        { dateFrom, dateTo, label: 'cotizaciones' },
+        // 'id': /estimates se pide ordenado por id, que es único y hace la
+        // paginación determinista. Ver la nota en AlegraClient.listEstimates.
+        { dateFrom, dateTo, label: 'cotizaciones', orden: 'id' },
       ),
     ['alegra', 'estimates', 'range', key, String(ttl)],
     {
@@ -270,6 +295,15 @@ export interface BillsRangeQuery {
   /** Substring match handed to Alegra's `provider_name` (server-side). */
   providerName?: string | null
   status?: string | null
+  /**
+   * `bill` | `supportDocument` | `all`.
+   *
+   * OJO: el DEFAULT DE ALEGRA ES `bill`, y deja afuera los documentos
+   * soporte sin avisar. Medido contra la cuenta: 171 sin `type` contra 271
+   * con `type: 'all'` — cien documentos invisibles. Quien necesite TODO lo
+   * comprado tiene que pedir 'all' explícitamente.
+   */
+  type?: 'bill' | 'supportDocument' | 'all' | null
 }
 
 /**
@@ -280,10 +314,10 @@ export interface BillsRangeQuery {
  * filters, so passing them narrows the walk rather than widening it.
  */
 export function getCachedBillsInRange(
-  { dateFrom, dateTo, providerName = null, status = null }: BillsRangeQuery,
+  { dateFrom, dateTo, providerName = null, status = null, type = null }: BillsRangeQuery,
   ttl: number = ALEGRA_TTL.kpis,
 ): Promise<DateRangeResult<BillListItem>> {
-  const key = stableKey({ from: dateFrom, to: dateTo, provider: providerName, status })
+  const key = stableKey({ from: dateFrom, to: dateTo, provider: providerName, status, type })
 
   return unstable_cache(
     async () =>
@@ -294,8 +328,11 @@ export function getCachedBillsInRange(
             limit,
             provider_name: providerName ?? undefined,
             status: status ?? undefined,
+            type: type ?? undefined,
           }),
-        { dateFrom, dateTo, label: 'facturas de compra' },
+        // 'fecha': /bills no acepta order_field: 'id', así que acá el corte
+        // temprano sigue siendo válido y la paginación sigue siendo inestable.
+        { dateFrom, dateTo, label: 'facturas de compra', orden: 'fecha' },
       ),
     ['alegra', 'bills', 'range', key, String(ttl)],
     {
@@ -369,7 +406,9 @@ export function getCachedPaymentsInRange(
             limit,
             type: type ?? undefined,
           }),
-        { dateFrom, dateTo, label: 'pagos' },
+        // 'id': /payments también acepta orden por id. Misma razón que
+        // cotizaciones — paginación determinista sobre una clave única.
+        { dateFrom, dateTo, label: 'pagos', orden: 'id' },
       ),
     ['alegra', 'payments', 'range', key, String(ttl)],
     {

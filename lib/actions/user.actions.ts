@@ -60,6 +60,7 @@ export const getUsers = cache(async (
         image: true,
         role: true,
         isActive: true,
+        canAccessControl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -108,6 +109,7 @@ export const getManagers = cache(async (): Promise<ActionResponse<SafeUser[]>> =
         image: true,
         role: true,
         isActive: true,
+        canAccessControl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -154,6 +156,7 @@ export const getUserById = cache(async (
         image: true,
         role: true,
         isActive: true,
+        canAccessControl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -205,7 +208,7 @@ export async function createManager(
       }
     }
 
-    const { name, email, role } = validatedFields.data
+    const { name, email, role, canAccessControl } = validatedFields.data
 
     // Only allow creating managers
     if (role === UserRole.SUPER_ADMIN) {
@@ -233,6 +236,7 @@ export async function createManager(
         name,
         email,
         role: UserRole.MANAGER,
+        canAccessControl,
         createdById: authCheck.userId,
       },
       select: {
@@ -242,6 +246,7 @@ export async function createManager(
         image: true,
         role: true,
         isActive: true,
+        canAccessControl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -335,6 +340,7 @@ export async function updateUser(
         image: true,
         role: true,
         isActive: true,
+        canAccessControl: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -554,6 +560,7 @@ export async function updateProfile(
         image: true,
         role: true,
         isActive: true,
+        canAccessControl: true,
         createdAt: true,
         updatedAt: true,
       },

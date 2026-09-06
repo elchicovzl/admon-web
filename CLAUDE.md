@@ -64,19 +64,43 @@ Incluye:
 
 ### Para Dashboard:
 ```bash
-# 1. Setup database
-DATABASE_URL="postgresql://..." pnpm db:migrate
+# 1. Levantar la base local (Postgres 16 en Docker/Podman)
+pnpm db:up
 
-# 2. Seed initial users
+# 2. Crear .env.local con la conexión local (ver abajo)
+
+# 3. Migraciones + datos iniciales
+pnpm db:migrate
 pnpm db:seed
 
-# 3. Start dev server
+# 4. Start dev server
 pnpm dev
 
-# 4. Login
+# 5. Login
 http://localhost:3000/login
 admin@admon.com / admin123
 ```
+
+**`.env.local`** (gitignored; pisa a `.env` tanto en Next.js como en Prisma):
+
+```env
+DATABASE_URL="postgresql://postgres:admon_local_dev@localhost:55432/admon"
+DIRECT_URL="postgresql://postgres:admon_local_dev@localhost:55432/admon"
+```
+
+El resto de las variables (`AUTH_SECRET`, R2, Resend, Alegra…) se siguen
+leyendo de `.env`. En `.env.local` va **solo lo que cambia en local**.
+
+> **Producción vive en Dokploy** (proyecto `admon db` → `admonDB`) y no se
+> toca desde el entorno de desarrollo. El `docker-compose.yml` de este repo es
+> exclusivamente para local.
+
+| Comando | Qué hace |
+|---------|----------|
+| `pnpm db:up` | Levanta la base local |
+| `pnpm db:down` | La apaga (conserva los datos) |
+| `pnpm db:nuke` | La apaga y **borra el volumen** — empezar de cero |
+| `pnpm db:deploy` | Aplica migraciones sin generar una nueva (CI/prod) |
 
 ### Para Landing:
 ```bash

@@ -35,6 +35,7 @@ import {
   ValidationError,
 } from './errors'
 import {
+  AlegraItemListResponseSchema,
   BillDetailSchema,
   BillListResponseSchema,
   CompanySchema,
@@ -44,6 +45,7 @@ import {
   InvoiceListResponseSchema,
   PaymentDetailSchema,
   PaymentListResponseSchema,
+  type AlegraItemListResponse,
   type BillDetail,
   type BillListResponse,
   type Company,
@@ -54,6 +56,7 @@ import {
   type ListBillsParams,
   type ListEstimatesParams,
   type ListInvoicesParams,
+  type ListItemsParams,
   type ListPaymentsParams,
   type PaymentDetail,
   type PaymentListResponse,
@@ -202,11 +205,44 @@ export class AlegraClient {
   async listEstimates(params: ListEstimatesParams = {}): Promise<EstimateListResponse> {
     const normalized: ListEstimatesParams = {
       metadata: true,
-      order_field: 'date',
+      // Se ordena por `id` y no por `date` a propósito. Alegra no desempata de
+      // forma estable entre documentos del mismo día, así que paginar sobre un
+      // orden por fecha repite y pierde filas en los bordes de página — medido
+      // contra la cuenta real: 81 filas para 73 cotizaciones distintas. El `id`
+      // es único, así que la paginación se vuelve determinista.
+      //
+      // El costo es perder el corte temprano por fecha: el id ordena por
+      // creación, no por la fecha del documento. Lo compensa el margen de
+      // páginas de collectByDateRange (ver `orden: 'id'` ahí).
+      order_field: 'id',
       order_direction: 'DESC',
       ...params,
     }
     return this.request('/estimates', normalized, EstimateListResponseSchema)
+  }
+
+  /**
+   * Catálogo de productos y servicios.
+   *
+   * Es la fuente del "servicio por el que se cobró": el nombre del ítem que
+   * aparece como línea en una cotización o factura — "Independiente 03",
+   * "Administracion", "Recaudo para Terceros".
+   *
+   * Se ordena por `id` y no por `name` por la misma razón que los documentos
+   * (ver date-range-walk): Alegra no desempata de forma estable, y un orden
+   * que no desempata hace que paginar repita filas y pierda otras. Con nombres
+   * repetidos — que los hay, porque `name` no es único en Alegra — eso se
+   * traduce en servicios que la sincronización nunca ve y termina apagando.
+   * Ordenar en pantalla es problema de quien muestra, no de quien pagina.
+   */
+  async listItems(params: ListItemsParams = {}): Promise<AlegraItemListResponse> {
+    const normalized: ListItemsParams = {
+      metadata: true,
+      order_field: 'id',
+      order_direction: 'ASC',
+      ...params,
+    }
+    return this.request('/items', normalized, AlegraItemListResponseSchema)
   }
 
   /** Get full estimate detail by id. */
@@ -232,6 +268,10 @@ export class AlegraClient {
   async listBills(params: ListBillsParams = {}): Promise<BillListResponse> {
     const normalized: ListBillsParams = {
       metadata: true,
+
+      // /bills NO acepta order_field: 'id' — solo date/name/dueDate. Se queda
+      // en 'date' y depende del descarte de repetidos de collectByDateRange,
+      // que cubre el síntoma más visible aunque no la inestabilidad de fondo.
       order_field: 'date',
       order_direction: 'DESC',
       ...params,
@@ -273,7 +313,16 @@ export class AlegraClient {
   async listPayments(params: ListPaymentsParams = {}): Promise<PaymentListResponse> {
     const normalized: ListPaymentsParams = {
       metadata: true,
-      order_field: 'date',
+      // Se ordena por `id` y no por `date` a propósito. Alegra no desempata de
+      // forma estable entre documentos del mismo día, así que paginar sobre un
+      // orden por fecha repite y pierde filas en los bordes de página — medido
+      // contra la cuenta real: 81 filas para 73 cotizaciones distintas. El `id`
+      // es único, así que la paginación se vuelve determinista.
+      //
+      // El costo es perder el corte temprano por fecha: el id ordena por
+      // creación, no por la fecha del documento. Lo compensa el margen de
+      // páginas de collectByDateRange (ver `orden: 'id'` ahí).
+      order_field: 'id',
       order_direction: 'DESC',
       fields: AlegraClient.PAYMENT_FIELDS,
       ...params,

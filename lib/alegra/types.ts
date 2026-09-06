@@ -486,6 +486,33 @@ export type BillProvider = z.infer<typeof BillProviderSchema>
  * absent on bills captured without a supplier document number.
  * Every numeric field uses `safeNumber` — see the file header.
  */
+/**
+ * El concepto contable de una línea: "Otros honorarios", "Aportes a EPS",
+ * "Ingresos recibidos para terceros".
+ *
+ * Es lo que dice POR QUÉ se pagó, y aparece en los dos lados del gasto: en
+ * `payment.categories` cuando el pago no se aplicó a ninguna factura, y en
+ * `bill.purchases.categories` cuando sí. Medido sobre 150 pagos de salida
+ * reales: 89 tenían factura, 61 categorías, y NINGUNO las dos ni ninguna —
+ * así que entre los dos lugares la cobertura es del 100%.
+ */
+export const AlegraConceptoSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).transform(String).optional(),
+    /**
+     * Opcional aunque los datos reales siempre lo traen: este mismo schema
+     * cubre el array `categories` de un pago, que `classifyPaymentAssociation`
+     * solo usa para saber SI hay categorías. Exigir el nombre ahí haría fallar
+     * la clasificación por un campo que a esa función no le importa.
+     */
+    name: z.string().optional(),
+    observations: z.string().nullable().optional(),
+    total: safeNumber.optional(),
+  })
+  .passthrough()
+
+export type AlegraConcepto = z.infer<typeof AlegraConceptoSchema>
+
 export const BillListItemSchema = z.object({
   id: z.string(),
   billNumber: z.string().nullable().optional(),
@@ -499,6 +526,21 @@ export const BillListItemSchema = z.object({
   currency: InvoiceCurrencySchema,
   observations: z.string().nullable().optional(),
   anotation: z.string().nullable().optional(),
+  /**
+   * El concepto de la compra. Viene YA en la lista, así que no hace falta
+   * pedir el detalle de cada factura para saber por qué se pagó.
+   *
+   * Algunas cuentas lo anidan en `purchases.items` en vez de
+   * `purchases.categories`; se aceptan las dos formas.
+   */
+  purchases: z
+    .object({
+      categories: z.array(AlegraConceptoSchema).optional(),
+      items: z.array(AlegraConceptoSchema).optional(),
+    })
+    .passthrough()
+    .nullable()
+    .optional(),
 }).passthrough()
 
 export type BillListItem = z.infer<typeof BillListItemSchema>
@@ -670,7 +712,16 @@ export const PaymentListItemSchema = z.object({
   // header: `associations` is a display string, NOT a structure.
   invoices: z.array(PaymentDocumentLinkSchema).optional(),
   bills: z.array(PaymentDocumentLinkSchema).optional(),
-  categories: z.array(PaymentDocumentLinkSchema).optional(),
+  /**
+   * Las categorías NO son un documento: son EL CONCEPTO del pago —
+   * "Aportes a EPS", "Otros gastos generales", "Ingresos recibidos para
+   * terceros"—, y por eso llevan `name`. Un pago las trae cuando NO se aplicó
+   * a una factura de compra; si se aplicó, el concepto vive en la factura.
+   *
+   * `classifyPaymentAssociation` solo mira si el array está o no; el nombre lo
+   * usa Control para deducir la categoría del movimiento.
+   */
+  categories: z.array(AlegraConceptoSchema).optional(),
 
   /**
    * Human-readable summary Alegra builds for the UI, e.g.
@@ -722,5 +773,73 @@ export interface ListPaymentsParams {
   order_direction?: 'ASC' | 'DESC'
   /** Comma-separated extras. `associations` is required for expense math. */
   fields?: string
+  [key: string]: unknown
+}
+
+
+// =============================================================================
+// Items (productos y servicios) — el catálogo de lo que se vende
+//
+// Es lo que aparece como línea en una cotización o factura: "Independiente 03",
+// "Administración", "Recaudo para Terceros". El nombre del ítem ES el servicio
+// por el que se cobró, y por eso interesa: permite preguntar cuánto se recaudó
+// por cada uno.
+//
+// Los montos vuelven a pasar por `safeNumber`: Alegra devuelve campos
+// numéricos como string según la cuenta.
+// =============================================================================
+
+export const AlegraItemPriceSchema = z
+  .object({
+    idPriceList: z.union([z.string(), z.number()]).optional(),
+    name: z.string().optional(),
+    price: safeNumber.optional(),
+  })
+  .passthrough()
+
+export const AlegraItemSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).transform(String),
+    name: z.string(),
+    description: z.string().nullable().optional(),
+    reference: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    /** 'product' | 'service' según la cuenta; llega suelto, no se restringe. */
+    type: z.string().nullable().optional(),
+    /** Puede venir como número suelto o como lista de precios. */
+    price: z.union([safeNumber, z.array(AlegraItemPriceSchema)]).optional(),
+  })
+  .passthrough()
+
+export type AlegraItem = z.infer<typeof AlegraItemSchema>
+
+/** Igual que las demás listas: o viene envuelto en metadata, o es un array. */
+const AlegraItemListResponseBaseSchema = z.union([
+  z.object({
+    metadata: z.object({ total: z.number() }),
+    data: z.array(AlegraItemSchema),
+  }),
+  z.array(AlegraItemSchema),
+])
+
+export const AlegraItemListResponseSchema =
+  AlegraItemListResponseBaseSchema.transform((v) =>
+    Array.isArray(v) ? { data: v, total: v.length } : { data: v.data, total: v.metadata.total }
+  )
+
+export interface AlegraItemListResponse {
+  data: AlegraItem[]
+  total: number
+}
+
+export interface ListItemsParams {
+  start?: number
+  limit?: number
+  metadata?: boolean
+  name?: string
+  /** 'active' | 'inactive' según la cuenta. */
+  status?: string
+  order_field?: 'id' | 'name' | 'reference'
+  order_direction?: 'ASC' | 'DESC'
   [key: string]: unknown
 }
