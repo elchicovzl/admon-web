@@ -1415,6 +1415,20 @@ model MovimientoDetalleServicio {
   // del libro.
   monto Decimal @db.Decimal(14, 2)
 
+  /**
+   * La parte de `monto` que es IVA.
+   *
+   * El IVA no es ingreso: se cobra para girarlo a la DIAN, igual que el
+   * recaudo para terceros. Se guarda acá y no como propiedad del servicio
+   * porque NO es una propiedad del servicio — medido contra la cuenta,
+   * "Afiliacion Dependiente" aparece con 19% en unas facturas y sin impuesto
+   * en otras. La mensajería y el recaudo van exentos.
+   *
+   * Va incluido en `monto` a propósito: eso es lo que entró a la caja, y el
+   * saldo del bolsillo tiene que seguir cuadrando contra el extracto.
+   */
+  impuesto Decimal @default(0) @db.Decimal(14, 2)
+
   createdAt DateTime @default(now())
 
   // Un servicio aparece una sola vez por movimiento: las líneas repetidas del

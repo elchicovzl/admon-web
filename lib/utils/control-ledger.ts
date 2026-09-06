@@ -328,7 +328,17 @@ export interface LineaDeDocumento {
 /** Cuánto del cobro le toca a cada servicio. */
 export interface ParteDeServicio {
   itemId: string
+  /** Lo que entró a la caja por este servicio, IVA incluido. */
   monto: number
+  /**
+   * La parte de `monto` que es impuesto.
+   *
+   * El IVA no es ingreso: se cobra para girarlo a la DIAN, igual que el
+   * recaudo para terceros. Se guarda por LÍNEA y no por servicio porque no es
+   * una propiedad del servicio: medido contra la cuenta, "Afiliacion
+   * Dependiente" aparece con 19% en unas facturas y sin impuesto en otras.
+   */
+  impuesto: number
 }
 
 /**
@@ -352,31 +362,41 @@ export function repartirEntreServicios(
 ): ParteDeServicio[] {
   if (montoCobrado <= 0) return []
 
-  // Bruto por línea: neto más los impuestos de esa misma línea.
-  const brutoPorItem = new Map<string, number>()
+  // Bruto e impuesto por línea. Se acumulan por separado porque un mismo item
+  // puede venir con impuesto en una línea y sin él en otra.
+  const porItem = new Map<string, { bruto: number; impuesto: number }>()
 
   for (const linea of lineas) {
     const neto = linea.precio * linea.cantidad - (linea.descuento ?? 0)
     if (neto <= 0) continue
 
-    const factor = (linea.impuestos ?? []).reduce((acc, pct) => acc + pct / 100, 1)
-    const bruto = neto * factor
+    const tasa = (linea.impuestos ?? []).reduce((acc, pct) => acc + pct / 100, 0)
+    const impuesto = neto * tasa
 
-    brutoPorItem.set(linea.itemId, (brutoPorItem.get(linea.itemId) ?? 0) + bruto)
+    const acc = porItem.get(linea.itemId) ?? { bruto: 0, impuesto: 0 }
+    acc.bruto += neto + impuesto
+    acc.impuesto += impuesto
+    porItem.set(linea.itemId, acc)
   }
 
-  const totalBruto = [...brutoPorItem.values()].reduce((acc, bruto) => acc + bruto, 0)
+  const totalBruto = [...porItem.values()].reduce((acc, v) => acc + v.bruto, 0)
   if (totalBruto <= 0) return []
 
   // De mayor a menor, y determinista: el residuo del redondeo lo absorbe la
   // parte más grande, que es donde menos se nota.
-  const items = [...brutoPorItem.entries()].sort((a, b) => b[1] - a[1])
+  const items = [...porItem.entries()].sort((a, b) => b[1].bruto - a[1].bruto)
 
   const partes = items
-    .map(([itemId, bruto]) => ({
-      itemId,
-      monto: redondearMonto((bruto / totalBruto) * montoCobrado),
-    }))
+    .map(([itemId, v]) => {
+      const monto = redondearMonto((v.bruto / totalBruto) * montoCobrado)
+      return {
+        itemId,
+        monto,
+        // El impuesto se prorratea con la MISMA proporción que el monto: si se
+        // cobró la mitad de la factura, se cobró la mitad del IVA.
+        impuesto: redondearMonto(monto * (v.impuesto / v.bruto)),
+      }
+    })
     // Una parte puede redondear a cero si su peso es despreciable frente al
     // cobro. Guardar un desglose de cero es ruido: no dice que se cobró ese
     // servicio. Se descartan ANTES de cuadrar, no después, porque si no el
@@ -486,7 +506,14 @@ export interface IngresoDeNaturaleza {
   bruto: number
   /** Parte que es plata en tránsito: entra y vuelve a salir. */
   enTransito: number
-  /** `bruto` menos la plata en tránsito: lo que se ganó de verdad. */
+  /**
+   * IVA cobrado. Tampoco es ingreso: se cobra para girarlo a la DIAN.
+   *
+   * Solo aparece del lado de las facturas. Las cotizaciones no llevan IVA, y
+   * lo que se cobra por debajo tampoco.
+   */
+  impuesto: number
+  /** `bruto` menos la plata en tránsito y menos el IVA: lo que se ganó. */
   neto: number
   /**
    * De qué categorías se compone, de mayor a menor.
@@ -513,7 +540,7 @@ export interface MovimientoParaNaturaleza {
   categoria: string
   monto: number
   /** Desglose por servicio, si lo tiene. */
-  detalles: Array<{ monto: number; enTransito: boolean }>
+  detalles: Array<{ monto: number; enTransito: boolean; impuesto: number }>
 }
 
 /**
@@ -530,10 +557,12 @@ export function ingresosPorNaturaleza(
   const vacio = (): {
     montos: number[]
     transito: number[]
+    impuestos: number[]
     categorias: Map<string, number[]>
   } => ({
     montos: [],
     transito: [],
+    impuestos: [],
     categorias: new Map(),
   })
 
@@ -556,17 +585,25 @@ export function ingresosPorNaturaleza(
     cubo.montos.push(m.monto)
     cubo.categorias.set(m.categoria, [...(cubo.categorias.get(m.categoria) ?? []), m.monto])
     for (const d of m.detalles) {
-      if (d.enTransito) cubo.transito.push(d.monto)
+      if (d.enTransito) {
+        // Su monto ya sale entero; restarle además el IVA sería descontarlo
+        // dos veces. En la práctica el recaudo y la mensajería van exentos.
+        cubo.transito.push(d.monto)
+      } else {
+        cubo.impuestos.push(d.impuesto)
+      }
     }
   }
 
   const cerrar = (c: ReturnType<typeof vacio>): IngresoDeNaturaleza => {
     const bruto = sumarMontos(c.montos)
     const enTransito = sumarMontos(c.transito)
+    const impuesto = sumarMontos(c.impuestos)
     return {
       bruto,
       enTransito,
-      neto: redondearMonto(bruto - enTransito),
+      impuesto,
+      neto: redondearMonto(bruto - enTransito - impuesto),
       porCategoria: [...c.categorias.entries()]
         .map(([nombre, montos]) => ({ nombre, monto: sumarMontos(montos) }))
         .sort((a, b) => b.monto - a.monto),
@@ -939,7 +976,12 @@ export interface MovimientoParaDesglose {
   esNomina: boolean
   /** Con qué nombre se identifica a quien cobró. Solo se usa en la nómina. */
   persona: string
-  detalles: Array<{ servicio: string; monto: number; enTransito: boolean }>
+  detalles: Array<{
+    servicio: string
+    monto: number
+    enTransito: boolean
+    impuesto: number
+  }>
 }
 
 /** Etiqueta de los cobros que entraron sin desglose por servicio. */
@@ -980,8 +1022,10 @@ export function desglosarPeriodo(
       }
       // La plata en tránsito se saca acá, no después: la tarjeta muestra el
       // neto y la lista tiene que sumar lo mismo.
+      // La plata en tránsito Y EL IVA se sacan acá, no después: la tarjeta
+      // muestra el neto y la lista tiene que sumar lo mismo.
       for (const d of m.detalles) {
-        if (!d.enTransito) sumar(destino, d.servicio, d.monto)
+        if (!d.enTransito) sumar(destino, d.servicio, redondearMonto(d.monto - d.impuesto))
       }
       continue
     }

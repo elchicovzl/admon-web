@@ -85,22 +85,34 @@ async function Kpis({ periodo }: { periodo: string }) {
     // pierde media razón de ser del módulo.
     {
       titulo: 'Ingresos por cotización (C)',
-      valor: formatearMonto(ingresos.cotizacion.bruto),
+      valor: formatearMonto(ingresos.cotizacion.neto),
       icono: TrendingUp,
-      nota: '"Por debajo". El documento es una cotización de Alegra',
+      // Las cotizaciones no llevan IVA ni plata en tránsito, así que el neto
+      // y el bruto coinciden. Se usa el neto igual, para que la tarjeta no
+      // mienta el día que aparezca un caso distinto.
+      nota: '"Por debajo". El documento es una cotización de Alegra, sin IVA',
     },
     // Cuando hay plata en tránsito, esta tarjeta muestra lo GANADO y no lo que
     // entró: de una factura de 729.000 solo 150.000 son de Admon, y mostrar
     // los 729.000 hace tomar decisiones sobre plata ajena. El bruto no se
     // esconde: queda en la nota.
-    ingresos.factura.enTransito > 0
+    ingresos.factura.enTransito > 0 || ingresos.factura.impuesto > 0
       ? {
           titulo: 'Ingreso real por factura (F)',
           valor: formatearMonto(ingresos.factura.neto),
           icono: TrendingUp,
-          nota: `Entraron ${formatearMonto(
-            ingresos.factura.bruto
-          )}; ${formatearMonto(ingresos.factura.enTransito)} son plata en tránsito`,
+          // Se nombran las dos cosas que no son ingreso: la plata que solo
+          // pasa y el IVA, que se cobra para girarlo a la DIAN.
+          nota: `Entraron ${formatearMonto(ingresos.factura.bruto)}; ${[
+            ingresos.factura.enTransito > 0
+              ? `${formatearMonto(ingresos.factura.enTransito)} en tránsito`
+              : null,
+            ingresos.factura.impuesto > 0
+              ? `${formatearMonto(ingresos.factura.impuesto)} de IVA`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' y ')}`,
         }
       : {
           titulo: 'Ingresos por factura (F)',

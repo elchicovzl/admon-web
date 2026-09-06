@@ -511,7 +511,7 @@ describe('repartirEntreServicios', () => {
       180000
     )
 
-    expect(partes).toEqual([{ itemId: '3', monto: 180000 }])
+    expect(partes).toEqual([{ itemId: '3', monto: 180000, impuesto: 0 }])
   })
 
   it('descuenta el descuento de la línea', () => {
@@ -520,7 +520,7 @@ describe('repartirEntreServicios', () => {
       80000
     )
 
-    expect(partes).toEqual([{ itemId: 'a', monto: 80000 }])
+    expect(partes).toEqual([{ itemId: 'a', monto: 80000, impuesto: 0 }])
   })
 
   it('descarta las partes que redondean a cero sin descuadrar la suma', () => {
@@ -556,7 +556,7 @@ describe('repartirEntreServicios', () => {
       100
     )
 
-    expect(partes).toEqual([{ itemId: 'a', monto: 100 }])
+    expect(partes).toEqual([{ itemId: 'a', monto: 100, impuesto: 0 }])
   })
 })
 
@@ -629,10 +629,16 @@ describe('ingresosPorNaturaleza', () => {
   const mov = (
     grupo: GrupoCategoria,
     monto: number,
-    detalles: Array<{ monto: number; enTransito: boolean }> = [],
+    detalles: Array<{ monto: number; enTransito: boolean; impuesto?: number }> = [],
     tipo: TipoMovimiento = TipoMovimiento.INGRESO,
     categoria = 'Categoría'
-  ) => ({ tipo, grupo, categoria, monto, detalles })
+  ) => ({
+    tipo,
+    grupo,
+    categoria,
+    monto,
+    detalles: detalles.map((d) => ({ ...d, impuesto: d.impuesto ?? 0 })),
+  })
 
   it('separa lo que entró por cotización de lo que entró por factura', () => {
     const r = ingresosPorNaturaleza([
@@ -695,9 +701,9 @@ describe('ingresosPorNaturaleza', () => {
     // El estado de hoy: 172 movimientos migrados y los 172 son egresos.
     const r = ingresosPorNaturaleza([])
 
-    expect(r.cotizacion).toEqual({ bruto: 0, enTransito: 0, neto: 0, porCategoria: [] })
-    expect(r.factura).toEqual({ bruto: 0, enTransito: 0, neto: 0, porCategoria: [] })
-    expect(r.otros).toEqual({ bruto: 0, enTransito: 0, neto: 0, porCategoria: [] })
+    expect(r.cotizacion).toEqual({ bruto: 0, enTransito: 0, impuesto: 0, neto: 0, porCategoria: [] })
+    expect(r.factura).toEqual({ bruto: 0, enTransito: 0, impuesto: 0, neto: 0, porCategoria: [] })
+    expect(r.otros).toEqual({ bruto: 0, enTransito: 0, impuesto: 0, neto: 0, porCategoria: [] })
   })
 
   it('desglosa "otros" por categoría, de mayor a menor', () => {
@@ -1094,14 +1100,30 @@ describe('desglosarPeriodo', () => {
     categoria: 'Gasto',
     esNomina: false,
     persona: '—',
-    detalles: [] as Array<{ servicio: string; monto: number; enTransito: boolean }>,
+    detalles: [] as Array<{
+      servicio: string
+      monto: number
+      enTransito: boolean
+      impuesto: number
+    }>,
   }
 
   const ingreso = (
     grupo: GrupoCategoria,
     monto: number,
-    detalles: Array<{ servicio: string; monto: number; enTransito: boolean }> = []
-  ) => ({ ...base, tipo: TipoMovimiento.INGRESO, grupo, monto, detalles })
+    detalles: Array<{
+      servicio: string
+      monto: number
+      enTransito: boolean
+      impuesto?: number
+    }> = []
+  ) => ({
+    ...base,
+    tipo: TipoMovimiento.INGRESO,
+    grupo,
+    monto,
+    detalles: detalles.map((d) => ({ ...d, impuesto: d.impuesto ?? 0 })),
+  })
 
   const egreso = (monto: number, categoria: string, extra: Partial<typeof base> = {}) => ({
     ...base,
@@ -1229,5 +1251,158 @@ describe('desglosarPeriodo', () => {
     expect(desglosarPeriodo([], EN_TRANSITO)).toEqual({
       cotizacion: [], factura: [], egresos: [], nomina: [],
     })
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('repartirEntreServicios — el IVA', () => {
+  it('separa el impuesto de cada línea', () => {
+    // El IVA no es ingreso: se cobra para girarlo a la DIAN, igual que el
+    // recaudo para terceros. 126.050 × 19% = 23.949,50.
+    const [parte] = repartirEntreServicios(
+      [{ itemId: '2', precio: 63025, cantidad: 2, impuestos: [19] }],
+      149999.5
+    )
+
+    expect(parte!.monto).toBe(149999.5)
+    expect(parte!.impuesto).toBe(23949.5)
+  })
+
+  it('una línea sin impuesto no aporta IVA', () => {
+    // Es el caso del recaudo para terceros y de la mensajería, que está exenta.
+    const [parte] = repartirEntreServicios(
+      [{ itemId: '4', precio: 579000, cantidad: 1 }],
+      579000
+    )
+
+    expect(parte!.impuesto).toBe(0)
+  })
+
+  it('el mismo servicio con y sin impuesto se acumula bien', () => {
+    // Medido contra la cuenta: "Afiliacion Dependiente" aparece con 19% en
+    // unas facturas y sin impuesto en otras. Por eso el impuesto se guarda
+    // por LÍNEA y no como propiedad del servicio.
+    const [parte] = repartirEntreServicios(
+      [
+        { itemId: '1', precio: 100000, cantidad: 1, impuestos: [19] },
+        { itemId: '1', precio: 100000, cantidad: 1 },
+      ],
+      219000
+    )
+
+    expect(parte!.monto).toBe(219000)
+    expect(parte!.impuesto).toBe(19000)
+  })
+
+  it('con la factura a medio pagar, el IVA se cobra a medias también', () => {
+    const [parte] = repartirEntreServicios(
+      [{ itemId: '2', precio: 100000, cantidad: 1, impuestos: [19] }],
+      59500
+    )
+
+    expect(parte!.monto).toBe(59500)
+    expect(parte!.impuesto).toBe(9500)
+  })
+
+  it('el impuesto nunca supera al monto de su parte', () => {
+    const partes = repartirEntreServicios(
+      [
+        { itemId: '2', precio: 63025, cantidad: 2, impuestos: [19] },
+        { itemId: '4', precio: 579000, cantidad: 1 },
+      ],
+      729000
+    )
+
+    for (const p of partes) expect(p.impuesto).toBeLessThanOrEqual(p.monto)
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('el IVA no es ingreso', () => {
+  const conIva = (monto: number, impuesto: number, enTransito = false) => ({
+    monto,
+    impuesto,
+    enTransito,
+  })
+
+  it('sale del ingreso por factura, igual que la plata en tránsito', () => {
+    // Una factura de 729.000: 150.000 de administración con 23.950 de IVA y
+    // 579.000 de recaudo. Ingreso real: 126.050.
+    const r = ingresosPorNaturaleza([
+      {
+        tipo: TipoMovimiento.INGRESO,
+        grupo: GrupoCategoria.COBRO_FACTURA,
+        categoria: 'Cobro de factura',
+        monto: 729_000,
+        detalles: [conIva(150_000, 23_950), conIva(579_000, 0, true)],
+      },
+    ])
+
+    expect(r.factura.bruto).toBe(729_000)
+    expect(r.factura.enTransito).toBe(579_000)
+    expect(r.factura.impuesto).toBe(23_950)
+    expect(r.factura.neto).toBe(126_050)
+  })
+
+  it('no se descuenta dos veces sobre una línea en tránsito', () => {
+    // Su monto ya sale entero. En la práctica el recaudo y la mensajería van
+    // exentos, pero si alguna vez trajeran impuesto no habría que restarlo
+    // otra vez.
+    const r = ingresosPorNaturaleza([
+      {
+        tipo: TipoMovimiento.INGRESO,
+        grupo: GrupoCategoria.COBRO_FACTURA,
+        categoria: 'Cobro de factura',
+        monto: 100_000,
+        detalles: [conIva(100_000, 19_000, true)],
+      },
+    ])
+
+    expect(r.factura.enTransito).toBe(100_000)
+    expect(r.factura.impuesto).toBe(0)
+    expect(r.factura.neto).toBe(0)
+  })
+
+  it('las cotizaciones no llevan IVA', () => {
+    const r = ingresosPorNaturaleza([
+      {
+        tipo: TipoMovimiento.INGRESO,
+        grupo: GrupoCategoria.COBRO_COTIZACION,
+        categoria: 'Cobro de cotización',
+        monto: 5_730_000,
+        detalles: [conIva(5_730_000, 0)],
+      },
+    ])
+
+    expect(r.cotizacion.impuesto).toBe(0)
+    expect(r.cotizacion.neto).toBe(5_730_000)
+  })
+
+  it('el desglose también muestra el servicio sin IVA', () => {
+    // Si la lista mostrara el bruto, sumaría más que la tarjeta.
+    const r = desglosarPeriodo(
+      [
+        {
+          tipo: TipoMovimiento.INGRESO,
+          grupo: GrupoCategoria.COBRO_FACTURA,
+          categoriaId: 'ccatcobro001',
+          categoria: 'Cobro de factura',
+          esNomina: false,
+          persona: '—',
+          monto: 729_000,
+          detalles: [
+            { servicio: 'Administracion', monto: 150_000, enTransito: false, impuesto: 23_950 },
+            { servicio: 'Recaudo para Terceros', monto: 579_000, enTransito: true, impuesto: 0 },
+          ],
+        },
+      ],
+      new Set()
+    )
+
+    expect(r.factura).toEqual([{ nombre: 'Administracion', monto: 126_050, movs: 1 }])
   })
 })

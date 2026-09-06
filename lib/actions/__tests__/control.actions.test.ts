@@ -1704,8 +1704,8 @@ describe('servicio en un movimiento manual', () => {
       prestamoId: null,
       anuladoPor: null,
       detalleServicios: [
-        { servicioAlegraId: 'csrvadmin001', monto: dec(150000) },
-        { servicioAlegraId: 'csrvrecaudo1', monto: dec(579000) },
+        { servicioAlegraId: 'csrvadmin001', monto: dec(150000), impuesto: dec(23950) },
+        { servicioAlegraId: 'csrvrecaudo1', monto: dec(579000), impuesto: dec(0) },
       ],
     })
 
@@ -1716,8 +1716,8 @@ describe('servicio en un movimiento manual', () => {
         data: expect.objectContaining({
           detalleServicios: {
             create: [
-              { servicioAlegraId: 'csrvadmin001', monto: 150000 },
-              { servicioAlegraId: 'csrvrecaudo1', monto: 579000 },
+              { servicioAlegraId: 'csrvadmin001', monto: 150000, impuesto: 23950 },
+              { servicioAlegraId: 'csrvrecaudo1', monto: 579000, impuesto: 0 },
             ],
           },
         }),
@@ -1746,6 +1746,7 @@ describe('reporte: separar lo ganado de lo que solo pasó', () => {
       contraparte: null,
       detalleServicios: detalles.map((d) => ({
         monto: dec(d.monto),
+        impuesto: dec(0),
         servicio: {
           id: d.id,
           nombre: d.nombre,
@@ -1912,7 +1913,7 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
       grupo: GrupoCategoria
       categoria?: string
       monto: number
-      detalles?: Array<{ monto: number; enTransito: boolean; servicio?: string }>
+      detalles?: Array<{ monto: number; enTransito: boolean; servicio?: string; impuesto?: number }>
     }>
   ) {
     prismaMock.bolsillo.findMany.mockResolvedValue([{ id: IVONE, nombre: 'IVONE' }])
@@ -1930,6 +1931,7 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
         contraparte: null,
         detalleServicios: (m.detalles ?? []).map((d) => ({
           monto: dec(d.monto),
+          impuesto: dec(d.impuesto ?? 0),
           servicio: { nombre: d.servicio ?? 'Servicio', enTransito: d.enTransito },
         })),
       }))
@@ -2095,6 +2097,7 @@ describe('reporte: contraste de lo que entra y sale', () => {
       contraparte: null,
       detalleServicios: detalles.map((d) => ({
         monto: dec(d.monto),
+        impuesto: dec(0),
         servicio: { id: d.id, nombre: 'Servicios de Mensajería', referencia: '19', enTransito: true },
       })),
     }
@@ -2847,8 +2850,8 @@ describe('getResumenPeriodo — desglose del mes', () => {
         monto: dec(729_000),
         categoria: { nombre: 'Cobro de factura', grupo: GrupoCategoria.COBRO_FACTURA, esNomina: false },
         detalleServicios: [
-          { monto: dec(150_000), servicio: { nombre: 'Administracion', enTransito: false } },
-          { monto: dec(579_000), servicio: { nombre: 'Recaudo para Terceros', enTransito: true } },
+          { monto: dec(150_000), impuesto: dec(0), servicio: { nombre: 'Administracion', enTransito: false } },
+          { monto: dec(579_000), impuesto: dec(0), servicio: { nombre: 'Recaudo para Terceros', enTransito: true } },
         ],
       }),
     ])

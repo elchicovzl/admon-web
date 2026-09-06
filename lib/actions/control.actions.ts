@@ -1096,7 +1096,7 @@ export async function anularMovimiento(
       anuladoPor: { select: { id: true } },
       // El desglose se espeja: si no, un movimiento anulado seguiría contando
       // entero en el reporte por servicio.
-      detalleServicios: { select: { servicioAlegraId: true, monto: true } },
+      detalleServicios: { select: { servicioAlegraId: true, monto: true, impuesto: true } },
     },
   })
 
@@ -1150,6 +1150,7 @@ export async function anularMovimiento(
               create: original.detalleServicios.map((d) => ({
                 servicioAlegraId: d.servicioAlegraId,
                 monto: decimalANumero(d.monto),
+                impuesto: decimalANumero(d.impuesto),
               })),
             },
           }
@@ -1654,6 +1655,7 @@ export const getResumenPeriodo = cache(
           detalleServicios: {
             select: {
               monto: true,
+              impuesto: true,
               servicio: { select: { nombre: true, enTransito: true } },
             },
           },
@@ -1781,6 +1783,7 @@ export const getResumenPeriodo = cache(
       detalles: m.detalleServicios.map((d) => ({
         monto: decimalANumero(d.monto),
         enTransito: d.servicio.enTransito,
+        impuesto: decimalANumero(d.impuesto),
       })),
     }))
 
@@ -1808,6 +1811,7 @@ export const getResumenPeriodo = cache(
         servicio: d.servicio.nombre,
         monto: decimalANumero(d.monto),
         enTransito: d.servicio.enTransito,
+        impuesto: decimalANumero(d.impuesto),
       })),
     }))
 
@@ -2083,6 +2087,7 @@ export const getReporteAnual = cache(
           detalleServicios: {
             select: {
               monto: true,
+              impuesto: true,
               servicio: {
                 select: { id: true, nombre: true, referencia: true, enTransito: true },
               },
@@ -2164,6 +2169,7 @@ export const getReporteAnual = cache(
         detalles: m.detalleServicios.map((d) => ({
           monto: decimalANumero(d.monto),
           enTransito: d.servicio.enTransito,
+          impuesto: decimalANumero(d.impuesto),
         })),
       }
       paraNaturaleza.push(paraM)
@@ -2437,7 +2443,7 @@ function desgloseDeDocumento(
   items: Array<Record<string, unknown>> | undefined,
   montoCobrado: number,
   porItemId: Map<string, string>
-): Array<{ servicioAlegraId: string; monto: number }> | null {
+): Array<{ servicioAlegraId: string; monto: number; impuesto: number }> | null {
   if (!items?.length) return null
 
   const lineas: LineaDeDocumento[] = items.map((item) => ({
@@ -2453,7 +2459,7 @@ function desgloseDeDocumento(
   const partes = repartirEntreServicios(lineas, montoCobrado)
   if (partes.length === 0) return null
 
-  const desglose: Array<{ servicioAlegraId: string; monto: number }> = []
+  const desglose: Array<{ servicioAlegraId: string; monto: number; impuesto: number }> = []
   for (const parte of partes) {
     const servicioAlegraId = porItemId.get(parte.itemId)
     if (!servicioAlegraId) {
@@ -2463,7 +2469,7 @@ function desgloseDeDocumento(
       )
       return null
     }
-    desglose.push({ servicioAlegraId, monto: parte.monto })
+    desglose.push({ servicioAlegraId, monto: parte.monto, impuesto: parte.impuesto })
   }
 
   return desglose
