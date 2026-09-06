@@ -422,7 +422,8 @@ describe('cerrarPeriodo', () => {
         monto: dec(m.monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: m.destino ?? null,
-        categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO },
+        categoriaId: CATEGORIA,
+        categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false },
         detalleServicios: [],
       }))
     })
@@ -841,7 +842,8 @@ describe('getResumenPeriodo — saldo inicial acumulado', () => {
         monto: dec(monto),
         bolsilloId: EFECTIVO,
         bolsilloDestinoId: null,
-        categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO },
+        categoriaId: CATEGORIA,
+        categoria: { nombre: 'Papelería y oficina', grupo: GrupoCategoria.GASTO_OPERATIVO, esNomina: false },
         detalleServicios: [],
       }))
     })
@@ -1918,7 +1920,8 @@ describe('getResumenPeriodo — ingresos C y F separados', () => {
         monto: dec(m.monto),
         bolsilloId: IVONE,
         bolsilloDestinoId: null,
-        categoria: { nombre: m.categoria ?? 'Cobro', grupo: m.grupo },
+        categoriaId: CATEGORIA,
+        categoria: { nombre: m.categoria ?? 'Cobro', grupo: m.grupo, esNomina: false },
         detalleServicios: (m.detalles ?? []).map((d) => ({
           monto: dec(d.monto),
           servicio: { enTransito: d.enTransito },
@@ -2698,5 +2701,102 @@ describe('getNominaDelAnio', () => {
 
     expect((await getNominaDelAnio(2026)).success).toBe(false)
     expect(prismaMock.movimiento.findMany).not.toHaveBeenCalled()
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('getResumenPeriodo — egreso real', () => {
+  const RECAUDO = 'ccatrecaudo1'
+
+  function preparar(
+    movimientos: Array<{ monto: number; categoriaId?: string; esNomina?: boolean }>,
+    categoriasEnTransito: string[] = []
+  ) {
+    prismaMock.bolsillo.findMany.mockResolvedValue([{ id: IVONE, nombre: 'IVONE' }])
+    prismaMock.cierreMensual.findMany.mockResolvedValue([])
+    prismaMock.servicioAlegra.findMany.mockResolvedValue(
+      categoriasEnTransito.map((id) => ({ categoriaEgresoId: id }))
+    )
+    prismaMock.movimiento.findMany.mockImplementation(async (args: any) => {
+      if (args?.where?.periodo?.lt) return []
+      return movimientos.map((m) => ({
+        tipo: TipoMovimiento.EGRESO,
+        monto: dec(m.monto),
+        bolsilloId: IVONE,
+        bolsilloDestinoId: null,
+        categoriaId: m.categoriaId ?? CATEGORIA,
+        categoria: {
+          nombre: m.categoriaId === RECAUDO ? 'Ingresos recibidos para terceros' : 'Gasto',
+          grupo: GrupoCategoria.GASTO_OPERATIVO,
+          esNomina: m.esNomina ?? false,
+        },
+        detalleServicios: [],
+      }))
+    })
+  }
+
+  it('descuenta del egreso lo que había entrado para volver a salir', async () => {
+    // Julio de 2026, números reales: salieron 84.432.347 pero la empresa gastó
+    // 20.557.347. Un número tres veces más grande que el real no es un detalle
+    // de presentación.
+    preparar(
+      [
+        { monto: 63_875_000, categoriaId: RECAUDO },
+        { monto: 20_557_347 },
+      ],
+      [RECAUDO]
+    )
+
+    const res = await getResumenPeriodo('2026-07')
+
+    expect(res.data!.egresoReal.bruto).toBe(84_432_347)
+    expect(res.data!.egresoReal.enTransito).toBe(63_875_000)
+    expect(res.data!.egresoReal.neto).toBe(20_557_347)
+  })
+
+  it('cuenta cuánto del gasto real es nómina', async () => {
+    preparar([
+      { monto: 15_983_588, esNomina: true },
+      { monto: 4_573_759 },
+    ])
+
+    const res = await getResumenPeriodo('2026-07')
+
+    expect(res.data!.egresoReal.nomina).toBe(15_983_588)
+  })
+
+  it('las categorías en tránsito salen de la MISMA config que el reporte', async () => {
+    // Una lista aparte se desincronizaría la primera vez que alguien marque un
+    // servicio nuevo y se olvide de la otra.
+    preparar([{ monto: 1000 }])
+
+    await getResumenPeriodo('2026-07')
+
+    expect(prismaMock.servicioAlegra.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { enTransito: true, categoriaEgresoId: { not: null } },
+      })
+    )
+  })
+
+  it('sin nada marcado como en tránsito, el neto es igual al bruto', async () => {
+    preparar([{ monto: 84_432_347, categoriaId: RECAUDO }], [])
+
+    const res = await getResumenPeriodo('2026-07')
+
+    expect(res.data!.egresoReal.neto).toBe(84_432_347)
+    expect(res.data!.egresoReal.enTransito).toBe(0)
+  })
+
+  it('el saldo del bolsillo NO descuenta la plata en tránsito de los egresos', async () => {
+    // Misma regla que del lado de los ingresos: esa plata salió del banco de
+    // verdad y la caja tiene que seguir cuadrando contra el extracto.
+    preparar([{ monto: 63_875_000, categoriaId: RECAUDO }], [RECAUDO])
+
+    const res = await getResumenPeriodo('2026-07')
+
+    expect(res.data!.saldoConsolidado).toBe(-63_875_000)
   })
 })

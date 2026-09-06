@@ -812,3 +812,91 @@ export function resumirNomina(movimientos: MovimientoDeNomina[]): ResumenNomina 
     total: sumarMontos([totalPorArriba, totalPorDebajo]),
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Egreso real: lo que gastó la empresa, sin la plata que solo pasa
+// ---------------------------------------------------------------------------
+//
+// "Egresos del mes" mostraba todo lo que salió, y en esta empresa eso miente
+// por lo alto. Julio de 2026: salieron 84.432.347, pero 63.875.000 son plata
+// que había entrado para volver a salir —el recaudo para terceros y lo que se
+// le paga a Fawer por mensajería—. Lo que gastó la empresa fueron 20.557.347.
+//
+// Un número tres veces más grande que el real no es un detalle de
+// presentación: es la diferencia entre creer que se gastan 84 millones al mes
+// y saber que se gastan 20.
+//
+// QUÉ CUENTA COMO "ENTRA Y SALE"
+//
+// Las categorías de egreso atadas a un ServicioAlegra marcado `enTransito`.
+// No hay una lista aparte: es la MISMA configuración que alimenta la pestaña
+// "Entra y sale" del reporte. Dos fuentes de verdad para lo mismo se
+// desincronizan, y la primera vez que alguien marque un servicio nuevo se
+// olvidaría de la otra.
+
+export interface MovimientoParaEgreso {
+  tipo: TipoMovimiento
+  monto: number
+  categoriaId: string
+  categoria: string
+  esNomina: boolean
+}
+
+export interface EgresoReal {
+  /** Todo lo que salió, traslados aparte. */
+  bruto: number
+  /** La parte que había entrado para volver a salir. */
+  enTransito: number
+  /** Lo que gastó la empresa de verdad. */
+  neto: number
+  /** Cuánto del gasto real es el equipo. */
+  nomina: number
+  /** De qué categorías es la plata en tránsito, de mayor a menor. */
+  porCategoriaEnTransito: Array<{ nombre: string; monto: number }>
+}
+
+/**
+ * Separa, dentro de los egresos, lo gastado de lo que solo pasó.
+ *
+ * Los TRASLADOS no entran: mover plata entre bolsillos no es un egreso, y el
+ * resto del libro ya los trata así.
+ */
+export function egresoRealDelPeriodo(
+  movimientos: MovimientoParaEgreso[],
+  categoriasEnTransito: Set<string>
+): EgresoReal {
+  const todos: number[] = []
+  const transito: number[] = []
+  const nomina: number[] = []
+  const porCategoria = new Map<string, number[]>()
+
+  for (const m of movimientos) {
+    if (m.tipo !== TipoMovimiento.EGRESO) continue
+
+    todos.push(m.monto)
+
+    if (categoriasEnTransito.has(m.categoriaId)) {
+      transito.push(m.monto)
+      porCategoria.set(m.categoria, [...(porCategoria.get(m.categoria) ?? []), m.monto])
+      // Un egreso en tránsito no cuenta como nómina aunque su categoría lo
+      // esté: no es plata que se le pagó al equipo, es plata que pasó.
+      continue
+    }
+
+    if (m.esNomina) nomina.push(m.monto)
+  }
+
+  const bruto = sumarMontos(todos)
+  const enTransito = sumarMontos(transito)
+
+  return {
+    bruto,
+    enTransito,
+    neto: redondearMonto(bruto - enTransito),
+    nomina: sumarMontos(nomina),
+    porCategoriaEnTransito: [...porCategoria.entries()]
+      .map(([nombre, montos]) => ({ nombre, monto: sumarMontos(montos) }))
+      .sort((a, b) => b.monto - a.monto),
+  }
+}

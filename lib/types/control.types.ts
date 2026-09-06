@@ -18,6 +18,7 @@ import type {
 } from '@prisma/client'
 import type {
   ContrasteIntermediado,
+  EgresoReal,
   EstadoPrestamo,
   ResumenNomina,
   EstadoServicio,
@@ -27,6 +28,7 @@ import type {
 
 export type {
   ContrasteIntermediado,
+  EgresoReal,
   EstadoPrestamo,
   ResumenNomina,
   EstadoServicio,
@@ -280,6 +282,15 @@ export interface ResumenPeriodo {
    * número pierde media razón de ser del módulo.
    */
   ingresos: IngresosPorNaturaleza
+  /**
+   * Lo que gastó la empresa de verdad, sin la plata que solo pasa.
+   *
+   * "Egresos del mes" a secas miente por lo alto en esta empresa: de los
+   * 84.432.347 que salieron en julio de 2026, 63.875.000 habían entrado para
+   * volver a salir. Creer que se gastan 84 millones al mes en vez de 20 no es
+   * un detalle de presentación.
+   */
+  egresoReal: EgresoReal
   ingresoNeto: IngresoNeto
   /** Suma de los saldos finales de todos los bolsillos. */
   saldoConsolidado: number

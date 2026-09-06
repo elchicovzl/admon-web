@@ -4,6 +4,7 @@ import Link from 'next/link'
 import {
   TrendingUp,
   TrendingDown,
+  Users,
   Wallet,
   AlertTriangle,
   ArrowRight,
@@ -63,12 +64,19 @@ async function Kpis({ periodo }: { periodo: string }) {
   }
 
   const {
-    totalEgresos,
     saldoConsolidado,
     tieneDescuadres,
     cierres,
     ingresos,
+    egresoReal,
   } = resultado.data
+
+  /**
+   * Lo que entró de verdad: los cobros netos de plata en tránsito, más lo que
+   * no viene ni de una cotización ni de una factura.
+   */
+  const ingresoReal =
+    ingresos.cotizacion.neto + ingresos.factura.neto + ingresos.otros.neto
 
   const tarjetas = [
     // C y F van en tarjetas separadas porque para el negocio son cosas
@@ -117,11 +125,43 @@ async function Kpis({ periodo }: { periodo: string }) {
           },
         ]
       : []),
+    // Lo GASTADO, no lo que salió. De los 84.432.347 que salieron en julio de
+    // 2026, 63.875.000 habían entrado para volver a salir; creer que se gastan
+    // 84 millones al mes en vez de 20 no es un detalle de presentación.
+    egresoReal.enTransito > 0
+      ? {
+          titulo: 'Egresos reales del mes',
+          valor: formatearMonto(egresoReal.neto),
+          icono: TrendingDown,
+          nota: `Salieron ${formatearMonto(egresoReal.bruto)}; ${formatearMonto(
+            egresoReal.enTransito
+          )} entró y volvió a salir`,
+        }
+      : {
+          titulo: 'Egresos del mes',
+          valor: formatearMonto(egresoReal.bruto),
+          icono: TrendingDown,
+          nota: 'Todo lo que salió, sin traslados',
+        },
+    // El equipo es el gasto más grande de esta empresa y merece su propia
+    // tarjeta, no quedar escondido dentro del total.
     {
-      titulo: 'Egresos del mes',
-      valor: formatearMonto(totalEgresos),
-      icono: TrendingDown,
-      nota: 'Todo lo que salió, sin traslados',
+      titulo: 'Nómina del mes',
+      valor: formatearMonto(egresoReal.nomina),
+      icono: Users,
+      nota:
+        egresoReal.neto > 0
+          ? `${Math.round((egresoReal.nomina / egresoReal.neto) * 100)}% de lo que gastó la empresa`
+          : 'Por arriba y por debajo',
+    },
+    // El número que resume el mes: lo que entró de verdad contra lo que se
+    // gastó de verdad, las dos puntas ya sin la plata que solo pasa.
+    {
+      titulo: 'Resultado del mes',
+      valor: formatearMonto(ingresoReal - egresoReal.neto),
+      negativo: ingresoReal - egresoReal.neto < 0,
+      icono: Wallet,
+      nota: `Entró ${formatearMonto(ingresoReal)} · gastó ${formatearMonto(egresoReal.neto)}`,
     },
     {
       titulo: 'Saldo consolidado',

@@ -85,6 +85,7 @@ import {
   estadoServicio,
   contraMovimiento,
   contrastarIntermediados,
+  egresoRealDelPeriodo,
   resumirNomina,
   ingresoPorServicio,
   ingresosPorNaturaleza,
@@ -94,6 +95,7 @@ import {
   type DetalleParaReporte,
   type MovimientoDeNomina,
   type MovimientoParaContraste,
+  type MovimientoParaEgreso,
   type MovimientoParaNaturaleza,
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
@@ -1624,7 +1626,8 @@ export const getResumenPeriodo = cache(
     const auth = await requireControlAuth()
     if (!auth.authorized) return sinAutorizacion(auth.error)
 
-    const [bolsillos, movimientos, cierres, aperturas, anteriores] = await Promise.all([
+    const [bolsillos, movimientos, cierres, aperturas, anteriores, enTransito] =
+      await Promise.all([
       prisma.bolsillo.findMany({
         orderBy: [{ isActive: 'desc' }, { orden: 'asc' }],
         select: { id: true, nombre: true },
@@ -1637,8 +1640,10 @@ export const getResumenPeriodo = cache(
           bolsilloId: true,
           bolsilloDestinoId: true,
           // El grupo separa "por debajo" (C) de "por arriba" (F); el nombre
-          // arma el desglose de "otros", que sin él no se puede cuadrar.
-          categoria: { select: { nombre: true, grupo: true } },
+          // arma el desglose de "otros", que sin él no se puede cuadrar; y
+          // `esNomina` dice cuánto del gasto real es el equipo.
+          categoriaId: true,
+          categoria: { select: { nombre: true, grupo: true, esNomina: true } },
           // Para separar lo ganado de lo que solo pasó. NO entra en el cálculo
           // del saldo: la plata en tránsito entró al bolsillo de verdad.
           detalleServicios: {
@@ -1682,6 +1687,17 @@ export const getResumenPeriodo = cache(
           bolsilloId: true,
           bolsilloDestinoId: true,
         },
+      }),
+      /**
+       * Las categorías por las que sale la plata que solo pasa.
+       *
+       * Salen de la MISMA configuración que alimenta la pestaña "Entra y sale"
+       * del reporte. Una lista aparte se desincronizaría la primera vez que
+       * alguien marque un servicio nuevo y se olvide de la otra.
+       */
+      prisma.servicioAlegra.findMany({
+        where: { enTransito: true, categoriaEgresoId: { not: null } },
+        select: { categoriaEgresoId: true },
       }),
     ])
 
@@ -1760,6 +1776,18 @@ export const getResumenPeriodo = cache(
       })),
     }))
 
+    const paraEgreso: MovimientoParaEgreso[] = movimientos.map((m) => ({
+      tipo: m.tipo,
+      monto: decimalANumero(m.monto),
+      categoriaId: m.categoriaId,
+      categoria: m.categoria.nombre,
+      esNomina: m.categoria.esNomina,
+    }))
+
+    const categoriasEnTransito = new Set(
+      enTransito.map((s) => s.categoriaEgresoId).filter((id): id is string => id !== null)
+    )
+
     const detallesDelPeriodo: DetalleParaReporte[] = movimientos.flatMap((m) =>
       m.detalleServicios.map((d) => ({
         tipo: m.tipo,
@@ -1778,6 +1806,7 @@ export const getResumenPeriodo = cache(
           movs.filter((m) => m.tipo === TipoMovimiento.EGRESO).map((m) => m.monto)
         ),
         ingresos: ingresosPorNaturaleza(paraNaturaleza),
+        egresoReal: egresoRealDelPeriodo(paraEgreso, categoriasEnTransito),
         ingresoNeto: ingresoPorServicio(totalIngresos, detallesDelPeriodo),
         saldoConsolidado: sumarMontos(vistas.map((v) => v.saldoFinalCalculado)),
         tieneDescuadres: vistas.some(

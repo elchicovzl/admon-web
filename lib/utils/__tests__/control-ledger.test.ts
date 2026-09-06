@@ -32,6 +32,7 @@ import {
   ingresosPorNaturaleza,
   contrastarIntermediados,
   resumirNomina,
+  egresoRealDelPeriodo,
 } from '../control-ledger'
 
 const EFECTIVO = 'cbolefectivo1'
@@ -956,6 +957,125 @@ describe('resumirNomina', () => {
       totalPorArriba: 0,
       totalPorDebajo: 0,
       total: 0,
+    })
+  })
+})
+
+
+// ---------------------------------------------------------------------------
+
+describe('egresoRealDelPeriodo', () => {
+  const RECAUDO = 'ccatrecaudo1'
+  const MENSAJERIA = 'ccatmensaje1'
+  const EN_TRANSITO = new Set([RECAUDO, MENSAJERIA])
+
+  const eg = (monto: number, categoriaId: string, categoria: string, esNomina = false) => ({
+    tipo: TipoMovimiento.EGRESO,
+    monto,
+    categoriaId,
+    categoria,
+    esNomina,
+  })
+
+  it('descuenta lo que había entrado para volver a salir', () => {
+    // Julio de 2026, números reales: salieron 84.432.347 pero 63.875.000 son
+    // recaudo y mensajería. La empresa gastó 20.557.347.
+    const r = egresoRealDelPeriodo(
+      [
+        eg(57_725_400, RECAUDO, 'Ingresos recibidos para terceros'),
+        eg(6_149_600, MENSAJERIA, 'Servicio de mensajería'),
+        eg(20_557_347, 'ccatgasto001', 'Otros honorarios', true),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.bruto).toBe(84_432_347)
+    expect(r.enTransito).toBe(63_875_000)
+    expect(r.neto).toBe(20_557_347)
+  })
+
+  it('cuenta cuánto del gasto real es nómina', () => {
+    const r = egresoRealDelPeriodo(
+      [
+        eg(15_983_588, 'ccatnomina01', 'Otros honorarios', true),
+        eg(4_573_759, 'ccatgasto001', 'Papelería y oficina'),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.nomina).toBe(15_983_588)
+    expect(r.neto).toBe(20_557_347)
+  })
+
+  it('un egreso en tránsito NO cuenta como nómina aunque su categoría lo sea', () => {
+    // No es plata que se le pagó al equipo: es plata que pasó.
+    const r = egresoRealDelPeriodo(
+      [eg(6_149_600, MENSAJERIA, 'Servicio de mensajería', true)],
+      EN_TRANSITO
+    )
+
+    expect(r.nomina).toBe(0)
+    expect(r.enTransito).toBe(6_149_600)
+  })
+
+  it('los TRASLADOS no son egreso', () => {
+    // Mover plata entre bolsillos no es gasto, y el resto del libro ya los
+    // trata así.
+    const r = egresoRealDelPeriodo(
+      [
+        { tipo: TipoMovimiento.TRASLADO, monto: 1_000_000, categoriaId: 'ccattras0001', categoria: 'Traslado', esNomina: false },
+        eg(500_000, 'ccatgasto001', 'Papelería y oficina'),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.bruto).toBe(500_000)
+  })
+
+  it('los INGRESOS tampoco entran', () => {
+    const r = egresoRealDelPeriodo(
+      [
+        { tipo: TipoMovimiento.INGRESO, monto: 9_000_000, categoriaId: 'ccatcobro001', categoria: 'Cobro', esNomina: false },
+        eg(500_000, 'ccatgasto001', 'Papelería y oficina'),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.bruto).toBe(500_000)
+  })
+
+  it('dice de qué categorías es la plata en tránsito, de mayor a menor', () => {
+    const r = egresoRealDelPeriodo(
+      [
+        eg(6_149_600, MENSAJERIA, 'Servicio de mensajería'),
+        eg(57_725_400, RECAUDO, 'Ingresos recibidos para terceros'),
+      ],
+      EN_TRANSITO
+    )
+
+    expect(r.porCategoriaEnTransito).toEqual([
+      { nombre: 'Ingresos recibidos para terceros', monto: 57_725_400 },
+      { nombre: 'Servicio de mensajería', monto: 6_149_600 },
+    ])
+  })
+
+  it('sin categorías en tránsito configuradas, el neto es igual al bruto', () => {
+    // El caso de una base recién armada: no se descuenta nada hasta que
+    // alguien marque qué entra y sale.
+    const r = egresoRealDelPeriodo(
+      [eg(84_432_347, RECAUDO, 'Ingresos recibidos para terceros')],
+      new Set()
+    )
+
+    expect(r.neto).toBe(84_432_347)
+    expect(r.enTransito).toBe(0)
+  })
+
+  it('sin movimientos devuelve todo en cero', () => {
+    const r = egresoRealDelPeriodo([], EN_TRANSITO)
+
+    expect(r).toEqual({
+      bruto: 0, enTransito: 0, neto: 0, nomina: 0, porCategoriaEnTransito: [],
     })
   })
 })
