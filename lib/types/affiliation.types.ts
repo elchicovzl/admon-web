@@ -511,6 +511,11 @@ export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string
   OTRO: 'Otro',
 }
 
+/** Opciones para selects de tipo de proceso. Derivadas de los labels: una sola fuente de verdad. */
+export const AffiliationProcessTypeOptions = (
+  Object.entries(AffiliationProcessTypeLabels) as [AffiliationProcessType, string][]
+).map(([value, label]) => ({ value, label }))
+
 // ========================================
 // EMAIL TYPES
 // ========================================
