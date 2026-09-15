@@ -32,6 +32,7 @@ const AFILIACIONES_TYPES = [
   AffiliationProcessType.DEPENDIENTE,
   AffiliationProcessType.INDEPENDIENTE,
   AffiliationProcessType.TRABAJADOR_TIEMPO_PARCIAL,
+  AffiliationProcessType.TRABAJADOR_TIEMPO_PARCIAL_INDEPENDIENTE,
   AffiliationProcessType.INDEPENDIENTE_VOLUNTARIO,
   AffiliationProcessType.CONTRATISTA_INDEPENDIENTE,
   AffiliationProcessType.BENEFICIARIO_UPC_ADICIONAL,
