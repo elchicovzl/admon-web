@@ -493,6 +493,7 @@ export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string
   DEPENDIENTE: '(01) Dependiente',
   INDEPENDIENTE: '(3) Independiente',
   TRABAJADOR_TIEMPO_PARCIAL: '(51) Trabajador de tiempo parcial',
+  TRABAJADOR_TIEMPO_PARCIAL_INDEPENDIENTE: '(76) Trabajador de tiempo parcial independiente',
   INDEPENDIENTE_VOLUNTARIO: '(57) Independiente voluntario',
   CONTRATISTA_INDEPENDIENTE: '(59) Contratista independiente',
   BENEFICIARIO_UPC_ADICIONAL: '(40) Beneficiario UPC adicional',
@@ -509,6 +510,11 @@ export const AffiliationProcessTypeLabels: Record<AffiliationProcessType, string
   ASESORIAS_PENSIONES: 'Asesorias y pensiones',
   OTRO: 'Otro',
 }
+
+/** Opciones para selects de tipo de proceso. Derivadas de los labels: una sola fuente de verdad. */
+export const AffiliationProcessTypeOptions = (
+  Object.entries(AffiliationProcessTypeLabels) as [AffiliationProcessType, string][]
+).map(([value, label]) => ({ value, label }))
 
 // ========================================
 // EMAIL TYPES

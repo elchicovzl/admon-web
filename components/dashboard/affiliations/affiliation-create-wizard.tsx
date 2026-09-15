@@ -12,6 +12,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { AffiliationSubProcessType, AffiliationProcessType } from '@prisma/client'
+import { AffiliationProcessTypeOptions } from '@/lib/types/affiliation.types'
 import {
   Dialog,
   DialogContent,
@@ -56,27 +57,6 @@ import { createAffiliation, getClientBeneficiaries } from '@/lib/actions/affilia
 import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
-
-const processTypeOptions = [
-  { value: AffiliationProcessType.DEPENDIENTE, label: '(01) Dependiente' },
-  { value: AffiliationProcessType.INDEPENDIENTE, label: '(3) Independiente' },
-  { value: AffiliationProcessType.TRABAJADOR_TIEMPO_PARCIAL, label: '(51) Trabajador de tiempo parcial' },
-  { value: AffiliationProcessType.INDEPENDIENTE_VOLUNTARIO, label: '(57) Independiente voluntario' },
-  { value: AffiliationProcessType.CONTRATISTA_INDEPENDIENTE, label: '(59) Contratista independiente' },
-  { value: AffiliationProcessType.BENEFICIARIO_UPC_ADICIONAL, label: '(40) Beneficiario UPC adicional' },
-  { value: AffiliationProcessType.COTIZANTE_INDEPENDIENTE_SALUD, label: '(42) Cotizante independiente pago solo salud' },
-  { value: AffiliationProcessType.COTIZANTE_PENSIONES_PAGO_TERCERO, label: '(43) Cotizante a pensiones con pago por tercero' },
-  { value: AffiliationProcessType.PLANILLA_S_SERVICIO_DOMESTICO, label: 'Planilla S Servicio doméstico' },
-  { value: AffiliationProcessType.PLANILLA_E_EMPLEADOS, label: 'Planilla E (Empleados)' },
-  { value: AffiliationProcessType.LIQUIDACIONES, label: 'Liquidaciones' },
-  { value: AffiliationProcessType.TRASLADO_EPS, label: 'Traslado de EPS' },
-  { value: AffiliationProcessType.COBRO_INCAPACIDADES, label: 'Cobro Incapacidades' },
-  { value: AffiliationProcessType.PENSIONADO, label: 'Pensionado' },
-  { value: AffiliationProcessType.INCLUSION_BENEFICIARIOS, label: 'Inclusion Beneficiarios' },
-  { value: AffiliationProcessType.EXCLUSION_BENEFICIARIOS, label: 'Exclusión de Beneficiarios' },
-  { value: AffiliationProcessType.ASESORIAS_PENSIONES, label: 'Asesorias y pensiones' },
-  { value: AffiliationProcessType.OTRO, label: 'Otro' },
-]
 
 const createAffiliationFormSchema = z.object({
   clientId: z.string().min(1, 'Debe seleccionar un cliente'),
@@ -615,7 +595,7 @@ export function AffiliationCreateWizard({
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {processTypeOptions.map((opt) => (
+                            {AffiliationProcessTypeOptions.map((opt) => (
                               <SelectItem key={opt.value} value={opt.value}>
                                 {opt.label}
                               </SelectItem>
