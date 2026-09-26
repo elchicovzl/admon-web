@@ -1462,7 +1462,13 @@ export async function getMyAssignments(
       }
     }
     if (args.employee) {
-      whereClause.employee = { fullName: { contains: args.employee, mode: 'insensitive' } }
+      // Match by worker name or identification number (cédula, RUT, etc.)
+      whereClause.employee = {
+        OR: [
+          { fullName: { contains: args.employee, mode: 'insensitive' } },
+          { identificationNumber: { contains: args.employee, mode: 'insensitive' } },
+        ],
+      }
     }
 
     // Resolve dynamic orderBy
