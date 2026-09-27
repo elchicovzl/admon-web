@@ -9,9 +9,19 @@ import {
   AffiliationSubProcessStatus,
   AffiliationDocumentCategory,
   AffiliationProcessType,
+  ClientType,
 } from '@prisma/client'
 
 export { AffiliationStatus, AffiliationProcessType }
+
+// Labels for the role (ClientType) an affiliation was created as. Shared
+// across the create wizard and the detail view so the wording stays
+// consistent with the client module's own type labels.
+export const ClientTypeLabels: Record<ClientType, string> = {
+  EMPLEADO: 'Empleado',
+  EMPRESA: 'Empresa',
+  INDEPENDIENTE: 'Independiente',
+}
 
 // ========================================
 // BASE TYPES (from database)
@@ -21,6 +31,7 @@ export interface Affiliation {
   id: string
   affiliationNumber: string
   clientId: string
+  affiliatedAs: ClientType
   processType: AffiliationProcessType | null
   processTypeOther: string | null
   status: AffiliationStatus
@@ -94,6 +105,7 @@ export interface SafeAffiliation {
   id: string
   affiliationNumber: string
   clientId: string
+  affiliatedAs: ClientType
   processType: AffiliationProcessType | null
   processTypeOther: string | null
   status: AffiliationStatus

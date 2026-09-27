@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { AffiliationSubProcessType, AffiliationSubProcessStatus, AffiliationDocumentCategory, AffiliationProcessType } from '@prisma/client'
+import { AffiliationSubProcessType, AffiliationSubProcessStatus, AffiliationDocumentCategory, AffiliationProcessType, ClientType } from '@prisma/client'
 
 // ========================================
 // AFFILIATION SCHEMAS
@@ -12,6 +12,9 @@ import { AffiliationSubProcessType, AffiliationSubProcessStatus, AffiliationDocu
 
 export const createAffiliationSchema = z.object({
   clientId: z.string().cuid('ID de cliente inválido'),
+  affiliatedAs: z.nativeEnum(ClientType, {
+    required_error: 'Debe seleccionar como qué se afilia el cliente',
+  }),
   processType: z.nativeEnum(AffiliationProcessType, {
     required_error: 'El tipo de proceso es requerido',
   }),

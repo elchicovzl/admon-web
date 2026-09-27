@@ -35,9 +35,9 @@ Business requirement: the same person/entity can be an independent, an employee 
 - Strategy: ask-on-risk. Forecast ~700-900 authored lines -> exceeds ~400 budget; chain strategy to be confirmed with the user.
 
 ## Tasks
-- [ ] T1 — Client multi-type core: schema + migration (`clientTypes`), types, Zod, client/employment/history actions, client form multi-select, clients table badges/filter, client info/summary/history views, existing affiliation checks switched to `includes`. Route: delegated (writer trigger: 15+ non-trivial files).
-- [ ] T2 — Affiliation role: `Affiliation.affiliatedAs` + backfill migration, wizard role step, create/edit actions, detail/emails/process logic read `affiliatedAs`. Route: delegated (writer trigger).
-- [ ] T3 — Dashboard stats per type with multi-type clients (replace `groupBy(['clientType'])`). Route: inline or delegated depending on size.
+- [x] T1 — Client multi-type core: schema + migration (`clientTypes`), types, Zod, client/employment/history actions, client form multi-select, clients table badges/filter, client info/summary/history views, existing affiliation checks switched to `includes`. Route: delegated (writer trigger: 15+ non-trivial files).
+- [x] T2 — Affiliation role: `Affiliation.affiliatedAs` + backfill migration, wizard role step, create/edit actions, detail/emails/process logic read `affiliatedAs`. Route: delegated (writer trigger).
+- [x] T3 — Dashboard stats per type with multi-type clients (replace `groupBy(['clientType'])`). Route: inline or delegated depending on size.
 
 ## Acceptance criteria
 - A client can be created/edited with 1..3 types; at least one is required.
@@ -48,10 +48,13 @@ Business requirement: the same person/entity can be an independent, an employee 
 
 ## Progress
 - Baseline recorded. Branch `feat/client-multi-type` from `master`.
-- T1 implemented (delegated writer), not yet committed — waiting for the chain strategy answer.
+- T1 done — commit `659b171`. Review: assessed high (process_boundary, 743 lines, review_due); native review UNAVAILABLE — preflight requires an undocumented `intended-untracked-selection/v1` JSON for the untracked `.atl/.skill-registry.cache.json` and every attempted shape was rejected.
   - Migration `20260927010000_client_multi_type` (add array, backfill `ARRAY["clientType"]`, NOT NULL, drop old column). Applied locally with `prisma migrate deploy` because `migrate dev` detected unrelated pre-existing drift (`20260827050000_servicios_alegra` modified after apply) and demanded a reset.
   - Evidence: `npx vitest run` -> 23 files / 738 tests passing (+2 files, +16 tests). `npx tsc --noEmit` -> 41 errors, same total as baseline; per-file counts unchanged (parent spot check).
   - ~686 authored changed lines (incl. migration and 2 new test files).
 
+- T2 done — migration `20260927020000_affiliation_affiliated_as` (backfill from `clientTypes[1]`), wizard role step for multi-type clients, server validation, detail badge; email builders/sub-process gates read `affiliatedAs`. Evidence: vitest 24 files / 743 passing; tsc 41 = baseline. ~400 lines. Error message changed to "Solo las afiliaciones registradas como EMPRESA pueden tener empleados en sub-procesos".
+- T3 absorbed by T1: `getClientsCount` counts per type with `{ has }` (multi-type client counts once per type); chart shape unchanged. Types with zero clients now appear with count 0.
+
 ## Next step
-Commit T1 once the delivery strategy is chosen, then T2.
+Open PR(s) once the user picks the chain strategy. Manual browser test of the wizard role step pending.

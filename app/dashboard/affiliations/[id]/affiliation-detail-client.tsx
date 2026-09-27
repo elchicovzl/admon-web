@@ -398,7 +398,7 @@ export function AffiliationDetailClient({
           onOpenChange={setAddSubProcessOpen}
           affiliationId={affiliation.id}
           clientId={client.id}
-          clientTypes={client.clientTypes}
+          affiliatedAs={affiliation.affiliatedAs}
           currentUserId={currentUserId}
           existingSubProcesses={subProcesses.map((sp) => ({
             type: sp.type,

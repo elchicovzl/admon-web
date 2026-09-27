@@ -638,6 +638,13 @@ model Affiliation {
   clientId          String
   client            Client                  @relation(fields: [clientId], references: [id])
 
+  // Role the client is being affiliated as for THIS specific affiliation.
+  // Chosen by the user when the client has more than one type; auto-selected
+  // when the client has exactly one. Stored here (not derived from
+  // Client.clientTypes) so adding a type to the client later never changes
+  // the meaning of existing affiliations.
+  affiliatedAs      ClientType
+
   // Process type classification
   processType       AffiliationProcessType? // Tipo de proceso
   processTypeOther  String?                 // Texto libre cuando processType = OTRO
