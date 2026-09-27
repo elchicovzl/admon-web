@@ -549,10 +549,10 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
             className="h-9 w-[200px]"
           />
           <Input
-            placeholder="Buscar empleado..."
+            placeholder="Buscar empleado o identificación..."
             value={employeeInput}
             onChange={(e) => setEmployeeInput(e.target.value)}
-            className="h-9 w-[200px]"
+            className="h-9 w-[240px]"
           />
           <Select value={processType} onValueChange={(v) => updateUrl({ processType: v })}>
             <SelectTrigger className="h-9 w-[200px]">
