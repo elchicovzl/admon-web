@@ -128,10 +128,13 @@ function setupEmpresaClient() {
  * Minimal valid payload for createAffiliation.
  * Uses DEPENDIENTE process type (no OTRO branch), one EPS subprocess per employee.
  * No assignedToId → manager validation step is skipped.
+ * Defaults `affiliatedAs` to EMPRESA since these tests exercise the
+ * employee-in-subprocess path, which requires it.
  */
-function createAffiliationPayload(employeeIds: string[]) {
+function createAffiliationPayload(employeeIds: string[], affiliatedAs: ClientType = ClientType.EMPRESA) {
   return {
     clientId: COMPANY_ID,
+    affiliatedAs,
     processType: AffiliationProcessType.DEPENDIENTE,
     subProcesses: employeeIds.map((employeeId) => ({
       type: AffiliationSubProcessType.EPS,
@@ -172,6 +175,7 @@ describe('REQ-6 createAffiliation: Employment-based employee validation', () => 
       id: 'cnewaffil000001',
       affiliationNumber: 'PROC-00001',
       clientId: COMPANY_ID,
+      affiliatedAs: ClientType.EMPRESA,
       processType: AffiliationProcessType.DEPENDIENTE,
       processTypeOther: null,
       startDate: null,
@@ -274,22 +278,28 @@ describe('REQ-6 createAffiliation: Employment-based employee validation', () => 
     expect(result.success).toBe(true)
   })
 
-  // Identity guard preserved: non-EMPRESA client still rejected before Employment check
-  it('rejects non-EMPRESA client before the Employment query runs', async () => {
-    // Override the client mock to return INDEPENDIENTE
+  // Identity guard preserved: employees require an EMPRESA `affiliatedAs`,
+  // NOT the client's own `clientTypes` — a multi-type client that chose a
+  // different role for this affiliation is still rejected before Employment.
+  it('rejects non-EMPRESA affiliatedAs before the Employment query runs', async () => {
+    // Multi-type client (has EMPRESA too), but this affiliation was registered
+    // as INDEPENDIENTE — employees must not be allowed regardless of the
+    // client's own types.
     prismaMock.client.findUnique.mockResolvedValue({
       id: COMPANY_ID,
-      clientTypes: [ClientType.INDEPENDIENTE],
+      clientTypes: [ClientType.EMPRESA, ClientType.INDEPENDIENTE],
       isActive: true,
       fullName: 'Freelancer SA',
     })
     prismaMock.employment.findMany.mockResolvedValue([])
 
-    const result = await createAffiliation(createAffiliationPayload([EMPLOYEE_A]))
+    const result = await createAffiliation(
+      createAffiliationPayload([EMPLOYEE_A], ClientType.INDEPENDIENTE)
+    )
 
     expect(result.success).toBe(false)
     expect(result.error).toBe(
-      'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos'
+      'Solo las afiliaciones registradas como EMPRESA pueden tener empleados en sub-procesos'
     )
     // Employment query must not have been called
     expect(prismaMock.employment.findMany).not.toHaveBeenCalled()
@@ -304,10 +314,11 @@ describe('REQ-6 addSubProcesses: Employment-based employee validation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupManagerSession()
-    // Active affiliation with EMPRESA client
+    // Active affiliation registered as EMPRESA
     prismaMock.affiliation.findUnique.mockResolvedValue({
       id: AFFIL_ID,
       clientId: COMPANY_ID,
+      affiliatedAs: ClientType.EMPRESA,
       status: AffiliationStatus.ACTIVE,
       client: {
         id: COMPANY_ID,
@@ -386,11 +397,13 @@ describe('REQ-6 addSubProcesses: Employment-based employee validation', () => {
     expect(prismaMock.client.findMany).not.toHaveBeenCalled()
   })
 
-  // Identity guard preserved: non-EMPRESA affiliation client still rejected
-  it('rejects non-EMPRESA affiliation client before the Employment query runs', async () => {
+  // Identity guard preserved: employees require the AFFILIATION's own
+  // `affiliatedAs` to be EMPRESA, not the client's `clientTypes`.
+  it('rejects non-EMPRESA affiliatedAs before the Employment query runs', async () => {
     prismaMock.affiliation.findUnique.mockResolvedValue({
       id: AFFIL_ID,
       clientId: COMPANY_ID,
+      affiliatedAs: ClientType.EMPLEADO,
       status: AffiliationStatus.ACTIVE,
       client: {
         id: COMPANY_ID,
@@ -405,7 +418,7 @@ describe('REQ-6 addSubProcesses: Employment-based employee validation', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toBe(
-      'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos'
+      'Solo las afiliaciones registradas como EMPRESA pueden tener empleados en sub-procesos'
     )
     expect(prismaMock.employment.findMany).not.toHaveBeenCalled()
   })
