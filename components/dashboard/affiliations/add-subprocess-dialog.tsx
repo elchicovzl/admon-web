@@ -6,7 +6,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AffiliationSubProcessType } from '@prisma/client'
+import { AffiliationSubProcessType, ClientType } from '@prisma/client'
 import {
   Dialog,
   DialogContent,
@@ -41,7 +41,7 @@ interface AddSubProcessDialogProps {
   onOpenChange: (open: boolean) => void
   affiliationId: string
   clientId: string
-  clientTypes: string[]
+  affiliatedAs: ClientType
   currentUserId?: string
   existingSubProcesses: { type: AffiliationSubProcessType; employeeId: string | null }[]
   onSubProcessesAdded?: (created: SafeAffiliationSubProcess[]) => void
@@ -63,7 +63,7 @@ export function AddSubProcessDialog({
   onOpenChange,
   affiliationId,
   clientId,
-  clientTypes,
+  affiliatedAs,
   currentUserId,
   existingSubProcesses,
   onSubProcessesAdded,
@@ -91,7 +91,7 @@ export function AddSubProcessDialog({
     PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [],
   })
 
-  const isEmpresa = clientTypes.includes('EMPRESA')
+  const isEmpresa = affiliatedAs === ClientType.EMPRESA
 
   useEffect(() => {
     if (open) {
