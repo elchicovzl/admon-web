@@ -133,7 +133,7 @@ export function AffiliationCreateWizard({
     CONCILIACION_MORA: [],
   })
 
-  const isEmpresa = selectedClient?.clientType === 'EMPRESA'
+  const isEmpresa = selectedClient?.clientTypes.includes('EMPRESA') ?? false
 
   const form = useForm<CreateAffiliationFormValues>({
     resolver: zodResolver(createAffiliationFormSchema),
@@ -234,12 +234,12 @@ export function AffiliationCreateWizard({
         return
       }
       // Load employees if EMPRESA
-      if (selectedClient?.clientType === 'EMPRESA') {
+      if (selectedClient?.clientTypes.includes('EMPRESA')) {
         loadCompanyEmployees(selectedClient.id)
       }
       // Load beneficiaries if INDIVIDUAL + INCLUSION/EXCLUSION
       const needsBeneficiaries =
-        selectedClient?.clientType !== 'EMPRESA' &&
+        !selectedClient?.clientTypes.includes('EMPRESA') &&
         (pt === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
           pt === AffiliationProcessType.EXCLUSION_BENEFICIARIOS)
       if (needsBeneficiaries && selectedClient) {
@@ -548,8 +548,10 @@ export function AffiliationCreateWizard({
                           </div>
                           <div>
                             <span className="text-muted-foreground">Tipo:</span>
-                            <p className="font-medium">
-                              <Badge variant="outline">{selectedClient.clientType}</Badge>
+                            <p className="font-medium space-x-1">
+                              {selectedClient.clientTypes.map((type) => (
+                                <Badge key={type} variant="outline">{type}</Badge>
+                              ))}
                             </p>
                           </div>
                           <div>

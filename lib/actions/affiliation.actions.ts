@@ -132,7 +132,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
           },
         },
         subProcesses: {
@@ -222,7 +222,7 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
           },
         },
         subProcesses: {
@@ -384,7 +384,7 @@ export async function createAffiliation(
     const uniqueEmployeeIds = [...new Set(employeeIds)]
 
     if (uniqueEmployeeIds.length > 0) {
-      if (client.clientType !== 'EMPRESA') {
+      if (!client.clientTypes.includes('EMPRESA')) {
         return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
       }
 
@@ -1366,7 +1366,7 @@ export async function addSubProcesses(
     const uniqueEmployeeIds = [...new Set(employeeIds)]
 
     if (uniqueEmployeeIds.length > 0) {
-      if (affiliation.client.clientType !== 'EMPRESA') {
+      if (!affiliation.client.clientTypes.includes('EMPRESA')) {
         return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
       }
 
@@ -1534,7 +1534,7 @@ export async function getMyAssignments(
                   phone: true,
                   identificationType: true,
                   identificationNumber: true,
-                  clientType: true,
+                  clientTypes: true,
                 },
               },
             },
@@ -1854,7 +1854,7 @@ export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<Af
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
           },
         },
         sentBy: {
@@ -2200,7 +2200,7 @@ export async function getAffiliationEmailData(
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
             companyId: true,
             legalRepresentative: {
               select: {
@@ -2529,7 +2529,7 @@ function buildAffiliationSubject(
     processTypeOther: string | null
     client: {
       fullName: string
-      clientType: string
+      clientTypes: string[]
       company?: { fullName: string } | null
     } | null
     subProcesses: { employee?: { fullName: string } | null }[]
@@ -2539,7 +2539,7 @@ function buildAffiliationSubject(
   const client = affiliation.client
   if (!client) return 'Afiliación Completada'
 
-  if (client.clientType === ClientType.EMPRESA) {
+  if (client.clientTypes.includes(ClientType.EMPRESA)) {
     // For empresa: "EMPLOYER / EMPLOYEE"
     const employees = affiliation.subProcesses
       .map((sp) => sp.employee?.fullName)
@@ -2702,7 +2702,7 @@ function buildAffiliationEmailBody(
       identificationNumber: string
       phone: string
       email: string
-      clientType: string
+      clientTypes: string[]
       legalRepresentative?: {
         fullName: string
         identificationType: string
@@ -2752,7 +2752,7 @@ function buildAffiliationEmailBody(
   lines.push('Adjunto enviamos certificados de afiliación solicitados:')
   lines.push('')
 
-  const isEmpresa = client.clientType === ClientType.EMPRESA
+  const isEmpresa = client.clientTypes.includes(ClientType.EMPRESA)
 
   const employees = affiliation.subProcesses
     .map((sp) => sp.employee)

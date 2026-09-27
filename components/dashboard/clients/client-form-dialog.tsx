@@ -50,6 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
@@ -136,6 +137,13 @@ const ID_MASK_CONFIG: Record<IdentificationType, MaskConfig> = {
 const PHONE_MASK = '+57 000 000 0000'
 const PHONE_PLACEHOLDER = '+57 300 123 4567'
 
+// Client type options — a client can hold several at once
+const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
+  { value: ClientType.EMPLEADO, label: 'Empleado' },
+  { value: ClientType.EMPRESA, label: 'Empresa' },
+  { value: ClientType.INDEPENDIENTE, label: 'Independiente' },
+]
+
 export function ClientFormDialog({
   open,
   onOpenChange,
@@ -159,7 +167,7 @@ export function ClientFormDialog({
     mode: 'onBlur',
     defaultValues: {
       fullName: '',
-      clientType: ClientType.EMPLEADO,
+      clientTypes: [ClientType.EMPLEADO],
       identificationType: IdentificationType.CEDULA,
       identificationNumber: '',
       email: '',
@@ -185,10 +193,10 @@ export function ClientFormDialog({
     ? getMunicipiosPorDepartamento(addressDepartamento)
     : []
 
-  // Watch clientType to show/hide legal representative fields and filter ID types
-  const clientType = form.watch('clientType')
+  // Watch clientTypes to show/hide legal representative fields and filter ID types
+  const clientTypes = form.watch('clientTypes') || []
   const identificationType = form.watch('identificationType')
-  const isCompany = clientType === ClientType.EMPRESA
+  const isCompany = clientTypes.includes(ClientType.EMPRESA)
 
   // Track previous identification type to clear number only when it actually changes
   const prevIdTypeRef = useRef<IdentificationType | null>(null)
@@ -224,7 +232,7 @@ export function ClientFormDialog({
     if (editClient) {
       form.reset({
         fullName: editClient.fullName,
-        clientType: editClient.clientType,
+        clientTypes: editClient.clientTypes,
         identificationType: editClient.identificationType,
         identificationNumber: editClient.identificationNumber,
         email: editClient.email,
@@ -246,7 +254,7 @@ export function ClientFormDialog({
     } else {
       form.reset({
         fullName: '',
-        clientType: ClientType.EMPLEADO,
+        clientTypes: [ClientType.EMPLEADO],
         identificationType: IdentificationType.CEDULA,
         identificationNumber: '',
         email: '',
@@ -406,29 +414,40 @@ export function ClientFormDialog({
               )}
             />
 
-            {/* Client type — first */}
+            {/* Client type — a client can hold several types at once */}
             <FormField
               control={form.control}
-              name="clientType"
+              name="clientTypes"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tipo de Cliente</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={isLoading}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value={ClientType.EMPLEADO}>Empleado</SelectItem>
-                      <SelectItem value={ClientType.EMPRESA}>Empresa</SelectItem>
-                      <SelectItem value={ClientType.INDEPENDIENTE}>Independiente</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap gap-4">
+                    {CLIENT_TYPE_OPTIONS.map((option) => {
+                      const currentValue: ClientType[] = field.value || []
+                      const checked = currentValue.includes(option.value)
+                      return (
+                        <FormItem
+                          key={option.value}
+                          className="flex flex-row items-center space-x-2 space-y-0"
+                        >
+                          <FormControl>
+                            <Checkbox
+                              checked={checked}
+                              disabled={isLoading}
+                              onCheckedChange={(isChecked) => {
+                                if (isChecked) {
+                                  field.onChange([...currentValue, option.value])
+                                } else {
+                                  field.onChange(currentValue.filter((t) => t !== option.value))
+                                }
+                              }}
+                            />
+                          </FormControl>
+                          <FormLabel className="font-normal">{option.label}</FormLabel>
+                        </FormItem>
+                      )
+                    })}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}

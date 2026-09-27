@@ -100,7 +100,7 @@ const MANAGER_SESSION = {
 
 function makeClient(overrides: {
   id: string
-  clientType?: ClientType
+  clientTypes?: ClientType[]
   companyId?: string | null
   isActive?: boolean
 }) {
@@ -109,7 +109,7 @@ function makeClient(overrides: {
     fullName: `Client ${overrides.id}`,
     identificationType: IdentificationType.CEDULA,
     identificationNumber: '1234567890',
-    clientType: overrides.clientType ?? ClientType.EMPLEADO,
+    clientTypes: overrides.clientTypes ?? [ClientType.EMPLEADO],
     employeeType: null,
     workDaysRange: null,
     email: `${overrides.id.slice(0, 8)}@test.com`,
@@ -178,8 +178,8 @@ describe('createEmployment', () => {
   it('REQ-1.1: creates Employment row for a valid employeeId + companyId pair', async () => {
     authorizeAsManager()
 
-    const company  = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
-    const employee = makeClient({ id: ID.CLIENT_A,  clientType: ClientType.INDEPENDIENTE })
+    const company  = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
+    const employee = makeClient({ id: ID.CLIENT_A,  clientTypes: [ClientType.INDEPENDIENTE] })
     const created  = makeEmployment({
       employeeId: ID.CLIENT_A,
       companyId:  ID.COMPANY_X,
@@ -216,8 +216,8 @@ describe('createEmployment', () => {
   it('REQ-1.2: EMPLEADO-type client can be assigned; clientType is preserved in DB', async () => {
     authorizeAsManager()
 
-    const company  = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
-    const employee = makeClient({ id: ID.CLIENT_B,  clientType: ClientType.EMPLEADO })
+    const company  = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
+    const employee = makeClient({ id: ID.CLIENT_B,  clientTypes: [ClientType.EMPLEADO] })
     const created  = makeEmployment({
       employeeId:    ID.CLIENT_B,
       companyId:     ID.COMPANY_X,
@@ -247,8 +247,8 @@ describe('createEmployment', () => {
   it('REQ-1.3: rejects when an active Employment already exists for the same pair', async () => {
     authorizeAsManager()
 
-    const company        = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
-    const employee       = makeClient({ id: ID.CLIENT_A,  clientType: ClientType.EMPLEADO })
+    const company        = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
+    const employee       = makeClient({ id: ID.CLIENT_A,  clientTypes: [ClientType.EMPLEADO] })
     const existingActive = makeEmployment({ employeeId: ID.CLIENT_A, companyId: ID.COMPANY_X, isActive: true })
 
     prismaMock.client.findUnique
@@ -310,8 +310,8 @@ describe('createEmployment', () => {
   it('REQ-1.6: undefined employeeType is accepted because schema field is optional/nullable', async () => {
     authorizeAsManager()
 
-    const company  = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
-    const employee = makeClient({ id: ID.CLIENT_A,  clientType: ClientType.EMPLEADO })
+    const company  = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
+    const employee = makeClient({ id: ID.CLIENT_A,  clientTypes: [ClientType.EMPLEADO] })
     const created  = makeEmployment({ employeeId: ID.CLIENT_A, companyId: ID.COMPANY_X, employeeType: null })
 
     prismaMock.client.findUnique
@@ -336,8 +336,8 @@ describe('createEmployment', () => {
   it('REQ-1.7: reactivates an inactive Employment (re-hire) via upsert — no duplicate row', async () => {
     authorizeAsManager()
 
-    const company    = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
-    const employee   = makeClient({ id: ID.CLIENT_A,  clientType: ClientType.EMPLEADO })
+    const company    = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
+    const employee   = makeClient({ id: ID.CLIENT_A,  clientTypes: [ClientType.EMPLEADO] })
     const inactive   = makeEmployment({ employeeId: ID.CLIENT_A, companyId: ID.COMPANY_X, isActive: false })
     const reactivated = { ...inactive, isActive: true, employeeType: EmployeeType.TIEMPO_COMPLETO }
 
@@ -370,8 +370,8 @@ describe('createEmployment — REQ-2 multi-employer', () => {
   it('REQ-2.1: allows creating a second active Employment at a different company', async () => {
     authorizeAsManager()
 
-    const companyY   = makeClient({ id: ID.COMPANY_Y, clientType: ClientType.EMPRESA })
-    const employee   = makeClient({ id: ID.CLIENT_A,  clientType: ClientType.EMPLEADO })
+    const companyY   = makeClient({ id: ID.COMPANY_Y, clientTypes: [ClientType.EMPRESA] })
+    const employee   = makeClient({ id: ID.CLIENT_A,  clientTypes: [ClientType.EMPLEADO] })
     const newEmp     = makeEmployment({
       employeeId:    ID.CLIENT_A,
       companyId:     ID.COMPANY_Y,
@@ -401,8 +401,8 @@ describe('createEmployment — REQ-2 multi-employer', () => {
   it('REQ-2.2: EMPRESA-type client can be an employee at another company', async () => {
     authorizeAsManager()
 
-    const companyZ   = makeClient({ id: ID.COMPANY_Z, clientType: ClientType.EMPRESA })
-    const empresaEmp = makeClient({ id: ID.EMPRESA,   clientType: ClientType.EMPRESA })
+    const companyZ   = makeClient({ id: ID.COMPANY_Z, clientTypes: [ClientType.EMPRESA] })
+    const empresaEmp = makeClient({ id: ID.EMPRESA,   clientTypes: [ClientType.EMPRESA] })
     const created    = makeEmployment({
       employeeId:   ID.EMPRESA,
       companyId:    ID.COMPANY_Z,
@@ -561,13 +561,13 @@ describe('getAvailableEmployees', () => {
   it('REQ-3.3: EMPRESA-type clients are included in available candidates', async () => {
     authorizeAsManager()
 
-    const empresa = makeClient({ id: ID.EMPRESA, clientType: ClientType.EMPRESA })
+    const empresa = makeClient({ id: ID.EMPRESA, clientTypes: [ClientType.EMPRESA] })
     prismaMock.client.findMany.mockResolvedValueOnce([empresa])
 
     const result = await getAvailableEmployees(ID.COMPANY_X)
 
     expect(result.success).toBe(true)
-    expect(result.data!.some((c) => c.clientType === ClientType.EMPRESA)).toBe(true)
+    expect(result.data!.some((c) => c.clientTypes.includes(ClientType.EMPRESA))).toBe(true)
   })
 
   // -------------------------------------------------------------------------
@@ -577,7 +577,7 @@ describe('getAvailableEmployees', () => {
     authorizeAsManager()
 
     // clientC has companyId=companyY in shadow — old query excluded them; new query doesn't
-    const clientC = makeClient({ id: ID.CLIENT_C, clientType: ClientType.EMPLEADO, companyId: ID.COMPANY_Y })
+    const clientC = makeClient({ id: ID.CLIENT_C, clientTypes: [ClientType.EMPLEADO], companyId: ID.COMPANY_Y })
     prismaMock.client.findMany.mockResolvedValueOnce([clientC])
 
     const result = await getAvailableEmployees(ID.COMPANY_X)
@@ -642,7 +642,7 @@ describe('getCompanyEmployees', () => {
   it('REQ-4.1: returns only active Employment rows with per-employment role fields', async () => {
     authorizeAsManager()
 
-    const company = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
+    const company = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
     const rowA = {
       employeeType:  EmployeeType.TIEMPO_COMPLETO,
       workDaysRange: WorkDaysRange.DIAS_1_7,
@@ -673,7 +673,7 @@ describe('getCompanyEmployees', () => {
   it('REQ-4.2: returns empty array when company has no active Employments', async () => {
     authorizeAsManager()
 
-    const company = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
+    const company = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
     prismaMock.client.findUnique.mockResolvedValueOnce(company)
     prismaMock.employment.findMany.mockResolvedValueOnce([])
 
@@ -691,7 +691,7 @@ describe('getCompanyEmployees', () => {
   it('REQ-4.3: employeeType from Employment row is returned, not from any Client shadow value', async () => {
     authorizeAsManager()
 
-    const company = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
+    const company = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
     // The employment row carries TIEMPO_COMPLETO — this is what getCompanyEmployees should return
     const row = {
       employeeType:  EmployeeType.TIEMPO_COMPLETO,  // from Employment table
@@ -703,7 +703,7 @@ describe('getCompanyEmployees', () => {
         fullName:             'Client A',
         identificationType:   IdentificationType.CEDULA,
         identificationNumber: '1234567890',
-        clientType:           ClientType.EMPLEADO,
+        clientTypes:          [ClientType.EMPLEADO],
         email:                'clienta@test.com',
         phone:                '3001234567',
         status:               'ACTIVO',
@@ -732,7 +732,7 @@ describe('getCompanyEmployees', () => {
   it('filters out employees whose Client record has isActive=false', async () => {
     authorizeAsManager()
 
-    const company = makeClient({ id: ID.COMPANY_X, clientType: ClientType.EMPRESA })
+    const company = makeClient({ id: ID.COMPANY_X, clientTypes: [ClientType.EMPRESA] })
     const rowInactive = {
       employeeType:  EmployeeType.TIEMPO_COMPLETO,
       workDaysRange: WorkDaysRange.DIAS_1_7,
@@ -742,7 +742,7 @@ describe('getCompanyEmployees', () => {
         fullName:             'Inactive Client',
         identificationType:   IdentificationType.CEDULA,
         identificationNumber: '9876543210',
-        clientType:           ClientType.EMPLEADO,
+        clientTypes:          [ClientType.EMPLEADO],
         email:                'inactive@test.com',
         phone:                '3009876543',
         status:               'INACTIVO',
@@ -767,7 +767,7 @@ describe('getCompanyEmployees', () => {
   it('returns error when target is not an EMPRESA-type client', async () => {
     authorizeAsManager()
 
-    const nonCompany = makeClient({ id: ID.CLIENT_A, clientType: ClientType.EMPLEADO })
+    const nonCompany = makeClient({ id: ID.CLIENT_A, clientTypes: [ClientType.EMPLEADO] })
     prismaMock.client.findUnique.mockResolvedValueOnce(nonCompany)
 
     const result = await getCompanyEmployees(ID.CLIENT_A)

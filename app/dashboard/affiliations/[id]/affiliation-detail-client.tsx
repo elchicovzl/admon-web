@@ -153,7 +153,11 @@ export function AffiliationDetailClient({
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Tipo de Cliente</p>
-                  <Badge variant="outline">{client?.clientType}</Badge>
+                  <div className="flex flex-wrap gap-1">
+                    {client?.clientTypes.map((type) => (
+                      <Badge key={type} variant="outline">{type}</Badge>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-muted-foreground" />
@@ -394,7 +398,7 @@ export function AffiliationDetailClient({
           onOpenChange={setAddSubProcessOpen}
           affiliationId={affiliation.id}
           clientId={client.id}
-          clientType={client.clientType}
+          clientTypes={client.clientTypes}
           currentUserId={currentUserId}
           existingSubProcesses={subProcesses.map((sp) => ({
             type: sp.type,

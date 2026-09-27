@@ -58,7 +58,7 @@ export const getClients = cache(async (): Promise<ActionResponse<SafeClient[]>> 
         fullName: true,
         identificationType: true,
         identificationNumber: true,
-        clientType: true,
+        clientTypes: true,
         employeeType: true,
         workDaysRange: true,
         email: true,
@@ -116,7 +116,7 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
         fullName: true,
         identificationType: true,
         identificationNumber: true,
-        clientType: true,
+        clientTypes: true,
         employeeType: true,
         workDaysRange: true,
         email: true,
@@ -140,7 +140,7 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
             fullName: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
             employeeType: true,
             workDaysRange: true,
             email: true,
@@ -159,7 +159,7 @@ export const getClientById = cache(async (id: string): Promise<ActionResponse<Cl
             fullName: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
             employeeType: true,
             workDaysRange: true,
             email: true,
@@ -347,7 +347,7 @@ export async function createClient(
       }
     }
 
-    const { fullName, identificationType, identificationNumber, clientType, email, phone, employeeType, workDaysRange, legalRepresentative } = clientValidation.data
+    const { fullName, identificationType, identificationNumber, clientTypes, email, phone, employeeType, workDaysRange, legalRepresentative } = clientValidation.data
 
     // Check if identification number already exists
     const existingClient = await prisma.client.findUnique({
@@ -367,14 +367,14 @@ export async function createClient(
         fullName,
         identificationType,
         identificationNumber,
-        clientType,
+        clientTypes,
         email,
         phone,
         employeeType: employeeType || null,
         workDaysRange: workDaysRange || null,
         createdById: authCheck.userId!,
         // Create legal representative if client is a company
-        ...(clientType === ClientType.EMPRESA && legalRepresentative && {
+        ...(clientTypes.includes(ClientType.EMPRESA) && legalRepresentative && {
           legalRepresentative: {
             create: {
               fullName: legalRepresentative.fullName,
@@ -391,7 +391,7 @@ export async function createClient(
         fullName: true,
         identificationType: true,
         identificationNumber: true,
-        clientType: true,
+        clientTypes: true,
         employeeType: true,
         workDaysRange: true,
         email: true,
@@ -473,7 +473,7 @@ export async function updateClient(
     if (updateData.employeeType && updateData.employeeType !== 'TIEMPO_PARCIAL') {
       updateData.workDaysRange = null
     }
-    if (updateData.clientType && updateData.clientType !== 'EMPLEADO') {
+    if (updateData.clientTypes && !updateData.clientTypes.includes('EMPLEADO')) {
       updateData.employeeType = null
       updateData.workDaysRange = null
     }
@@ -487,7 +487,7 @@ export async function updateClient(
         fullName: true,
         identificationType: true,
         identificationNumber: true,
-        clientType: true,
+        clientTypes: true,
         employeeType: true,
         workDaysRange: true,
         email: true,
@@ -763,19 +763,20 @@ export const getClientsCount = cache(async (): Promise<
       return { success: false, error: authCheck.error }
     }
 
-    const [total, active, inactive, byType] = await Promise.all([
+    // A client can hold several types at once; Prisma's groupBy can't group by an
+    // array column, so each type gets its own `has` count. A multi-type client
+    // counts once per type it holds (per product decision).
+    const clientTypeValues = Object.values(ClientType)
+    const [total, active, inactive, ...byTypeCounts] = await Promise.all([
       prisma.client.count(),
       prisma.client.count({ where: { isActive: true } }),
       prisma.client.count({ where: { isActive: false } }),
-      prisma.client.groupBy({
-        by: ['clientType'],
-        _count: true,
-      }),
+      ...clientTypeValues.map((type) => prisma.client.count({ where: { clientTypes: { has: type } } })),
     ])
 
-    const byTypeFormatted = byType.map((item) => ({
-      type: item.clientType,
-      count: item._count,
+    const byTypeFormatted = clientTypeValues.map((type, index) => ({
+      type,
+      count: byTypeCounts[index],
     }))
 
     return {
@@ -799,7 +800,7 @@ export const getClientsCount = cache(async (): Promise<
 /**
  * Get available employee candidates for a specific company.
  * Phase 2 migration: excludes only clients already actively employed by THIS company
- * (instead of old filter: clientType=EMPLEADO + companyId=null).
+ * (instead of old filter: clientTypes has EMPLEADO + companyId=null).
  * Covers REQ-3 (3.1–3.6):
  *   - 3.1: excludes clients with an active Employment at the target company
  *   - 3.2: includes clients employed at OTHER companies (multi-employer)
@@ -832,7 +833,7 @@ export const getAvailableEmployees = cache(async (companyId: string): Promise<Ac
         fullName: true,
         identificationType: true,
         identificationNumber: true,
-        clientType: true,
+        clientTypes: true,
         email: true,
         phone: true,
         status: true,
@@ -886,7 +887,7 @@ export const getCompanyEmployees = cache(async (companyId: string): Promise<Acti
     }
 
     // Check if company is actually a company type
-    if (company.clientType !== 'EMPRESA') {
+    if (!company.clientTypes.includes('EMPRESA')) {
       return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados' }
     }
 
@@ -903,7 +904,7 @@ export const getCompanyEmployees = cache(async (companyId: string): Promise<Acti
             fullName: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
             email: true,
             phone: true,
             status: true,

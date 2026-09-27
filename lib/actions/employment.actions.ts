@@ -74,7 +74,7 @@ export async function createEmployment(
     if (!company) {
       return { success: false, error: 'Empresa no encontrada' }
     }
-    if (company.clientType !== ClientType.EMPRESA) {
+    if (!company.clientTypes.includes(ClientType.EMPRESA)) {
       return {
         success: false,
         error: 'Solo clientes tipo EMPRESA pueden tener empleados asignados',

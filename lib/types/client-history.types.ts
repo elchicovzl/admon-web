@@ -18,7 +18,7 @@ export interface ClientHistoryListItem {
   fullName: string
   identificationType: IdentificationType
   identificationNumber: string
-  clientType: ClientType
+  clientTypes: ClientType[]
   email: string
   phone: string
   status: string

@@ -268,7 +268,7 @@ export function AffiliationsTable({
               label: AffiliationGlobalStatusLabels[globalStatus],
               className: globalStatusClassName[globalStatus],
             }
-            const isCompany = affiliation.client?.clientType === ClientType.EMPRESA
+            const isCompany = affiliation.client?.clientTypes.includes(ClientType.EMPRESA) ?? false
             const uniqueEmployees = isCompany ? getUniqueEmployees(affiliation) : []
             const trimmedQuery = searchQuery.trim()
             const matchedEmployees = trimmedQuery

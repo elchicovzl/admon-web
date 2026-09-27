@@ -168,7 +168,7 @@ export interface AffiliationWithRelations extends SafeAffiliation {
     phone: string
     identificationType: string
     identificationNumber: string
-    clientType: string
+    clientTypes: string[]
   }
   subProcesses?: AffiliationSubProcessWithRelations[]
   createdBy?: {
@@ -199,7 +199,7 @@ export interface AffiliationSubProcessWithRelations extends SafeAffiliationSubPr
       phone?: string
       identificationType?: string
       identificationNumber?: string
-      clientType?: string
+      clientTypes?: string[]
     }
   }
   assignedTo?: {
