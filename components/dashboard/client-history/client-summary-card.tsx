@@ -79,7 +79,10 @@ export function ClientSummaryCard({ client }: ClientSummaryCardProps) {
             label="Identificación"
             value={`${identificationTypeLabels[client.identificationType]} ${client.identificationNumber}`}
           />
-          <Field label="Tipo" value={clientTypeLabels[client.clientType]} />
+          <Field
+            label="Tipo"
+            value={client.clientTypes.map((type) => clientTypeLabels[type]).join(', ')}
+          />
           <Field label="Email" value={client.email} />
           <Field label="Teléfono" value={client.phone} />
           {addressLine && (

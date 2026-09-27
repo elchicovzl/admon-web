@@ -103,7 +103,7 @@ export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
 
     // Filter by type
     if (typeFilter !== 'all') {
-      result = result.filter((c) => c.clientType === typeFilter)
+      result = result.filter((c) => c.clientTypes.includes(typeFilter as ClientType))
     }
 
     // Filter by search term
@@ -275,9 +275,13 @@ export function ClientsTable({ clients, onEditClient }: ClientsTableProps) {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getClientTypeBadgeVariant(client.clientType)}>
-                      {getClientTypeLabel(client.clientType)}
-                    </Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {client.clientTypes.map((type) => (
+                        <Badge key={type} variant={getClientTypeBadgeVariant(type)}>
+                          {getClientTypeLabel(type)}
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                   <TableCell className="text-sm">{client.email}</TableCell>
                   <TableCell className="text-sm">{client.phone}</TableCell>

@@ -2,7 +2,7 @@
  * affiliation-employment-validation.test.ts
  *
  * Verifies REQ-6: affiliation employee validation uses the Employment join table
- * instead of the legacy `Client.companyId + clientType:'EMPLEADO'` check.
+ * instead of the legacy `Client.companyId + clientTypes has EMPLEADO` check.
  *
  * Covers scenarios 6.1–6.6 from the delta spec.
  *
@@ -118,7 +118,7 @@ function setupManagerSession() {
 function setupEmpresaClient() {
   prismaMock.client.findUnique.mockResolvedValue({
     id: COMPANY_ID,
-    clientType: ClientType.EMPRESA,
+    clientTypes: [ClientType.EMPRESA],
     isActive: true,
     fullName: 'Test Company SA',
   })
@@ -232,15 +232,15 @@ describe('REQ-6 createAffiliation: Employment-based employee validation', () => 
     )
   })
 
-  // REQ-6.6 — validation uses Employment, NOT Client.companyId or Client.clientType
-  it('REQ-6.6: passes regardless of Client.companyId shadow value or clientType', async () => {
+  // REQ-6.6 — validation uses Employment, NOT Client.companyId or Client.clientTypes
+  it('REQ-6.6: passes regardless of Client.companyId shadow value or clientTypes', async () => {
     // Employment table has the row — that is the ONLY source of truth
     prismaMock.employment.findMany.mockResolvedValue([{ employeeId: EMPLOYEE_A }])
 
     const result = await createAffiliation(createAffiliationPayload([EMPLOYEE_A]))
 
     expect(result.success).toBe(true)
-    // Critical: the old code called prisma.client.findMany with companyId + clientType:'EMPLEADO'.
+    // Critical: the old code called prisma.client.findMany with companyId + clientTypes has 'EMPLEADO'.
     // The new code must NOT call prisma.client.findMany for membership validation.
     expect(prismaMock.client.findMany).not.toHaveBeenCalled()
   })
@@ -279,7 +279,7 @@ describe('REQ-6 createAffiliation: Employment-based employee validation', () => 
     // Override the client mock to return INDEPENDIENTE
     prismaMock.client.findUnique.mockResolvedValue({
       id: COMPANY_ID,
-      clientType: ClientType.INDEPENDIENTE,
+      clientTypes: [ClientType.INDEPENDIENTE],
       isActive: true,
       fullName: 'Freelancer SA',
     })
@@ -311,7 +311,7 @@ describe('REQ-6 addSubProcesses: Employment-based employee validation', () => {
       status: AffiliationStatus.ACTIVE,
       client: {
         id: COMPANY_ID,
-        clientType: ClientType.EMPRESA,
+        clientTypes: [ClientType.EMPRESA],
         isActive: true,
         fullName: 'Test Company SA',
       },
@@ -394,7 +394,7 @@ describe('REQ-6 addSubProcesses: Employment-based employee validation', () => {
       status: AffiliationStatus.ACTIVE,
       client: {
         id: COMPANY_ID,
-        clientType: ClientType.EMPLEADO,
+        clientTypes: [ClientType.EMPLEADO],
         isActive: true,
         fullName: 'Single Employee',
       },

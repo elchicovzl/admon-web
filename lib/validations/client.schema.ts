@@ -44,9 +44,10 @@ export const createClientSchema = z
       .min(1, 'El nombre completo es requerido')
       .min(3, 'El nombre debe tener al menos 3 caracteres')
       .max(100, 'El nombre no puede exceder 100 caracteres'),
-    clientType: z.nativeEnum(ClientType, {
-      required_error: 'El tipo de cliente es requerido',
-    }),
+    clientTypes: z
+      .array(z.nativeEnum(ClientType))
+      .min(1, 'Selecciona al menos un tipo')
+      .transform((types) => Array.from(new Set(types))),
     identificationType: z.nativeEnum(IdentificationType, {
       required_error: 'El tipo de identificación es requerido',
     }),
@@ -72,7 +73,7 @@ export const createClientSchema = z
   })
   .refine(
     (data) => {
-      if (data.clientType === ClientType.EMPRESA) {
+      if (data.clientTypes.includes(ClientType.EMPRESA)) {
         return !!data.legalRepresentative
       }
       return true
@@ -80,6 +81,18 @@ export const createClientSchema = z
     {
       message: 'El representante legal es requerido para empresas',
       path: ['legalRepresentative'],
+    }
+  )
+  .refine(
+    (data) => {
+      if (data.clientTypes.includes(ClientType.EMPLEADO) && data.employeeType === EmployeeType.TIEMPO_PARCIAL) {
+        return !!data.workDaysRange
+      }
+      return true
+    },
+    {
+      message: 'Los días laborados son requeridos para tiempo parcial',
+      path: ['workDaysRange'],
     }
   )
 
@@ -93,9 +106,11 @@ export const createEmployeeSchema = z
       .min(1, 'El nombre completo es requerido')
       .min(3, 'El nombre debe tener al menos 3 caracteres')
       .max(100, 'El nombre no puede exceder 100 caracteres'),
-    clientType: z.nativeEnum(ClientType, {
-      required_error: 'El tipo de cliente es requerido',
-    }),
+    // This dialog only ever creates EMPLEADO clients; the type is fixed, not user-selected.
+    clientTypes: z
+      .array(z.nativeEnum(ClientType))
+      .default([ClientType.EMPLEADO])
+      .transform(() => [ClientType.EMPLEADO] as ClientType[]),
     identificationType: z.nativeEnum(IdentificationType, {
       required_error: 'El tipo de identificación es requerido',
     }),
@@ -145,8 +160,10 @@ export const updateClientSchema = z.object({
     .min(3, 'El nombre debe tener al menos 3 caracteres')
     .max(100, 'El nombre no puede exceder 100 caracteres')
     .optional(),
-  clientType: z
-    .nativeEnum(ClientType)
+  clientTypes: z
+    .array(z.nativeEnum(ClientType))
+    .min(1, 'Selecciona al menos un tipo')
+    .transform((types) => Array.from(new Set(types)))
     .optional(),
   employeeType: z
     .nativeEnum(EmployeeType)

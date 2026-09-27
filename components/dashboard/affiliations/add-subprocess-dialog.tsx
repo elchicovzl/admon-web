@@ -41,7 +41,7 @@ interface AddSubProcessDialogProps {
   onOpenChange: (open: boolean) => void
   affiliationId: string
   clientId: string
-  clientType: string
+  clientTypes: string[]
   currentUserId?: string
   existingSubProcesses: { type: AffiliationSubProcessType; employeeId: string | null }[]
   onSubProcessesAdded?: (created: SafeAffiliationSubProcess[]) => void
@@ -63,7 +63,7 @@ export function AddSubProcessDialog({
   onOpenChange,
   affiliationId,
   clientId,
-  clientType,
+  clientTypes,
   currentUserId,
   existingSubProcesses,
   onSubProcessesAdded,
@@ -91,7 +91,7 @@ export function AddSubProcessDialog({
     PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [],
   })
 
-  const isEmpresa = clientType === 'EMPRESA'
+  const isEmpresa = clientTypes.includes('EMPRESA')
 
   useEffect(() => {
     if (open) {

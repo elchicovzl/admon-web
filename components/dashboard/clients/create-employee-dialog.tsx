@@ -120,7 +120,7 @@ export function CreateEmployeeDialog({
     mode: 'onBlur',
     defaultValues: {
       fullName: '',
-      clientType: ClientType.EMPLEADO,
+      clientTypes: [ClientType.EMPLEADO],
       identificationType: IdentificationType.CEDULA,
       identificationNumber: '',
       email: '',
@@ -521,8 +521,7 @@ export function CreateEmployeeDialog({
               </>
             )}
 
-            {/* Client Type (hidden, always EMPLEADO) */}
-            <input type="hidden" {...form.register('clientType')} value={ClientType.EMPLEADO} />
+            {/* Client type is fixed to EMPLEADO by createEmployeeSchema (see defaultValues) — no field needed */}
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-4">

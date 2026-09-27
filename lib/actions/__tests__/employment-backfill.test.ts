@@ -25,7 +25,7 @@ interface ClientRow {
   companyId: string | null
   employeeType: EmployeeType | null
   workDaysRange: WorkDaysRange | null
-  clientType: ClientType
+  clientTypes: ClientType[]
   isActive: boolean
 }
 
@@ -81,7 +81,7 @@ function makeClient(overrides: Partial<ClientRow> & { id: string }): ClientRow {
     companyId: null,
     employeeType: null,
     workDaysRange: null,
-    clientType: ClientType.EMPLEADO,
+    clientTypes: [ClientType.EMPLEADO],
     isActive: true,
     ...overrides,
   }
