@@ -1,232 +1,197 @@
 /**
  * Archived Affiliations Client Component
- * Displays table of archived affiliations
+ * Displays archived affiliations on the shared server-driven data table
+ * shell — server-side search, sorting and pagination via the URL.
  */
 
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import type { ColumnDef, ColumnPinningState } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChevronLeft, ChevronRight, Eye, Search, Archive, Send } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Send, Eye } from 'lucide-react'
 import { SentEmailViewer } from '@/components/dashboard/affiliations/sent-email-viewer'
-import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
+import { TypeBadge } from '@/components/dashboard/affiliations/status-badge'
+import { ServerDataTable } from '@/components/dashboard/data-table/server-data-table'
+import { useDebouncedUrlParam, useTableUrlParams } from '@/components/dashboard/data-table/use-table-url-params'
+import type {
+  AffiliationWithRelations,
+  ArchivedAffiliationsPage,
+  ArchivedSortBy,
+} from '@/lib/types/affiliation.types'
+
+const STORAGE_KEY = 'archived-affiliations-table-v1'
+const SORTABLE_COLUMNS: Set<string> = new Set(['process', 'client', 'sentAt', 'sentBy'])
+const SORT_COLUMN_MAP: Record<string, ArchivedSortBy> = {
+  process: 'affiliationNumber',
+  client: 'client',
+  sentAt: 'sentAt',
+  sentBy: 'sentBy',
+}
+const DEFAULT_COLUMN_PINNING: ColumnPinningState = { left: ['process'], right: [] }
+
+type Row_ = AffiliationWithRelations
 
 interface ArchivedAffiliationsClientProps {
-  affiliations: AffiliationWithRelations[]
+  initialPage: ArchivedAffiliationsPage
 }
 
-const PAGE_SIZE = 10
+export function ArchivedAffiliationsClient({ initialPage }: ArchivedAffiliationsClientProps) {
+  const { searchParams, updateUrl, isPending } = useTableUrlParams()
 
-export function ArchivedAffiliationsClient({ affiliations }: ArchivedAffiliationsClientProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
+  // URL-driven filter/sort values
+  const q = searchParams.get('q') ?? ''
+  const sortBy = searchParams.get('sortBy') ?? ''
+  const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc' | null) ?? 'desc'
 
-  // Filter affiliations by client name
-  const filteredAffiliations = useMemo(() =>
-    affiliations.filter((affiliation) =>
-      affiliation.client?.fullName.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-    [affiliations, searchQuery]
+  const [qInput, setQInput] = useDebouncedUrlParam('q', updateUrl, q)
+
+  const columns = useMemo<ColumnDef<Row_>[]>(
+    () => [
+      {
+        id: 'process',
+        header: 'Proceso',
+        cell: ({ row }) => (
+          <span className="font-mono text-xs font-semibold">{row.original.affiliationNumber}</span>
+        ),
+        size: 110,
+      },
+      {
+        id: 'client',
+        header: 'Cliente',
+        cell: ({ row }) => (
+          <span
+            className="text-sm font-medium truncate block max-w-[220px]"
+            title={row.original.client?.fullName}
+          >
+            {row.original.client?.fullName ?? 'Sin nombre'}
+          </span>
+        ),
+        size: 220,
+      },
+      {
+        id: 'identification',
+        header: 'Identificación',
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">
+            {row.original.client?.identificationType} {row.original.client?.identificationNumber}
+          </span>
+        ),
+        size: 160,
+      },
+      {
+        id: 'sentAt',
+        header: 'Fecha de Envío',
+        cell: ({ row }) => {
+          const sentAt = row.original.sentAt
+          if (!sentAt) return <span className="text-xs text-muted-foreground">N/A</span>
+          return (
+            <div className="flex flex-col">
+              <span className="text-xs font-medium">{format(new Date(sentAt), 'd MMM yyyy', { locale: es })}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {format(new Date(sentAt), 'HH:mm', { locale: es })}
+              </span>
+            </div>
+          )
+        },
+        size: 130,
+      },
+      {
+        id: 'sentBy',
+        header: 'Enviada Por',
+        cell: ({ row }) => {
+          const sentBy = row.original.sentBy
+          if (!sentBy) return <span className="text-xs text-muted-foreground">N/A</span>
+          return (
+            <div className="flex flex-col">
+              <span className="text-xs font-medium">{sentBy.name ?? 'Sin nombre'}</span>
+              <span className="text-[10px] text-muted-foreground">{sentBy.email}</span>
+            </div>
+          )
+        },
+        size: 180,
+      },
+      {
+        id: 'subProcesses',
+        header: 'Sub-Procesos',
+        cell: ({ row }) => {
+          const subs = row.original.subProcesses
+          if (!subs || subs.length === 0) {
+            return <span className="text-xs text-muted-foreground">Sin sub-procesos</span>
+          }
+          return (
+            <div className="flex flex-wrap gap-1">
+              {subs.map((sp) => (
+                <TypeBadge key={sp.id} type={sp.type} className="text-[10px]" />
+              ))}
+            </div>
+          )
+        },
+        size: 220,
+      },
+      {
+        id: 'actions',
+        header: 'Acciones',
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-2">
+            <SentEmailViewer affiliationId={row.original.id} />
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/affiliations/${row.original.id}/send?resend=1`}>
+                <Send className="h-4 w-4 mr-1" />
+                Reenviar
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/affiliations/${row.original.id}`}>
+                <Eye className="h-4 w-4 mr-1" />
+                Ver Detalles
+              </Link>
+            </Button>
+          </div>
+        ),
+        size: 260,
+      },
+    ],
+    []
   )
 
-  const totalPages = Math.max(1, Math.ceil(filteredAffiliations.length / PAGE_SIZE))
-  const safeCurrentPage = Math.min(currentPage, totalPages)
-
-  const paginatedAffiliations = useMemo(() => {
-    const start = (safeCurrentPage - 1) * PAGE_SIZE
-    return filteredAffiliations.slice(start, start + PAGE_SIZE)
-  }, [filteredAffiliations, safeCurrentPage])
-
-  function handleSearchChange(value: string) {
-    setSearchQuery(value)
-    setCurrentPage(1)
+  function clearAllFilters() {
+    updateUrl({ q: undefined })
   }
 
-  if (affiliations.length === 0) {
-    return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12">
-          <Archive className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No hay afiliaciones archivadas</h3>
-          <p className="text-muted-foreground text-center max-w-sm">
-            Las afiliaciones enviadas a clientes aparecerán aquí para consulta histórica.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
+  const activeFilters = q ? 1 : 0
 
   return (
-    <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Archivadas</CardTitle>
-            <Archive className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{affiliations.length}</div>
-            <p className="text-xs text-muted-foreground">Afiliaciones completadas</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    <ServerDataTable
+      columns={columns}
+      result={initialPage}
+      storageKey={STORAGE_KEY}
+      updateUrl={updateUrl}
+      isPending={isPending}
+      sortBy={sortBy}
+      sortDir={sortDir}
+      sortableColumns={SORTABLE_COLUMNS}
+      sortColumnMap={SORT_COLUMN_MAP}
+      defaultColumnPinning={DEFAULT_COLUMN_PINNING}
+      title="Afiliaciones Archivadas"
+      description="Vista tipo Excel — pineá columnas, scroll horizontal, filtros y paginación"
+      activeFilterCount={activeFilters}
+      onClearFilters={clearAllFilters}
+      emptyMessage="No hay afiliaciones archivadas"
+      emptyFilteredMessage="No hay resultados para tu búsqueda"
+      toolbar={
         <Input
-          type="text"
-          placeholder="Buscar por nombre de cliente..."
-          value={searchQuery}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          className="pl-10"
+          placeholder="Buscar por proceso, nombre o identificación..."
+          title="Busca por número de proceso, nombre o identificación (NIT, RUT, cédula) del cliente o del empleado"
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+          className="h-9 w-full sm:w-[320px]"
         />
-      </div>
-
-      {/* Table */}
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Proceso</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Identificación</TableHead>
-              <TableHead>Fecha de Envío</TableHead>
-              <TableHead>Enviada Por</TableHead>
-              <TableHead>Sub-Procesos</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredAffiliations.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                  No se encontraron afiliaciones con ese nombre
-                </TableCell>
-              </TableRow>
-            ) : (
-              paginatedAffiliations.map((affiliation) => (
-                <TableRow key={affiliation.id}>
-                  <TableCell>
-                    <span className="font-mono text-sm font-bold">{affiliation.affiliationNumber}</span>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {affiliation.client?.fullName || 'Sin nombre'}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {affiliation.client?.identificationType}{' '}
-                    {affiliation.client?.identificationNumber}
-                  </TableCell>
-                  <TableCell>
-                    {affiliation.sentAt ? (
-                      <div className="flex flex-col">
-                        <span className="font-medium">
-                          {format(new Date(affiliation.sentAt), 'd MMM yyyy', { locale: es })}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(affiliation.sentAt), 'HH:mm', { locale: es })}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">N/A</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {affiliation.sentBy ? (
-                      <div className="flex flex-col">
-                        <span className="font-medium">
-                          {affiliation.sentBy.name || 'Sin nombre'}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {affiliation.sentBy.email}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">N/A</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {affiliation.subProcesses?.map((sp) => (
-                        <Badge key={sp.id} variant="outline" className="text-xs">
-                          {sp.type}
-                        </Badge>
-                      ))}
-                      {!affiliation.subProcesses || affiliation.subProcesses.length === 0 ? (
-                        <span className="text-muted-foreground text-sm">Sin sub-procesos</span>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <SentEmailViewer affiliationId={affiliation.id} />
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/dashboard/affiliations/${affiliation.id}/send?resend=1`}>
-                          <Send className="h-4 w-4 mr-2" />
-                          Reenviar
-                        </Link>
-                      </Button>
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/dashboard/affiliations/${affiliation.id}`}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Ver Detalles
-                        </Link>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-
-        {/* Pagination */}
-        {filteredAffiliations.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between border-t px-4 py-3">
-            <p className="text-sm text-muted-foreground">
-              {(safeCurrentPage - 1) * PAGE_SIZE + 1}-{Math.min(safeCurrentPage * PAGE_SIZE, filteredAffiliations.length)} de {filteredAffiliations.length}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={safeCurrentPage <= 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Anterior
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {safeCurrentPage} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safeCurrentPage >= totalPages}
-              >
-                Siguiente
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
-    </div>
+      }
+    />
   )
 }
