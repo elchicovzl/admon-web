@@ -35,3 +35,38 @@ export function buildAssignmentSearchWhere(q: string | undefined) {
     ],
   }
 }
+
+/**
+ * Build the search OR clause for the archived affiliations list.
+ *
+ * Matches an archived affiliation when its own affiliationNumber, its
+ * client (fullName or identificationNumber — covers companies and
+ * independents, since NIT/RUT/cédula are all stored in
+ * identificationNumber) OR any of its sub-process employees (fullName or
+ * identificationNumber) contains `q`, case-insensitive.
+ *
+ * Returns `undefined` for an empty/whitespace query so callers can skip
+ * adding the clause entirely.
+ */
+export function buildArchivedWhere(q: string | undefined) {
+  const query = q?.trim()
+  if (!query) return undefined
+
+  return {
+    OR: [
+      { affiliationNumber: { contains: query, mode: 'insensitive' as const } },
+      { client: { fullName: { contains: query, mode: 'insensitive' as const } } },
+      { client: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
+      {
+        subProcesses: {
+          some: { employee: { fullName: { contains: query, mode: 'insensitive' as const } } },
+        },
+      },
+      {
+        subProcesses: {
+          some: { employee: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
+        },
+      },
+    ],
+  }
+}

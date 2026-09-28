@@ -63,7 +63,8 @@ vi.mock('@/emails/affiliation-completed-email', () => ({
 // Action imports (after mocks so mocked modules are used)
 // ---------------------------------------------------------------------------
 
-import { getArchivedAffiliations, buildArchivedWhere } from '../affiliation.actions'
+import { getArchivedAffiliations } from '../affiliation.actions'
+import { buildArchivedWhere } from '@/lib/utils/search-filters'
 
 const USER_ID = 'cuseridtest00004'
 

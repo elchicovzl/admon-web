@@ -5,7 +5,7 @@
 
 'use server'
 
-import { buildAssignmentSearchWhere } from '@/lib/utils/search-filters'
+import { buildAssignmentSearchWhere, buildArchivedWhere } from '@/lib/utils/search-filters'
 import { cache } from 'react'
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth/auth'
@@ -1826,41 +1826,6 @@ export async function sendAffiliation(affiliationId: string): Promise<ActionResp
   } catch (error) {
     console.error('Error sending affiliation:', error)
     return { success: false, error: 'Error al enviar la afiliación' }
-  }
-}
-
-/**
- * Build the search OR clause for the archived affiliations list.
- *
- * Matches an archived affiliation when its own affiliationNumber, its
- * client (fullName or identificationNumber — covers companies and
- * independents, since NIT/RUT/cédula are all stored in
- * identificationNumber) OR any of its sub-process employees (fullName or
- * identificationNumber) contains `q`, case-insensitive.
- *
- * Returns `undefined` for an empty/whitespace query so callers can skip
- * adding the clause entirely.
- */
-export function buildArchivedWhere(q: string | undefined) {
-  const query = q?.trim()
-  if (!query) return undefined
-
-  return {
-    OR: [
-      { affiliationNumber: { contains: query, mode: 'insensitive' as const } },
-      { client: { fullName: { contains: query, mode: 'insensitive' as const } } },
-      { client: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
-      {
-        subProcesses: {
-          some: { employee: { fullName: { contains: query, mode: 'insensitive' as const } } },
-        },
-      },
-      {
-        subProcesses: {
-          some: { employee: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
-        },
-      },
-    ],
   }
 }
 
