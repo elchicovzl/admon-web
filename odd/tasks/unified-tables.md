@@ -33,7 +33,7 @@
 
 ## Tasks
 - [x] T1 — Unified search (`q` param): action ORs affiliation client + employee by fullName/identificationNumber; single debounced input; tests. Route: delegated (writer trigger: 2 non-trivial files). Branch `feat/my-assignments-unified-search`.
-- [ ] T2 — Extract shared data table shell (URL sync hook, pagination footer, sortable headers, column visibility/order persistence); My Assignments uses it with identical behavior. Route: delegated.
+- [x] T2 — Extract shared data table shell (URL sync hook, pagination footer, sortable headers, column visibility/order persistence); My Assignments uses it with identical behavior. Route: delegated.
 - [ ] T3 — Archived: `getArchivedAffiliations(args)` paginated/sorted/searchable server-side; view on shared table. Route: delegated.
 - [ ] T4 — History: `getClientHistoryList(args)` paginated/sorted/searchable server-side (keep status filter active/deleted/all); view on shared table. Route: delegated.
 
@@ -48,5 +48,7 @@
 
 - T1 done: `buildAssignmentSearchWhere(q)` 4-way OR (client/employee x fullName/identificationNumber); single `q` input; legacy `company`/`employee` params map to `q` (company wins if both). Evidence: vitest 25 files / 748 passing (+5); tsc 41 = baseline.
 
+- T2 done: `ServerDataTable<TData>` + `useTableUrlParams`/`useDebouncedUrlParam` + `buildSearchParams` + `parsePaginationParams` + `PaginatedResult<T>` in `components/dashboard/data-table/`, `lib/utils/pagination.ts`, `lib/types/pagination.types.ts`. My Assignments client ~800 -> ~330 lines, same localStorage key/format. Call `useTableUrlParams()` once per view and pass `updateUrl`/`isPending` down. Evidence: vitest 27 files / 768 (+20); tsc 41. Manual browser check of My Assignments pending.
+
 ## Next step
-T2.
+T3.
