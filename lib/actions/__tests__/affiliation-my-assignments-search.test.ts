@@ -63,7 +63,8 @@ vi.mock('@/emails/affiliation-completed-email', () => ({
 // Action imports (after mocks so mocked modules are used)
 // ---------------------------------------------------------------------------
 
-import { getMyAssignments, buildAssignmentSearchWhere } from '../affiliation.actions'
+import { getMyAssignments } from '../affiliation.actions'
+import { buildAssignmentSearchWhere } from '@/lib/utils/search-filters'
 
 const USER_ID = 'cuseridtest00003'
 
