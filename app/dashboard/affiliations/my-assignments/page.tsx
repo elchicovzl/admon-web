@@ -8,6 +8,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/auth'
 import { getMyAssignments, getMyAssignmentsStats } from '@/lib/actions/affiliation.actions'
+import { parsePaginationParams } from '@/lib/utils/pagination'
 import { MyAssignmentsClient } from './my-assignments-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Clock, AlertCircle, CheckCircle2, XCircle, FileText, Eye } from 'lucide-react'
@@ -136,18 +137,16 @@ function parseArgs(sp: SearchParams) {
   // Backwards compatibility: bookmarked URLs from the old two-input search
   // still work, degrading to a single unified query when `q` is absent.
   const legacyQuery = sp.company?.trim() || sp.employee?.trim() || undefined
+  const { page, pageSize, sortDir } = parsePaginationParams(sp)
   return {
-    page: sp.page ? Math.max(1, parseInt(sp.page, 10) || 1) : 1,
-    pageSize: sp.pageSize ? Math.min(200, Math.max(5, parseInt(sp.pageSize, 10) || 25)) : 25,
+    page,
+    pageSize,
     q: sp.q?.trim() || legacyQuery,
     processType: (sp.processType || undefined) as any,
     subProcess: (sp.subProcess || undefined) as any,
     status: (sp.status || undefined) as any,
     sortBy: (sp.sortBy || undefined) as any,
-    sortDir: (sp.sortDir === 'asc' || sp.sortDir === 'desc' ? sp.sortDir : undefined) as
-      | 'asc'
-      | 'desc'
-      | undefined,
+    sortDir,
   }
 }
 

@@ -11,6 +11,7 @@ import {
   AffiliationProcessType,
   ClientType,
 } from '@prisma/client'
+import type { PaginatedResult } from './pagination.types'
 
 export { AffiliationStatus, AffiliationProcessType }
 
@@ -375,13 +376,7 @@ export interface GetMyAssignmentsArgs {
   sortDir?: 'asc' | 'desc'
 }
 
-export interface MyAssignmentsPage {
-  data: AffiliationSubProcessWithRelations[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
-}
+export type MyAssignmentsPage = PaginatedResult<AffiliationSubProcessWithRelations>
 
 // ========================================
 // UI HELPER TYPES

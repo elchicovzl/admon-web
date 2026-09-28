@@ -1,21 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import {
-  ColumnDef,
-  ColumnOrderState,
-  ColumnPinningState,
-  flexRender,
-  getCoreRowModel,
-  Row,
-  useReactTable,
-  VisibilityState,
-} from '@tanstack/react-table'
+import { useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { type ColumnDef, type ColumnPinningState, type Row } from '@tanstack/react-table'
 import { format, differenceInCalendarDays } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -24,42 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Badge } from '@/components/ui/badge'
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  CheckCircle2,
-  Circle,
-  Loader2,
-  MoreHorizontal,
-  Pin,
-  PinOff,
-  Settings2,
-  X,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
+import { ServerDataTable } from '@/components/dashboard/data-table/server-data-table'
+import { useDebouncedUrlParam, useTableUrlParams } from '@/components/dashboard/data-table/use-table-url-params'
 import {
   AffiliationProcessTypeLabels,
   SubProcessStatusLabels,
@@ -74,10 +30,9 @@ import {
   AffiliationProcessType,
   AffiliationSubProcessType,
 } from '@prisma/client'
+import { CheckCircle2, Circle } from 'lucide-react'
 
 const STORAGE_KEY = 'my-assignments-table-v2'
-const DEFAULT_PAGE_SIZE = 25
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200]
 const SORTABLE_COLUMNS: Set<string> = new Set([
   'startDate',
   'company',
@@ -92,6 +47,7 @@ const SORT_COLUMN_MAP: Record<string, MyAssignmentsSortBy> = {
   subProcess: 'subProcess',
   status: 'status',
 }
+const DEFAULT_COLUMN_PINNING: ColumnPinningState = { left: ['process'], right: [] }
 
 type Row_ = AffiliationSubProcessWithRelations
 
@@ -99,32 +55,6 @@ interface MyAssignmentsClientProps {
   initialPage: MyAssignmentsPage
   currentUserId?: string
   currentUserRole?: string
-}
-
-interface PersistedState {
-  columnOrder?: ColumnOrderState
-  columnPinning?: ColumnPinningState
-  columnVisibility?: VisibilityState
-  pageSize?: number
-}
-
-function loadPersisted(): PersistedState {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as PersistedState) : {}
-  } catch {
-    return {}
-  }
-}
-
-function savePersisted(state: PersistedState) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // ignore
-  }
 }
 
 function fmtDate(d: Date | string | null | undefined) {
@@ -164,15 +94,7 @@ function CheckCell({ value }: { value: boolean }) {
 
 export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [isPending, startTransition] = useTransition()
-
-  const data = initialPage.data
-  const total = initialPage.total
-  const page = initialPage.page
-  const pageSize = initialPage.pageSize
-  const totalPages = initialPage.totalPages
+  const { searchParams, updateUrl, isPending, startTransition } = useTableUrlParams()
 
   // URL-driven filter/sort values
   const q = searchParams.get('q') ?? ''
@@ -182,59 +104,7 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
   const sortBy = searchParams.get('sortBy') ?? ''
   const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc' | null) ?? 'desc'
 
-  // Local input state for the debounced text filter
-  const [qInput, setQInput] = useState(q)
-
-  // Sync input state with URL when URL changes externally
-  useEffect(() => setQInput(q), [q])
-
-  // Persisted column UI state
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
-  const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({ left: ['process'], right: [] })
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [hydrated, setHydrated] = useState(false)
-
-  useEffect(() => {
-    const persisted = loadPersisted()
-    if (persisted.columnOrder?.length) setColumnOrder(persisted.columnOrder)
-    if (persisted.columnPinning) setColumnPinning(persisted.columnPinning)
-    if (persisted.columnVisibility) setColumnVisibility(persisted.columnVisibility)
-    setHydrated(true)
-  }, [])
-
-  useEffect(() => {
-    if (!hydrated) return
-    const prev = loadPersisted()
-    savePersisted({ ...prev, columnOrder, columnPinning, columnVisibility })
-  }, [columnOrder, columnPinning, columnVisibility, hydrated])
-
-  // URL update helper. Resets page to 1 unless explicitly preserved.
-  const updateUrl = useCallback(
-    (patch: Record<string, string | undefined>, opts: { keepPage?: boolean } = {}) => {
-      const params = new URLSearchParams(searchParams.toString())
-      for (const [k, v] of Object.entries(patch)) {
-        if (v === undefined || v === '' || v === '__all__') params.delete(k)
-        else params.set(k, v)
-      }
-      if (!opts.keepPage) params.delete('page')
-      const qs = params.toString()
-      startTransition(() => {
-        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-      })
-    },
-    [pathname, router, searchParams]
-  )
-
-  // Debounce text filter writes to URL (350ms)
-  const debouncedQRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    if (qInput === q) return
-    if (debouncedQRef.current) clearTimeout(debouncedQRef.current)
-    debouncedQRef.current = setTimeout(() => updateUrl({ q: qInput || undefined }), 350)
-    return () => {
-      if (debouncedQRef.current) clearTimeout(debouncedQRef.current)
-    }
-  }, [qInput, q, updateUrl])
+  const [qInput, setQInput] = useDebouncedUrlParam('q', updateUrl, q)
 
   // Row navigation
   const navigateToRow = useCallback(
@@ -243,23 +113,7 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
         router.push(`/dashboard/affiliations/${row.original.affiliationId}/subprocess/${row.original.id}`)
       )
     },
-    [router]
-  )
-
-  // Sort handler
-  const handleSort = useCallback(
-    (columnId: string) => {
-      if (!SORTABLE_COLUMNS.has(columnId)) return
-      const mapped = SORT_COLUMN_MAP[columnId]
-      if (sortBy === mapped) {
-        // Toggle direction; on second click going asc -> desc -> off
-        if (sortDir === 'desc') updateUrl({ sortBy: mapped, sortDir: 'asc' })
-        else updateUrl({ sortBy: undefined, sortDir: undefined })
-      } else {
-        updateUrl({ sortBy: mapped, sortDir: 'desc' })
-      }
-    },
-    [sortBy, sortDir, updateUrl]
+    [router, startTransition]
   )
 
   const columns = useMemo<ColumnDef<Row_>[]>(
@@ -406,32 +260,6 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
     []
   )
 
-  const table = useReactTable({
-    data,
-    columns,
-    state: {
-      columnOrder,
-      columnPinning,
-      columnVisibility,
-    },
-    onColumnOrderChange: setColumnOrder,
-    onColumnPinningChange: setColumnPinning,
-    onColumnVisibilityChange: setColumnVisibility,
-    manualPagination: true,
-    manualFiltering: true,
-    manualSorting: true,
-    pageCount: totalPages,
-    rowCount: total,
-    getCoreRowModel: getCoreRowModel(),
-  })
-
-  // Initialize column order if empty
-  useEffect(() => {
-    if (columnOrder.length === 0 && hydrated) {
-      setColumnOrder(columns.map((c) => c.id as string))
-    }
-  }, [hydrated, columnOrder.length, columns])
-
   function clearAllFilters() {
     updateUrl({
       q: undefined,
@@ -441,93 +269,33 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
     })
   }
 
-  function resetTablePrefs() {
-    setColumnOrder(columns.map((c) => c.id as string))
-    setColumnPinning({ left: ['process'], right: [] })
-    setColumnVisibility({})
-  }
-
-  function changePage(next: number) {
-    const target = Math.min(totalPages, Math.max(1, next))
-    if (target === page) return
-    updateUrl({ page: String(target) }, { keepPage: true })
-  }
-
-  function changePageSize(next: string) {
-    const size = parseInt(next, 10)
-    if (Number.isNaN(size)) return
-    const prev = loadPersisted()
-    savePersisted({ ...prev, pageSize: size })
-    updateUrl({ pageSize: String(size) })
-  }
-
   const activeFilters =
     (q ? 1 : 0) +
     (processType !== '__all__' ? 1 : 0) +
     (subProcess !== '__all__' ? 1 : 0) +
     (status !== '__all__' ? 1 : 0)
 
-  // Apply persisted pageSize on first mount if URL doesn't have one
-  useEffect(() => {
-    if (!hydrated) return
-    if (searchParams.get('pageSize')) return
-    const persisted = loadPersisted()
-    if (persisted.pageSize && persisted.pageSize !== pageSize) {
-      updateUrl({ pageSize: String(persisted.pageSize) })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated])
-
-  const startRow = total === 0 ? 0 : (page - 1) * pageSize + 1
-  const endRow = Math.min(page * pageSize, total)
-
   return (
-    <Card className="relative w-full max-w-full overflow-hidden">
-      {isPending && (
-        <div className="absolute top-2 right-2 z-30 flex items-center gap-2 bg-card border shadow rounded-md px-3 py-1.5">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-          <span className="text-xs font-medium">Cargando...</span>
-        </div>
-      )}
-
-      <CardHeader>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <CardTitle>Tus Sub-procesos Asignados</CardTitle>
-            <CardDescription>
-              Vista tipo Excel — pineá columnas, scroll horizontal, filtros y paginación
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Settings2 className="mr-2 h-4 w-4" />
-                  Columnas
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Mostrar columnas</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {table.getAllLeafColumns().map((col) => (
-                  <DropdownMenuCheckboxItem
-                    key={col.id}
-                    checked={col.getIsVisible()}
-                    onCheckedChange={(v) => col.toggleVisibility(!!v)}
-                    className="capitalize"
-                  >
-                    {typeof col.columnDef.header === 'string' ? col.columnDef.header : col.id}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={resetTablePrefs}>Restaurar predeterminado</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* FILTERS */}
-        <div className="flex flex-wrap gap-2 pt-4">
+    <ServerDataTable
+      columns={columns}
+      result={initialPage}
+      storageKey={STORAGE_KEY}
+      updateUrl={updateUrl}
+      isPending={isPending}
+      sortBy={sortBy}
+      sortDir={sortDir}
+      sortableColumns={SORTABLE_COLUMNS}
+      sortColumnMap={SORT_COLUMN_MAP}
+      defaultColumnPinning={DEFAULT_COLUMN_PINNING}
+      title="Tus Sub-procesos Asignados"
+      description="Vista tipo Excel — pineá columnas, scroll horizontal, filtros y paginación"
+      activeFilterCount={activeFilters}
+      onClearFilters={clearAllFilters}
+      emptyMessage="No hay sub-procesos asignados"
+      emptyFilteredMessage="No hay resultados para los filtros aplicados"
+      onRowClick={navigateToRow}
+      toolbar={
+        <>
           <Input
             placeholder="Buscar por nombre o identificación..."
             title="Busca por nombre o identificación (NIT, RUT, cédula) de la empresa, el independiente o el empleado"
@@ -574,206 +342,8 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
               ))}
             </SelectContent>
           </Select>
-          {activeFilters > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9">
-              <X className="mr-1 h-4 w-4" />
-              Limpiar ({activeFilters})
-            </Button>
-          )}
-          <Badge variant="secondary" className="ml-auto self-center">
-            {total === 0 ? 'Sin resultados' : `${startRow}-${endRow} de ${total}`}
-          </Badge>
-        </div>
-      </CardHeader>
-
-      <CardContent className="overflow-hidden pt-4">
-        <div className="rounded-md border overflow-x-auto relative w-full max-w-full mt-4">
-          <Table style={{ minWidth: table.getTotalSize(), width: 'max-content' }}>
-            <TableHeader>
-              {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
-                  {hg.headers.map((header) => {
-                    const isPinned = header.column.getIsPinned()
-                    const sortable = SORTABLE_COLUMNS.has(header.column.id)
-                    const mapped = SORT_COLUMN_MAP[header.column.id]
-                    const activeSort = sortable && sortBy === mapped
-                    return (
-                      <TableHead
-                        key={header.id}
-                        style={{
-                          width: header.getSize(),
-                          ...(isPinned === 'left' && {
-                            position: 'sticky',
-                            left: header.column.getStart('left'),
-                            zIndex: 20,
-                          }),
-                        }}
-                        className={cn(
-                          'whitespace-nowrap text-xs font-semibold bg-muted/60 group',
-                          isPinned === 'left' && 'shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]'
-                        )}
-                      >
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => sortable && handleSort(header.column.id)}
-                            className={cn(
-                              'flex items-center gap-1 truncate',
-                              sortable && 'cursor-pointer hover:text-primary',
-                              !sortable && 'cursor-default'
-                            )}
-                            disabled={!sortable}
-                          >
-                            <span className="truncate">{flexRender(header.column.columnDef.header, header.getContext())}</span>
-                            {activeSort && (
-                              sortDir === 'asc' ? (
-                                <ArrowUp className="h-3 w-3" />
-                              ) : (
-                                <ArrowDown className="h-3 w-3" />
-                              )
-                            )}
-                          </button>
-                          {header.column.getCanPin() && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-5 w-5 opacity-0 group-hover:opacity-100 transition ml-auto"
-                                >
-                                  <MoreHorizontal className="h-3 w-3" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start">
-                                {!isPinned ? (
-                                  <DropdownMenuItem onClick={() => header.column.pin('left')}>
-                                    <Pin className="mr-2 h-4 w-4" />
-                                    Pinear a la izquierda
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem onClick={() => header.column.pin(false)}>
-                                    <PinOff className="mr-2 h-4 w-4" />
-                                    Quitar pin
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onClick={() => header.column.toggleVisibility(false)}>
-                                  Ocultar columna
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </TableHead>
-                    )
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={table.getAllLeafColumns().length} className="h-32 text-center text-muted-foreground">
-                    {activeFilters > 0
-                      ? 'No hay resultados para los filtros aplicados'
-                      : 'No hay sub-procesos asignados'}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => navigateToRow(row)}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      const isPinned = cell.column.getIsPinned()
-                      return (
-                        <TableCell
-                          key={cell.id}
-                          style={{
-                            width: cell.column.getSize(),
-                            ...(isPinned === 'left' && {
-                              position: 'sticky',
-                              left: cell.column.getStart('left'),
-                              zIndex: 10,
-                            }),
-                          }}
-                          className={cn(
-                            'whitespace-nowrap',
-                            isPinned === 'left' && 'bg-background shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]'
-                          )}
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* PAGINATION */}
-        <div className="flex items-center justify-between flex-wrap gap-3 pt-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Filas por página</span>
-            <Select value={String(pageSize)} onValueChange={changePageSize}>
-              <SelectTrigger className="h-8 w-[80px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={String(s)}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              Página {page} de {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => changePage(1)}
-              disabled={page <= 1 || isPending}
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => changePage(page - 1)}
-              disabled={page <= 1 || isPending}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => changePage(page + 1)}
-              disabled={page >= totalPages || isPending}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => changePage(totalPages)}
-              disabled={page >= totalPages || isPending}
-            >
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </>
+      }
+    />
   )
 }
