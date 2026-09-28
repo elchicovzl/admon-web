@@ -1,13 +1,17 @@
 'use server'
 
+import { buildClientHistoryWhere } from '@/lib/utils/search-filters'
 import { cache } from 'react'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole } from '@prisma/client'
+import { type Prisma, UserRole } from '@prisma/client'
 import type { ActionResponse } from '@/lib/types/auth.types'
 import type {
   ClientHistoryListItem,
+  ClientHistoryListPage,
   ClientHistoryDetail,
+  ClientHistoryStatusFilter,
+  GetClientHistoryListArgs,
   HistoryAffiliation,
 } from '@/lib/types/client-history.types'
 import { getClientById } from '@/lib/actions/client.actions'
@@ -31,20 +35,51 @@ async function requireManagerOrAdmin() {
 }
 
 /**
- * List ALL clients for the histórico — INCLUDING soft-deleted ones.
- * This is the deliberate opposite of getClients(), which filters out
- * status='ELIMINADO'. Here we want the full picture so any deleted client can
- * be inspected and reactivated.
+ * List clients for the histórico — paginated/sorted/searched server-side.
+ * By default (status 'all' or omitted) this INCLUDES soft-deleted clients,
+ * the deliberate opposite of getClients(), which filters out
+ * status='ELIMINADO'. Here we want the full picture so any deleted client
+ * can be found, inspected and reactivated.
  */
-export const getClientHistoryList = cache(
-  async (): Promise<ActionResponse<ClientHistoryListItem[]>> => {
-    try {
-      const authCheck = await requireManagerOrAdmin()
-      if (!authCheck.authorized) {
-        return { success: false, error: authCheck.error }
-      }
+export async function getClientHistoryList(
+  args: GetClientHistoryListArgs = {}
+): Promise<ActionResponse<ClientHistoryListPage>> {
+  try {
+    const authCheck = await requireManagerOrAdmin()
+    if (!authCheck.authorized) {
+      return { success: false, error: authCheck.error }
+    }
 
-      const clients = await prisma.client.findMany({
+    const page = Math.max(1, args.page ?? 1)
+    const pageSize = Math.min(200, Math.max(5, args.pageSize ?? 25))
+
+    const where = buildClientHistoryWhere({ q: args.q, status: args.status })
+
+    const dir: 'asc' | 'desc' = args.sortDir ?? 'desc'
+    let orderBy: Prisma.ClientOrderByWithRelationInput
+    switch (args.sortBy) {
+      case 'fullName':
+        orderBy = { fullName: dir }
+        break
+      case 'affiliationsCount':
+        orderBy = { affiliations: { _count: dir } }
+        break
+      case 'documentsCount':
+        orderBy = { documents: { _count: dir } }
+        break
+      case 'createdAt':
+        orderBy = { createdAt: dir }
+        break
+      default:
+        orderBy = { createdAt: 'desc' }
+    }
+
+    const [clients, total] = await Promise.all([
+      prisma.client.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy,
         select: {
           id: true,
           fullName: true,
@@ -76,36 +111,43 @@ export const getClientHistoryList = cache(
             },
           },
         },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      })
+      }),
+      prisma.client.count({ where }),
+    ])
 
-      const data: ClientHistoryListItem[] = clients.map((c) => ({
-        id: c.id,
-        fullName: c.fullName,
-        identificationType: c.identificationType,
-        identificationNumber: c.identificationNumber,
-        clientTypes: c.clientTypes,
-        email: c.email,
-        phone: c.phone,
-        status: c.status,
-        isActive: c.isActive,
-        isDeleted: c.status === 'ELIMINADO',
-        createdAt: c.createdAt,
-        updatedAt: c.updatedAt,
-        employmentsAsEmployee: c.employmentsAsEmployee,
-        affiliationsCount: c._count.affiliations,
-        documentsCount: c._count.documents,
-      }))
+    const data: ClientHistoryListItem[] = clients.map((c) => ({
+      id: c.id,
+      fullName: c.fullName,
+      identificationType: c.identificationType,
+      identificationNumber: c.identificationNumber,
+      clientTypes: c.clientTypes,
+      email: c.email,
+      phone: c.phone,
+      status: c.status,
+      isActive: c.isActive,
+      isDeleted: c.status === 'ELIMINADO',
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+      employmentsAsEmployee: c.employmentsAsEmployee,
+      affiliationsCount: c._count.affiliations,
+      documentsCount: c._count.documents,
+    }))
 
-      return { success: true, data }
-    } catch (error) {
-      console.error('Get client history list error:', error)
-      return { success: false, error: 'Error al obtener el histórico de clientes' }
+    return {
+      success: true,
+      data: {
+        data,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
     }
+  } catch (error) {
+    console.error('Get client history list error:', error)
+    return { success: false, error: 'Error al obtener el histórico de clientes' }
   }
-)
+}
 
 /**
  * Full history aggregation for ONE client: the client with all its relations,

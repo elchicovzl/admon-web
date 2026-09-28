@@ -8,6 +8,7 @@ import type {
   AffiliationDocumentCategory,
 } from '@prisma/client'
 import type { ClientWithRelations } from './client.types'
+import type { PaginatedResult } from './pagination.types'
 
 /**
  * Row in the histórico list (one per client, INCLUDING soft-deleted ones).
@@ -40,6 +41,32 @@ export interface ClientHistoryListItem {
   affiliationsCount: number
   documentsCount: number
 }
+
+// ========================================
+// HISTÓRICO LIST — server-side search/pagination/sorting
+// ========================================
+
+/** Same active/deleted/all filter the client component has always exposed. */
+export type ClientHistoryStatusFilter = 'active' | 'deleted' | 'all'
+
+export type ClientHistorySortBy = 'fullName' | 'createdAt' | 'affiliationsCount' | 'documentsCount'
+
+export interface GetClientHistoryListArgs {
+  page?: number
+  pageSize?: number
+  /**
+   * Unified search: matches when the client's fullName, identificationNumber
+   * or email, OR the fullName of a company from one of their active
+   * employments, contains this text, case-insensitive.
+   */
+  q?: string
+  /** Defaults to 'all', matching the previous client-side filter default. */
+  status?: ClientHistoryStatusFilter
+  sortBy?: ClientHistorySortBy
+  sortDir?: 'asc' | 'desc'
+}
+
+export type ClientHistoryListPage = PaginatedResult<ClientHistoryListItem>
 
 // ========================================
 // AFFILIATION SLICE (read-only, for histórico)

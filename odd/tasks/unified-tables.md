@@ -33,9 +33,9 @@
 
 ## Tasks
 - [x] T1 — Unified search (`q` param): action ORs affiliation client + employee by fullName/identificationNumber; single debounced input; tests. Route: delegated (writer trigger: 2 non-trivial files). Branch `feat/my-assignments-unified-search`.
-- [ ] T2 — Extract shared data table shell (URL sync hook, pagination footer, sortable headers, column visibility/order persistence); My Assignments uses it with identical behavior. Route: delegated.
-- [ ] T3 — Archived: `getArchivedAffiliations(args)` paginated/sorted/searchable server-side; view on shared table. Route: delegated.
-- [ ] T4 — History: `getClientHistoryList(args)` paginated/sorted/searchable server-side (keep status filter active/deleted/all); view on shared table. Route: delegated.
+- [x] T2 — Extract shared data table shell (URL sync hook, pagination footer, sortable headers, column visibility/order persistence); My Assignments uses it with identical behavior. Route: delegated.
+- [x] T3 — Archived: `getArchivedAffiliations(args)` paginated/sorted/searchable server-side; view on shared table. Route: delegated.
+- [x] T4 — History: `getClientHistoryList(args)` paginated/sorted/searchable server-side (keep status filter active/deleted/all); view on shared table. Route: delegated.
 
 ## Acceptance criteria
 - Typing a name or ID of the company, independent client or employee finds the matching sub-processes; old `company`/`employee` URLs keep working or degrade gracefully.
@@ -48,5 +48,12 @@
 
 - T1 done: `buildAssignmentSearchWhere(q)` 4-way OR (client/employee x fullName/identificationNumber); single `q` input; legacy `company`/`employee` params map to `q` (company wins if both). Evidence: vitest 25 files / 748 passing (+5); tsc 41 = baseline.
 
+- T2 done: `ServerDataTable<TData>` + `useTableUrlParams`/`useDebouncedUrlParam` + `buildSearchParams` + `parsePaginationParams` + `PaginatedResult<T>` in `components/dashboard/data-table/`, `lib/utils/pagination.ts`, `lib/types/pagination.types.ts`. My Assignments client ~800 -> ~330 lines, same localStorage key/format. Call `useTableUrlParams()` once per view and pass `updateUrl`/`isPending` down. Evidence: vitest 27 files / 768 (+20); tsc 41. Manual browser check of My Assignments pending.
+
+- T3 done: `getArchivedAffiliations(args)` paginated/sorted, `buildArchivedWhere(q)` (affiliationNumber, client name/ID, employee name/ID); view on `ServerDataTable` (`archived-affiliations-table-v1`). Removed "Total Archivadas" card (count shown in table header); sub-process badges now use `TypeBadge`. Local DB has 0 archived rows — only unit-tested. Evidence: vitest 28 files / 777 (+9); tsc 41.
+
+- T4 done: `getClientHistoryList(args)` paginated/sorted (name, createdAt, processes/files count), `buildClientHistoryWhere({q,status})` (same active/deleted/all semantics, default all); view on `ServerDataTable` (`client-history-table-v1`); `client-history-table.tsx` deleted. Status select no longer shows counts. Evidence: vitest 29 files / 791 (+14); tsc 41.
+- PRs (stacked to master): #30 T1 -> #31 T2 -> #32 T3 -> T4. Native review: not run (preflight blocked by untracked .atl cache file, see client-multi-type doc).
+
 ## Next step
-T2.
+Manual browser check of the three tables; merge chain in order, retargeting each PR to master before merging it.

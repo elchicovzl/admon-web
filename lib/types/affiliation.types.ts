@@ -11,6 +11,7 @@ import {
   AffiliationProcessType,
   ClientType,
 } from '@prisma/client'
+import type { PaginatedResult } from './pagination.types'
 
 export { AffiliationStatus, AffiliationProcessType }
 
@@ -375,13 +376,25 @@ export interface GetMyAssignmentsArgs {
   sortDir?: 'asc' | 'desc'
 }
 
-export interface MyAssignmentsPage {
-  data: AffiliationSubProcessWithRelations[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
+export type MyAssignmentsPage = PaginatedResult<AffiliationSubProcessWithRelations>
+
+export type ArchivedSortBy = 'affiliationNumber' | 'client' | 'sentAt' | 'sentBy'
+
+export interface GetArchivedAffiliationsArgs {
+  page?: number
+  pageSize?: number
+  /**
+   * Unified search: matches when the affiliation's own affiliationNumber,
+   * its client (fullName or identificationNumber — covers companies and
+   * independents) OR any of its sub-process employees (fullName or
+   * identificationNumber) contains this text, case-insensitive.
+   */
+  q?: string
+  sortBy?: ArchivedSortBy
+  sortDir?: 'asc' | 'desc'
 }
+
+export type ArchivedAffiliationsPage = PaginatedResult<AffiliationWithRelations>
 
 // ========================================
 // UI HELPER TYPES
