@@ -47,7 +47,8 @@ vi.mock('react', () => ({
 // Action imports (after mocks so mocked modules are used)
 // ---------------------------------------------------------------------------
 
-import { getClientHistoryList, buildClientHistoryWhere } from '../client-history.actions'
+import { getClientHistoryList } from '../client-history.actions'
+import { buildClientHistoryWhere } from '@/lib/utils/search-filters'
 
 const USER_ID = 'cuseridtest00005'
 

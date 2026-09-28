@@ -1,5 +1,6 @@
 'use server'
 
+import { buildClientHistoryWhere } from '@/lib/utils/search-filters'
 import { cache } from 'react'
 import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
@@ -31,57 +32,6 @@ async function requireManagerOrAdmin() {
   }
 
   return { authorized: true, userId: session.user.id }
-}
-
-/**
- * Build the where clause for the histórico list, applying the active/
- * deleted/all status filter and the unified search.
- *
- * Status semantics match the previous client-side filter exactly:
- * - 'active': status !== 'ELIMINADO'
- * - 'deleted': status === 'ELIMINADO'
- * - 'all' (or omitted): no status constraint — INCLUDES soft-deleted
- *   clients, same as the original getClientHistoryList() with no args.
- *
- * `q` matches (case-insensitive, partial) the client's fullName,
- * identificationNumber, email, or the fullName of a company from one of
- * their active employments — the same fields the removed client-side
- * filter used via formatEmployeeCompanies().
- */
-export function buildClientHistoryWhere({
-  q,
-  status,
-}: {
-  q?: string
-  status?: ClientHistoryStatusFilter
-}): Prisma.ClientWhereInput {
-  const where: Prisma.ClientWhereInput = {}
-
-  if (status === 'active') {
-    where.status = { not: 'ELIMINADO' }
-  } else if (status === 'deleted') {
-    where.status = 'ELIMINADO'
-  }
-  // status === 'all' or undefined: no status constraint
-
-  const query = q?.trim()
-  if (query) {
-    where.OR = [
-      { fullName: { contains: query, mode: 'insensitive' } },
-      { identificationNumber: { contains: query, mode: 'insensitive' } },
-      { email: { contains: query, mode: 'insensitive' } },
-      {
-        employmentsAsEmployee: {
-          some: {
-            isActive: true,
-            company: { fullName: { contains: query, mode: 'insensitive' } },
-          },
-        },
-      },
-    ]
-  }
-
-  return where
 }
 
 /**
