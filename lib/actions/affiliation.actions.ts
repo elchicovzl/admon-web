@@ -45,6 +45,7 @@ import {
 import { sendAffiliationCompletedEmail } from '@/lib/email'
 import { render } from '@react-email/render'
 import AffiliationCompletedEmail from '@/emails/affiliation-completed-email'
+import { hasClientType } from '@/lib/types/client.types'
 import type {
   SafeAffiliation,
   AffiliationWithRelations,
@@ -113,6 +114,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
         id: true,
         affiliationNumber: true,
         clientId: true,
+        affiliatedAs: true,
         processType: true,
         processTypeOther: true,
         status: true,
@@ -132,7 +134,7 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
           },
         },
         subProcesses: {
@@ -203,6 +205,7 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
         id: true,
         affiliationNumber: true,
         clientId: true,
+        affiliatedAs: true,
         processType: true,
         processTypeOther: true,
         status: true,
@@ -222,7 +225,7 @@ export const getAffiliationById = cache(async (id: string): Promise<ActionRespon
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
           },
         },
         subProcesses: {
@@ -354,6 +357,16 @@ export async function createAffiliation(
       return { success: false, error: 'Cliente no encontrado' }
     }
 
+    // The chosen role for THIS affiliation must be one of the client's own
+    // types (single-type clients only have one valid choice; multi-type
+    // clients pick in the wizard).
+    if (!hasClientType(client, data.affiliatedAs)) {
+      return {
+        success: false,
+        error: 'El rol de afiliación seleccionado no corresponde a los tipos del cliente',
+      }
+    }
+
     // Verify all assigned managers exist
     // Get unique manager IDs (same manager can be assigned to multiple sub-processes)
     const managerIds = data.subProcesses
@@ -384,8 +397,8 @@ export async function createAffiliation(
     const uniqueEmployeeIds = [...new Set(employeeIds)]
 
     if (uniqueEmployeeIds.length > 0) {
-      if (client.clientType !== 'EMPRESA') {
-        return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
+      if (data.affiliatedAs !== ClientType.EMPRESA) {
+        return { success: false, error: 'Solo las afiliaciones registradas como EMPRESA pueden tener empleados en sub-procesos' }
       }
 
       const employments = await prisma.employment.findMany({
@@ -412,6 +425,7 @@ export async function createAffiliation(
       data: {
         affiliationNumber,
         clientId: data.clientId,
+        affiliatedAs: data.affiliatedAs,
         processType: data.processType,
         processTypeOther: data.processTypeOther ?? null,
         startDate: data.startDate ?? null,
@@ -441,6 +455,7 @@ export async function createAffiliation(
         id: true,
         affiliationNumber: true,
         clientId: true,
+        affiliatedAs: true,
         processType: true,
         processTypeOther: true,
         startDate: true,
@@ -503,6 +518,7 @@ export async function updateAffiliation(
         id: true,
         affiliationNumber: true,
         clientId: true,
+        affiliatedAs: true,
         processType: true,
         processTypeOther: true,
         status: true,
@@ -1358,7 +1374,7 @@ export async function addSubProcesses(
       }
     }
 
-    // Verify employees (for EMPRESA clients)
+    // Verify employees (only for affiliations registered as EMPRESA)
     const employeeIds = data.subProcesses
       .map((sp) => sp.employeeId)
       .filter((id): id is string => id !== null && id !== undefined)
@@ -1366,8 +1382,8 @@ export async function addSubProcesses(
     const uniqueEmployeeIds = [...new Set(employeeIds)]
 
     if (uniqueEmployeeIds.length > 0) {
-      if (affiliation.client.clientType !== 'EMPRESA') {
-        return { success: false, error: 'Solo clientes tipo EMPRESA pueden tener empleados en sub-procesos' }
+      if (affiliation.affiliatedAs !== ClientType.EMPRESA) {
+        return { success: false, error: 'Solo las afiliaciones registradas como EMPRESA pueden tener empleados en sub-procesos' }
       }
 
       const employments = await prisma.employment.findMany({
@@ -1540,7 +1556,7 @@ export async function getMyAssignments(
                   phone: true,
                   identificationType: true,
                   identificationNumber: true,
-                  clientType: true,
+                  clientTypes: true,
                 },
               },
             },
@@ -1841,6 +1857,7 @@ export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<Af
         id: true,
         affiliationNumber: true,
         clientId: true,
+        affiliatedAs: true,
         processType: true,
         processTypeOther: true,
         status: true,
@@ -1860,7 +1877,7 @@ export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<Af
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
+            clientTypes: true,
           },
         },
         sentBy: {
@@ -2196,6 +2213,7 @@ export async function getAffiliationEmailData(
       where: { id: affiliationId },
       select: {
         affiliationNumber: true,
+        affiliatedAs: true,
         processType: true,
         processTypeOther: true,
         status: true,
@@ -2206,7 +2224,6 @@ export async function getAffiliationEmailData(
             phone: true,
             identificationType: true,
             identificationNumber: true,
-            clientType: true,
             companyId: true,
             legalRepresentative: {
               select: {
@@ -2531,11 +2548,11 @@ export async function getAffiliationResendData(
  */
 function buildAffiliationSubject(
   affiliation: {
+    affiliatedAs: ClientType
     processType: string | null
     processTypeOther: string | null
     client: {
       fullName: string
-      clientType: string
       company?: { fullName: string } | null
     } | null
     subProcesses: { employee?: { fullName: string } | null }[]
@@ -2545,7 +2562,7 @@ function buildAffiliationSubject(
   const client = affiliation.client
   if (!client) return 'Afiliación Completada'
 
-  if (client.clientType === ClientType.EMPRESA) {
+  if (affiliation.affiliatedAs === ClientType.EMPRESA) {
     // For empresa: "EMPLOYER / EMPLOYEE"
     const employees = affiliation.subProcesses
       .map((sp) => sp.employee?.fullName)
@@ -2701,6 +2718,7 @@ function appendEmployeeSection(lines: string[], emp: EmployeeLike) {
 
 function buildAffiliationEmailBody(
   affiliation: {
+    affiliatedAs: ClientType
     processType: string | null
     client: {
       fullName: string
@@ -2708,7 +2726,6 @@ function buildAffiliationEmailBody(
       identificationNumber: string
       phone: string
       email: string
-      clientType: string
       legalRepresentative?: {
         fullName: string
         identificationType: string
@@ -2758,7 +2775,7 @@ function buildAffiliationEmailBody(
   lines.push('Adjunto enviamos certificados de afiliación solicitados:')
   lines.push('')
 
-  const isEmpresa = client.clientType === ClientType.EMPRESA
+  const isEmpresa = affiliation.affiliatedAs === ClientType.EMPRESA
 
   const employees = affiliation.subProcesses
     .map((sp) => sp.employee)

@@ -14,8 +14,8 @@ import { AffiliationDetailClient } from './affiliation-detail-client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SendAffiliationButton } from '@/components/dashboard/affiliations/send-affiliation-button'
-import { AffiliationStatusLabels, AffiliationStatusColors, AffiliationProcessTypeLabels } from '@/lib/types/affiliation.types'
-import { AffiliationProcessType } from '@prisma/client'
+import { AffiliationStatusLabels, AffiliationStatusColors, AffiliationProcessTypeLabels, ClientTypeLabels } from '@/lib/types/affiliation.types'
+import { AffiliationProcessType, ClientType } from '@prisma/client'
 import { AffiliationSubProcessStatus } from '@prisma/client'
 import { SentEmailViewer } from '@/components/dashboard/affiliations/sent-email-viewer'
 import { AffiliationEditDialog } from '@/components/dashboard/affiliations/affiliation-edit-dialog'
@@ -87,6 +87,9 @@ export default async function AffiliationDetailPage({
                 )}
               >
                 {statusLabel}
+              </Badge>
+              <Badge variant="outline" className="font-medium">
+                Afiliado como: {ClientTypeLabels[affiliation.affiliatedAs as ClientType]}
               </Badge>
             </div>
             <p className="text-muted-foreground">

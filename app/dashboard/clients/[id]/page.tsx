@@ -57,7 +57,7 @@ export default function ClientDetailPage() {
 
           // Company employees live in the Employment join table (Phase 2), not the
           // legacy Client.companyId relation — read them from the source of truth.
-          if (result.data.clientType === ClientType.EMPRESA) {
+          if (result.data.clientTypes.includes(ClientType.EMPRESA)) {
             const employeesResult = await getCompanyEmployees(clientId)
             if (employeesResult.success && employeesResult.data) {
               setCompanyEmployees(employeesResult.data)
@@ -162,7 +162,7 @@ export default function ClientDetailPage() {
       <ClientInfoPanel client={client} onClientUpdated={setClient} />
 
       {/* Beneficiaries Section (not for companies) */}
-      {client.clientType !== ClientType.EMPRESA && (
+      {!client.clientTypes.includes(ClientType.EMPRESA) && (
         <ClientBeneficiariesSection
           clientId={client.id}
           initialBeneficiaries={client.beneficiaries || []}
@@ -170,7 +170,7 @@ export default function ClientDetailPage() {
       )}
 
       {/* Employees Section (only for companies) */}
-      {client.clientType === ClientType.EMPRESA && (
+      {client.clientTypes.includes(ClientType.EMPRESA) && (
         <CompanyEmployeesSection
           companyId={client.id}
           initialEmployees={companyEmployees}

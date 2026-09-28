@@ -156,7 +156,7 @@ export function SubProcessClientTab({
 
   if (!client) return null
 
-  const isEmpresa = client.clientType === 'EMPRESA'
+  const isEmpresa = client.clientTypes.includes('EMPRESA')
 
   const clientTypeLabels: Record<string, string> = {
     EMPLEADO: 'Empleado',
@@ -166,7 +166,7 @@ export function SubProcessClientTab({
 
   // Unified card: personal info + administradoras + credentials + legal rep (if empresa)
   function renderPersonCard(person: ClientWithRelations, title: string, highlight: boolean = false) {
-    const showLegalRep = person.clientType === 'EMPRESA' && person.legalRepresentative
+    const showLegalRep = person.clientTypes.includes('EMPRESA') && person.legalRepresentative
     const hasCredentials = person.credentials && person.credentials.length > 0
 
     return (
@@ -214,8 +214,10 @@ export function SubProcessClientTab({
             <div className="font-medium">{person.fullName}</div>
 
             <div className="text-muted-foreground">Tipo</div>
-            <div>
-              <Badge variant="outline">{clientTypeLabels[person.clientType] || person.clientType}</Badge>
+            <div className="flex flex-wrap gap-1">
+              {person.clientTypes.map((type) => (
+                <Badge key={type} variant="outline">{clientTypeLabels[type] || type}</Badge>
+              ))}
             </div>
 
             <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -376,7 +378,7 @@ export function SubProcessClientTab({
           )}
 
           {/* Part-time work days (only for TIEMPO_PARCIAL employees) */}
-          {person.clientType === 'EMPLEADO' &&
+          {person.clientTypes.includes('EMPLEADO') &&
             person.employeeType === EmployeeType.TIEMPO_PARCIAL &&
             person.workDaysRange && (
               <>

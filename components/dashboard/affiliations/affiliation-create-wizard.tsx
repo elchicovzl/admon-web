@@ -11,8 +11,8 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AffiliationSubProcessType, AffiliationProcessType } from '@prisma/client'
-import { AffiliationProcessTypeOptions } from '@/lib/types/affiliation.types'
+import { AffiliationSubProcessType, AffiliationProcessType, ClientType } from '@prisma/client'
+import { AffiliationProcessTypeOptions, ClientTypeLabels } from '@/lib/types/affiliation.types'
 import {
   Dialog,
   DialogContent,
@@ -101,6 +101,7 @@ export function AffiliationCreateWizard({
   const [clients, setClients] = useState<SafeClient[]>([])
   const [managers, setManagers] = useState<SafeUser[]>([])
   const [selectedClient, setSelectedClient] = useState<SafeClient | null>(null)
+  const [affiliatedAs, setAffiliatedAs] = useState<ClientType | null>(null)
   const [credentialsModalOpen, setCredentialsModalOpen] = useState(false)
   const [comboboxOpen, setComboboxOpen] = useState(false)
   const [navigating, setNavigating] = useState(false)
@@ -133,7 +134,7 @@ export function AffiliationCreateWizard({
     CONCILIACION_MORA: [],
   })
 
-  const isEmpresa = selectedClient?.clientType === 'EMPRESA'
+  const isEmpresa = affiliatedAs === ClientType.EMPRESA
 
   const form = useForm<CreateAffiliationFormValues>({
     resolver: zodResolver(createAffiliationFormSchema),
@@ -210,6 +211,8 @@ export function AffiliationCreateWizard({
     setSelectedClient(client)
     form.setValue('clientId', client.id)
     setComboboxOpen(false)
+    // Single-type clients skip the role choice; multi-type clients must pick it
+    setAffiliatedAs(client.clientTypes.length === 1 ? client.clientTypes[0] : null)
     // Reset employee + beneficiary selections when client changes
     setCompanyEmployees([])
     setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
@@ -223,6 +226,10 @@ export function AffiliationCreateWizard({
         toast.error('Debe seleccionar un cliente')
         return
       }
+      if (selectedClient && selectedClient.clientTypes.length > 1 && !affiliatedAs) {
+        toast.error('Debe seleccionar como qué se afilia el cliente en este trámite')
+        return
+      }
       if (!form.getValues('processType')) {
         toast.error('Debe seleccionar el tipo de proceso')
         return
@@ -234,12 +241,12 @@ export function AffiliationCreateWizard({
         return
       }
       // Load employees if EMPRESA
-      if (selectedClient?.clientType === 'EMPRESA') {
+      if (isEmpresa && selectedClient) {
         loadCompanyEmployees(selectedClient.id)
       }
       // Load beneficiaries if INDIVIDUAL + INCLUSION/EXCLUSION
       const needsBeneficiaries =
-        selectedClient?.clientType !== 'EMPRESA' &&
+        !isEmpresa &&
         (pt === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
           pt === AffiliationProcessType.EXCLUSION_BENEFICIARIOS)
       if (needsBeneficiaries && selectedClient) {
@@ -277,6 +284,11 @@ export function AffiliationCreateWizard({
   }
 
   async function onSubmit(data: CreateAffiliationFormValues) {
+    if (!affiliatedAs) {
+      toast.error('Debe seleccionar como qué se afilia el cliente en este trámite')
+      return
+    }
+
     // Validate employee selection for EMPRESA
     if (isEmpresa) {
       const selectedTypes = data.subProcesses.map((sp) => sp.type)
@@ -355,6 +367,7 @@ export function AffiliationCreateWizard({
 
       const result = await createAffiliation({
         clientId: data.clientId,
+        affiliatedAs,
         processType: data.processType,
         processTypeOther: data.processTypeOther ?? null,
         startDate: data.startDate ?? null,
@@ -367,6 +380,7 @@ export function AffiliationCreateWizard({
         form.reset()
         setStep(1)
         setSelectedClient(null)
+        setAffiliatedAs(null)
         setCompanyEmployees([])
         setSelectedEmployeesByType({ ARL: [], EPS: [], AFP: [], CCF: [], PILA: [], TRASLADOS: [], INCAPACIDADES: [], CONCILIACION_MORA: [] })
         setBeneficiaries([])
@@ -548,8 +562,10 @@ export function AffiliationCreateWizard({
                           </div>
                           <div>
                             <span className="text-muted-foreground">Tipo:</span>
-                            <p className="font-medium">
-                              <Badge variant="outline">{selectedClient.clientType}</Badge>
+                            <p className="font-medium space-x-1">
+                              {selectedClient.clientTypes.map((type) => (
+                                <Badge key={type} variant="outline">{type}</Badge>
+                              ))}
                             </p>
                           </div>
                           <div>
@@ -579,6 +595,30 @@ export function AffiliationCreateWizard({
                         </Button>
                       </CardContent>
                     </Card>
+                  )}
+
+                  {/* AFFILIATED-AS ROLE (only when the client has more than one type) */}
+                  {selectedClient && selectedClient.clientTypes.length > 1 && (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>¿Como qué se afilia en este trámite? *</FormLabel>
+                      <Select
+                        value={affiliatedAs ?? undefined}
+                        onValueChange={(value) => setAffiliatedAs(value as ClientType)}
+                      >
+                        <FormControl>
+                          <SelectTrigger className={cn(!affiliatedAs && 'text-muted-foreground')}>
+                            <SelectValue placeholder="Seleccionar rol..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {selectedClient.clientTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {ClientTypeLabels[type]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
                   )}
 
                   {/* PROCESS TYPE COMBOBOX */}

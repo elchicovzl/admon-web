@@ -89,7 +89,11 @@ export function ClientHistoryTable({ clients }: ClientHistoryTableProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="outline">{clientTypeLabels[client.clientType]}</Badge>
+                <div className="flex flex-wrap gap-1">
+                  {client.clientTypes.map((type) => (
+                    <Badge key={type} variant="outline">{clientTypeLabels[type]}</Badge>
+                  ))}
+                </div>
               </TableCell>
               <TableCell className="text-center">
                 <span className="inline-flex items-center gap-1 text-sm">

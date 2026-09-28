@@ -99,7 +99,7 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
     client.additionalInfo ?? null
   )
 
-  const isEmpresa = client.clientType === ClientType.EMPRESA
+  const isEmpresa = client.clientTypes.includes(ClientType.EMPRESA)
 
   function handleClientUpdated(clientId: string, updates: Partial<SafeClient>) {
     onClientUpdated({ ...client, ...updates } as ClientWithRelations)
@@ -155,7 +155,9 @@ export function ClientInfoPanel({ client, onClientUpdated }: ClientInfoPanelProp
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Tipo de Cliente</p>
-                <p className="text-sm">{CLIENT_TYPE_LABELS[client.clientType]}</p>
+                <p className="text-sm">
+                  {client.clientTypes.map((type) => CLIENT_TYPE_LABELS[type]).join(', ')}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Identificación</p>

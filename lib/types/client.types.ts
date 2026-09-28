@@ -1,5 +1,14 @@
 import { ClientType, IdentificationType, AdministratorType, DocumentCategory, EmployeeType, WorkDaysRange } from '@prisma/client'
 
+/**
+ * Shared helper: checks whether a client (or any object with a `clientTypes`
+ * array) includes a given type. Prefer this over repeating `.includes(...)`
+ * across actions/components so the multi-type semantics stay in one place.
+ */
+export function hasClientType(client: { clientTypes: ClientType[] }, type: ClientType): boolean {
+  return client.clientTypes.includes(type)
+}
+
 // ---------------------------------------------------------------------------
 // Employment join table types (Phase 2 additions)
 // ---------------------------------------------------------------------------
@@ -41,7 +50,7 @@ export type AvailableEmployee = Pick<
   | 'fullName'
   | 'identificationType'
   | 'identificationNumber'
-  | 'clientType'
+  | 'clientTypes'
   | 'email'
   | 'phone'
   | 'status'
@@ -55,7 +64,7 @@ export interface Client {
   fullName: string
   identificationType: IdentificationType
   identificationNumber: string
-  clientType: ClientType
+  clientTypes: ClientType[]
   email: string
   phone: string
   status: string
@@ -71,7 +80,7 @@ export interface SafeClient {
   fullName: string
   identificationType: IdentificationType
   identificationNumber: string
-  clientType: ClientType
+  clientTypes: ClientType[]
   employeeType?: EmployeeType | null
   workDaysRange?: WorkDaysRange | null
   email: string
