@@ -360,8 +360,14 @@ export type MyAssignmentsSortBy =
 export interface GetMyAssignmentsArgs {
   page?: number
   pageSize?: number
-  company?: string
-  employee?: string
+  /**
+   * Unified search: matches when the affiliation's client (fullName or
+   * identificationNumber — covers companies and independents, since
+   * NIT/RUT/cédula are all stored in identificationNumber) OR the
+   * sub-process employee (fullName or identificationNumber) contains this
+   * text, case-insensitive.
+   */
+  q?: string
   processType?: AffiliationProcessType
   subProcess?: AffiliationSubProcessType
   status?: AffiliationSubProcessStatus
