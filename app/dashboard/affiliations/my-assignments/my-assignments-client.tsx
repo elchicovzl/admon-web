@@ -175,21 +175,18 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
   const totalPages = initialPage.totalPages
 
   // URL-driven filter/sort values
-  const company = searchParams.get('company') ?? ''
-  const employee = searchParams.get('employee') ?? ''
+  const q = searchParams.get('q') ?? ''
   const processType = searchParams.get('processType') ?? '__all__'
   const subProcess = searchParams.get('subProcess') ?? '__all__'
   const status = searchParams.get('status') ?? '__all__'
   const sortBy = searchParams.get('sortBy') ?? ''
   const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc' | null) ?? 'desc'
 
-  // Local input state for debounced text filters
-  const [companyInput, setCompanyInput] = useState(company)
-  const [employeeInput, setEmployeeInput] = useState(employee)
+  // Local input state for the debounced text filter
+  const [qInput, setQInput] = useState(q)
 
   // Sync input state with URL when URL changes externally
-  useEffect(() => setCompanyInput(company), [company])
-  useEffect(() => setEmployeeInput(employee), [employee])
+  useEffect(() => setQInput(q), [q])
 
   // Persisted column UI state
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([])
@@ -229,24 +226,15 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
   )
 
   // Debounce text filter writes to URL (350ms)
-  const debouncedCompanyRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const debouncedEmployeeRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debouncedQRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (companyInput === company) return
-    if (debouncedCompanyRef.current) clearTimeout(debouncedCompanyRef.current)
-    debouncedCompanyRef.current = setTimeout(() => updateUrl({ company: companyInput || undefined }), 350)
+    if (qInput === q) return
+    if (debouncedQRef.current) clearTimeout(debouncedQRef.current)
+    debouncedQRef.current = setTimeout(() => updateUrl({ q: qInput || undefined }), 350)
     return () => {
-      if (debouncedCompanyRef.current) clearTimeout(debouncedCompanyRef.current)
+      if (debouncedQRef.current) clearTimeout(debouncedQRef.current)
     }
-  }, [companyInput, company, updateUrl])
-  useEffect(() => {
-    if (employeeInput === employee) return
-    if (debouncedEmployeeRef.current) clearTimeout(debouncedEmployeeRef.current)
-    debouncedEmployeeRef.current = setTimeout(() => updateUrl({ employee: employeeInput || undefined }), 350)
-    return () => {
-      if (debouncedEmployeeRef.current) clearTimeout(debouncedEmployeeRef.current)
-    }
-  }, [employeeInput, employee, updateUrl])
+  }, [qInput, q, updateUrl])
 
   // Row navigation
   const navigateToRow = useCallback(
@@ -446,8 +434,7 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
 
   function clearAllFilters() {
     updateUrl({
-      company: undefined,
-      employee: undefined,
+      q: undefined,
       processType: undefined,
       subProcess: undefined,
       status: undefined,
@@ -475,8 +462,7 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
   }
 
   const activeFilters =
-    (company ? 1 : 0) +
-    (employee ? 1 : 0) +
+    (q ? 1 : 0) +
     (processType !== '__all__' ? 1 : 0) +
     (subProcess !== '__all__' ? 1 : 0) +
     (status !== '__all__' ? 1 : 0)
@@ -543,16 +529,11 @@ export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {
         {/* FILTERS */}
         <div className="flex flex-wrap gap-2 pt-4">
           <Input
-            placeholder="Buscar empresa..."
-            value={companyInput}
-            onChange={(e) => setCompanyInput(e.target.value)}
-            className="h-9 w-[200px]"
-          />
-          <Input
-            placeholder="Buscar empleado o identificación..."
-            value={employeeInput}
-            onChange={(e) => setEmployeeInput(e.target.value)}
-            className="h-9 w-[240px]"
+            placeholder="Buscar por nombre o identificación..."
+            title="Busca por nombre o identificación (NIT, RUT, cédula) de la empresa, el independiente o el empleado"
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+            className="h-9 w-full sm:w-[320px]"
           />
           <Select value={processType} onValueChange={(v) => updateUrl({ processType: v })}>
             <SelectTrigger className="h-9 w-[200px]">

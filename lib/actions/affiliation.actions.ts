@@ -1443,6 +1443,36 @@ export async function addSubProcesses(
 }
 
 /**
+ * Build the top-level OR clause for the unified "Mis Asignaciones" search.
+ *
+ * Matches a sub-process when the affiliation's client (fullName or
+ * identificationNumber — covers companies and independents, since NIT/RUT/
+ * cédula are all stored in identificationNumber) OR the sub-process employee
+ * (fullName or identificationNumber) contains `q`, case-insensitive.
+ *
+ * Sub-processes without an employee still match through the affiliation's
+ * client. Returns `undefined` for an empty/whitespace query so callers can
+ * skip adding the clause entirely.
+ */
+export function buildAssignmentSearchWhere(q: string | undefined) {
+  const query = q?.trim()
+  if (!query) return undefined
+
+  return {
+    OR: [
+      { affiliation: { client: { fullName: { contains: query, mode: 'insensitive' as const } } } },
+      {
+        affiliation: {
+          client: { identificationNumber: { contains: query, mode: 'insensitive' as const } },
+        },
+      },
+      { employee: { fullName: { contains: query, mode: 'insensitive' as const } } },
+      { employee: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
+    ],
+  }
+}
+
+/**
  * Get manager's assigned sub-processes
  */
 export async function getMyAssignments(
@@ -1471,20 +1501,10 @@ export async function getMyAssignments(
     if (args.processType) {
       whereClause.affiliation = { ...whereClause.affiliation, processType: args.processType }
     }
-    if (args.company) {
-      whereClause.affiliation = {
-        ...whereClause.affiliation,
-        client: { fullName: { contains: args.company, mode: 'insensitive' } },
-      }
-    }
-    if (args.employee) {
-      // Match by worker name or identification number (cédula, RUT, etc.)
-      whereClause.employee = {
-        OR: [
-          { fullName: { contains: args.employee, mode: 'insensitive' } },
-          { identificationNumber: { contains: args.employee, mode: 'insensitive' } },
-        ],
-      }
+
+    const searchWhere = buildAssignmentSearchWhere(args.q)
+    if (searchWhere) {
+      whereClause.OR = searchWhere.OR
     }
 
     // Resolve dynamic orderBy

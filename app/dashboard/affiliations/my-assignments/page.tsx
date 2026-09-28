@@ -120,7 +120,10 @@ async function AssignmentsStats() {
 type SearchParams = {
   page?: string
   pageSize?: string
+  q?: string
+  /** @deprecated legacy filter, kept only for bookmarked-URL compatibility */
   company?: string
+  /** @deprecated legacy filter, kept only for bookmarked-URL compatibility */
   employee?: string
   processType?: string
   subProcess?: string
@@ -130,11 +133,13 @@ type SearchParams = {
 }
 
 function parseArgs(sp: SearchParams) {
+  // Backwards compatibility: bookmarked URLs from the old two-input search
+  // still work, degrading to a single unified query when `q` is absent.
+  const legacyQuery = sp.company?.trim() || sp.employee?.trim() || undefined
   return {
     page: sp.page ? Math.max(1, parseInt(sp.page, 10) || 1) : 1,
     pageSize: sp.pageSize ? Math.min(200, Math.max(5, parseInt(sp.pageSize, 10) || 25)) : 25,
-    company: sp.company?.trim() || undefined,
-    employee: sp.employee?.trim() || undefined,
+    q: sp.q?.trim() || legacyQuery,
     processType: (sp.processType || undefined) as any,
     subProcess: (sp.subProcess || undefined) as any,
     status: (sp.status || undefined) as any,
