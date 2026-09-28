@@ -1830,92 +1830,166 @@ export async function sendAffiliation(affiliationId: string): Promise<ActionResp
 }
 
 /**
- * Get archived affiliations
- * Returns affiliations with status ARCHIVED
+ * Build the search OR clause for the archived affiliations list.
+ *
+ * Matches an archived affiliation when its own affiliationNumber, its
+ * client (fullName or identificationNumber — covers companies and
+ * independents, since NIT/RUT/cédula are all stored in
+ * identificationNumber) OR any of its sub-process employees (fullName or
+ * identificationNumber) contains `q`, case-insensitive.
+ *
+ * Returns `undefined` for an empty/whitespace query so callers can skip
+ * adding the clause entirely.
  */
-export const getArchivedAffiliations = cache(async (): Promise<ActionResponse<AffiliationWithRelations[]>> => {
+export function buildArchivedWhere(q: string | undefined) {
+  const query = q?.trim()
+  if (!query) return undefined
+
+  return {
+    OR: [
+      { affiliationNumber: { contains: query, mode: 'insensitive' as const } },
+      { client: { fullName: { contains: query, mode: 'insensitive' as const } } },
+      { client: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
+      {
+        subProcesses: {
+          some: { employee: { fullName: { contains: query, mode: 'insensitive' as const } } },
+        },
+      },
+      {
+        subProcesses: {
+          some: { employee: { identificationNumber: { contains: query, mode: 'insensitive' as const } } },
+        },
+      },
+    ],
+  }
+}
+
+/**
+ * Get archived affiliations, paginated/sorted/searched server-side.
+ * Returns affiliations with status ARCHIVED.
+ */
+export async function getArchivedAffiliations(
+  args: import('@/lib/types/affiliation.types').GetArchivedAffiliationsArgs = {}
+): Promise<ActionResponse<import('@/lib/types/affiliation.types').ArchivedAffiliationsPage>> {
   try {
     const authCheck = await requireManagerOrAdmin()
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error }
     }
 
-    const affiliations = await prisma.affiliation.findMany({
-      where: {
-        status: AffiliationStatus.ARCHIVED,
-      },
-      select: {
-        id: true,
-        affiliationNumber: true,
-        clientId: true,
-        affiliatedAs: true,
-        processType: true,
-        processTypeOther: true,
-        status: true,
-        sentAt: true,
-        sentById: true,
-        archivedAt: true,
-        startDate: true,
-        note: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        client: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            phone: true,
-            identificationType: true,
-            identificationNumber: true,
-            clientTypes: true,
+    const page = Math.max(1, args.page ?? 1)
+    const pageSize = Math.min(200, Math.max(5, args.pageSize ?? 25))
+
+    const whereClause: any = {
+      status: AffiliationStatus.ARCHIVED,
+    }
+
+    const searchWhere = buildArchivedWhere(args.q)
+    if (searchWhere) {
+      whereClause.OR = searchWhere.OR
+    }
+
+    // Resolve dynamic orderBy
+    const dir: 'asc' | 'desc' = args.sortDir ?? 'desc'
+    let orderBy: any
+    switch (args.sortBy) {
+      case 'affiliationNumber':
+        orderBy = { affiliationNumber: dir }
+        break
+      case 'client':
+        orderBy = { client: { fullName: dir } }
+        break
+      case 'sentBy':
+        orderBy = { sentBy: { name: dir } }
+        break
+      case 'sentAt':
+        orderBy = { sentAt: dir }
+        break
+      default:
+        orderBy = { sentAt: 'desc' }
+    }
+
+    const [affiliations, total] = await Promise.all([
+      prisma.affiliation.findMany({
+        where: whereClause,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy,
+        select: {
+          id: true,
+          affiliationNumber: true,
+          clientId: true,
+          affiliatedAs: true,
+          processType: true,
+          processTypeOther: true,
+          status: true,
+          sentAt: true,
+          sentById: true,
+          archivedAt: true,
+          startDate: true,
+          note: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          client: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              identificationType: true,
+              identificationNumber: true,
+              clientTypes: true,
+            },
           },
-        },
-        sentBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+          sentBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
-        },
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        subProcesses: {
-          select: {
-            id: true,
-            affiliationId: true,
-            type: true,
-            status: true,
-            assignedToId: true,
-            employeeId: true,
-            statusReason: true,
+          subProcesses: {
+            select: {
+              id: true,
+              affiliationId: true,
+              type: true,
+              status: true,
+              assignedToId: true,
+              employeeId: true,
+              statusReason: true,
               createdAt: true,
-            updatedAt: true,
-            employee: {
-              select: {
-                id: true,
-                fullName: true,
+              updatedAt: true,
+              employee: {
+                select: {
+                  id: true,
+                  fullName: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: {
-        archivedAt: 'desc',
-      },
-    })
+      }),
+      prisma.affiliation.count({ where: whereClause }),
+    ])
 
-    return { success: true, data: affiliations }
+    const totalPages = Math.max(1, Math.ceil(total / pageSize))
+
+    return {
+      success: true,
+      data: {
+        data: affiliations as any,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      },
+    }
   } catch (error) {
     console.error('Error fetching archived affiliations:', error)
     return { success: false, error: 'Error al obtener las afiliaciones archivadas' }
   }
-})
+}
 
 // ========================================
 // OBSERVATION OPERATIONS

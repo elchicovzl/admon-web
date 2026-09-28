@@ -34,7 +34,7 @@
 ## Tasks
 - [x] T1 — Unified search (`q` param): action ORs affiliation client + employee by fullName/identificationNumber; single debounced input; tests. Route: delegated (writer trigger: 2 non-trivial files). Branch `feat/my-assignments-unified-search`.
 - [x] T2 — Extract shared data table shell (URL sync hook, pagination footer, sortable headers, column visibility/order persistence); My Assignments uses it with identical behavior. Route: delegated.
-- [ ] T3 — Archived: `getArchivedAffiliations(args)` paginated/sorted/searchable server-side; view on shared table. Route: delegated.
+- [x] T3 — Archived: `getArchivedAffiliations(args)` paginated/sorted/searchable server-side; view on shared table. Route: delegated.
 - [ ] T4 — History: `getClientHistoryList(args)` paginated/sorted/searchable server-side (keep status filter active/deleted/all); view on shared table. Route: delegated.
 
 ## Acceptance criteria
@@ -50,5 +50,7 @@
 
 - T2 done: `ServerDataTable<TData>` + `useTableUrlParams`/`useDebouncedUrlParam` + `buildSearchParams` + `parsePaginationParams` + `PaginatedResult<T>` in `components/dashboard/data-table/`, `lib/utils/pagination.ts`, `lib/types/pagination.types.ts`. My Assignments client ~800 -> ~330 lines, same localStorage key/format. Call `useTableUrlParams()` once per view and pass `updateUrl`/`isPending` down. Evidence: vitest 27 files / 768 (+20); tsc 41. Manual browser check of My Assignments pending.
 
+- T3 done: `getArchivedAffiliations(args)` paginated/sorted, `buildArchivedWhere(q)` (affiliationNumber, client name/ID, employee name/ID); view on `ServerDataTable` (`archived-affiliations-table-v1`). Removed "Total Archivadas" card (count shown in table header); sub-process badges now use `TypeBadge`. Local DB has 0 archived rows — only unit-tested. Evidence: vitest 28 files / 777 (+9); tsc 41.
+
 ## Next step
-T3.
+T4.
