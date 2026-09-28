@@ -35,7 +35,9 @@ export function ClientHistoryDetailClient({ detail }: ClientHistoryDetailClientP
     ...(client.documents || []).map((doc) => ({
       id: `client-${doc.id}`,
       fileName: doc.fileName,
-      fileUrl: doc.fileUrl,
+      // The R2 bucket is private: go through the API route, which checks the
+      // session and redirects to a presigned URL
+      downloadUrl: `/api/documents/${doc.id}`,
       fileSize: doc.fileSize,
       source: 'Cliente',
       createdAt: doc.createdAt,
@@ -46,7 +48,7 @@ export function ClientHistoryDetailClient({ detail }: ClientHistoryDetailClientP
         sp.documents.map((doc) => ({
           id: `aff-${doc.id}`,
           fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
+          downloadUrl: `/api/affiliations/documents/${doc.id}`,
           fileSize: doc.fileSize,
           source: `${aff.affiliationNumber} · ${SubProcessTypeLabels[sp.type]}`,
           createdAt: doc.createdAt,
@@ -142,7 +144,7 @@ export function ClientHistoryDetailClient({ detail }: ClientHistoryDetailClientP
                     </div>
                   </div>
                   <Button asChild variant="ghost" size="sm">
-                    <a href={file.fileUrl} target="_blank" rel="noopener noreferrer">
+                    <a href={file.downloadUrl} target="_blank" rel="noopener noreferrer">
                       <Download className="h-4 w-4" />
                     </a>
                   </Button>
