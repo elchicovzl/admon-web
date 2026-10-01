@@ -15,7 +15,7 @@ export default function Footer() {
   }
 
   return (
-    <footer className="bg-black text-white">
+    <footer className="bg-brand-navy-deep text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           {/* Left side - Main content */}
@@ -51,19 +51,19 @@ export default function Footer() {
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-8 text-lg">
               <button
                 onClick={() => handleNavClick('#servicios')}
-                className="text-gray-300 hover:text-white transition-colors text-left"
+                className="text-gray-300 hover:text-brand-gold transition-colors text-left"
               >
                 Nuestros Servicios
               </button>
               <button
                 onClick={() => handleNavClick('#proceso')}
-                className="text-gray-300 hover:text-white transition-colors text-left"
+                className="text-gray-300 hover:text-brand-gold transition-colors text-left"
               >
                 Cómo Trabajamos
               </button>
               <button
                 onClick={() => handleNavClick('#contacto')}
-                className="text-gray-300 hover:text-white transition-colors text-left"
+                className="text-gray-300 hover:text-brand-gold transition-colors text-left"
               >
                 Contacto
               </button>
@@ -75,7 +75,7 @@ export default function Footer() {
                 href="https://facebook.com/adminisegura"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-gray-400 hover:text-brand-gold transition-colors"
                 aria-label="Facebook"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -86,7 +86,7 @@ export default function Footer() {
                 href="https://instagram.com/adminisegura"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
+                className="text-gray-400 hover:text-brand-gold transition-colors"
                 aria-label="Instagram"
               >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -100,17 +100,17 @@ export default function Footer() {
         {/* Bottom section */}
         <div className="mt-12 pt-8 border-t border-gray-700">
           <div className="flex flex-col md:flex-row justify-between items-center text-gray-400 text-sm">
-            <p>© <span className="font-serif">ADMINISTRACIÓN <span className="text-[#F1AD32] font-serif">SEGURA</span></span> {currentYear}</p>
+            <p>© <span className="font-serif">ADMINISTRACIÓN <span className="text-brand-gold font-serif">SEGURA</span></span> {currentYear}</p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <Link 
                 href="/privacy" 
-                className="hover:text-white transition-colors"
+                className="hover:text-brand-gold transition-colors"
               >
                 Política de Privacidad
               </Link>
               <Link 
                 href="/terms" 
-                className="hover:text-white transition-colors"
+                className="hover:text-brand-gold transition-colors"
               >
                 Términos de Servicio
               </Link>
