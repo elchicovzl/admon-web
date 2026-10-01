@@ -507,7 +507,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
         <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 hover:opacity-80 transition-opacity">
           <div className="relative h-10 w-10 flex-shrink-0">
             <Image
-              src="/images/logoadmon2.webp"
+              src="/images/logo-icon.webp"
               alt="Administración Segura"
               fill
               className="object-contain"
