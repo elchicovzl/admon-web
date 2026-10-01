@@ -94,19 +94,23 @@ export default function Header() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex items-center space-x-2">
-            <Link href="/" className="flex items-center space-x-2">
+            <Link href="/" className="flex items-center space-x-3">
               <Image
-                src="/images/logoadmon2.webp"
-                alt="Administración Segura Logo"
-                width={80}
-                height={80}
+                src="/images/logo-icon.webp"
+                alt="Administración Segura"
+                width={512}
+                height={512}
                 className="w-10 h-10 sm:w-12 sm:h-12 object-contain"
                 priority
               />
-              <span className="text-xl text-gray-900" style={{ fontFamily: 'Anton, sans-serif' }}>
-                ADMINISTRACIÓN
-              </span>
-              <span className="bg-[#F1AD32] text-gray-900 px-1 py-0.5 font-bold text-xs">SEGURA</span>
+              <Image
+                src="/images/logo-wordmark.webp"
+                alt="Administración Segura"
+                width={1600}
+                height={315}
+                className="h-6 sm:h-7 w-auto object-contain"
+                priority
+              />
             </Link>
           </div>
 

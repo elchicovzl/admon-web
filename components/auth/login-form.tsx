@@ -25,7 +25,7 @@ export function LoginForm() {
       <div className="flex flex-col items-center mb-8">
         <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-lg p-3">
           <Image
-            src="/images/logoadmon2.webp"
+            src="/images/logo-icon.webp"
             alt="Administración Segura Logo"
             width={80}
             height={80}

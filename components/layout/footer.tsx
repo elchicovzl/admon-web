@@ -27,17 +27,21 @@ export default function Footer() {
             </div>
             
             {/* Logo */}
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
-                <Image
-                  src="/images/logoadmon2.webp"
-                  alt="Administración Segura Logo"
-                  width={32}
-                  height={32}
-                  className="w-8 h-8 object-contain"
-                />
-              </div>
-              <span className="text-xl md:text-2xl inline-flex items-center gap-2" style={{ fontFamily: 'Anton, sans-serif' }}>ADMINISTRACIÓN <span className="bg-[#F1AD32] text-gray-900 px-2 py-0.5">SEGURA</span></span>
+            <div className="flex items-center space-x-4">
+              <Image
+                src="/images/logo-icon.webp"
+                alt="Administración Segura"
+                width={512}
+                height={512}
+                className="w-12 h-12 md:w-14 md:h-14 object-contain"
+              />
+              <Image
+                src="/images/logo-wordmark-light.webp"
+                alt="Administración Segura"
+                width={1600}
+                height={315}
+                className="h-8 md:h-10 w-auto object-contain"
+              />
             </div>
           </div>
 

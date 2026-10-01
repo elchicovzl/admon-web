@@ -88,9 +88,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           alt: service.name,
         },
         {
-          url: `${BASE_URL}/images/logoadmon2.webp`,
-          width: 512,
-          height: 512,
+          url: `${BASE_URL}/images/og-logo.png`,
+          width: 1200,
+          height: 630,
           alt: 'Administración Segura Logo',
         },
       ],
@@ -137,7 +137,7 @@ function generateServiceJsonLd(service: ReturnType<typeof getServiceBySlug>, slu
       '@type': 'Organization',
       name: 'Administración Segura',
       url: BASE_URL,
-      logo: `${BASE_URL}/images/logoadmon2.webp`,
+      logo: `${BASE_URL}/images/logo-icon.png`,
       address: {
         '@type': 'PostalAddress',
         addressCountry: 'CO',

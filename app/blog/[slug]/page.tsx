@@ -108,7 +108,7 @@ function generateArticleJsonLd(post: NonNullable<Awaited<ReturnType<typeof getBl
       url: BASE_URL,
       logo: {
         '@type': 'ImageObject',
-        url: `${BASE_URL}/images/logoadmon2.webp`,
+        url: `${BASE_URL}/images/logo-icon.png`,
       },
     },
     mainEntityOfPage: {

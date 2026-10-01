@@ -25,9 +25,9 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: `${BASE_URL}/images/logoadmon2.webp`,
-        width: 512,
-        height: 512,
+        url: `${BASE_URL}/images/og-logo.png`,
+        width: 1200,
+        height: 630,
         alt: 'Administración Segura Logo',
       },
     ],
