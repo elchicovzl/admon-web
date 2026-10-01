@@ -25,21 +25,21 @@ const mainServices = [
     href: '/servicios/afiliaciones-seguridad-social',
     description: 'Para Empresas e Independientes',
     icon: Shield,
-    color: 'text-blue-500'
+    color: 'text-brand-navy'
   },
   {
     title: 'Gestión y Liquidación PILA',
     href: '/servicios/gestion-pila',
     description: 'Ahorre tiempo y evite sanciones',
     icon: FileText,
-    color: 'text-green-500'
+    color: 'text-brand-navy'
   },
   {
     title: 'Recobro de Incapacidades',
     href: '/servicios/recobro-incapacidades',
     description: 'Recupere sus pagos ante EPS, ARL y Fondos',
     icon: Heart,
-    color: 'text-purple-500'
+    color: 'text-brand-navy'
   },
 ]
 
@@ -119,7 +119,7 @@ export default function Header() {
             {/* Services Dropdown with hover */}
             <button
               ref={menuRef}
-              className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm cursor-pointer"
+              className="nav-item text-gray-700 hover:text-brand-navy font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm cursor-pointer"
               {...anchorProps}
             >
               Servicios
@@ -160,7 +160,7 @@ export default function Header() {
               <SubMenu
                 label={
                   <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <Car className="w-4 h-4 text-amber-500" />
+                    <Car className="w-4 h-4 text-brand-gold" />
                     Seguros
                   </span>
                 }
@@ -168,12 +168,12 @@ export default function Header() {
                 menuClassName="!bg-white !border !border-gray-200 !rounded-xl !shadow-xl !p-2"
               >
                 {insuranceServices.map((service) => (
-                  <MenuItem key={service.href} className="!p-0 !rounded-lg hover:!bg-amber-50">
+                  <MenuItem key={service.href} className="!p-0 !rounded-lg hover:!bg-brand-gold-soft">
                     <Link
                       href={service.href}
                       className="flex items-center gap-2 p-2 w-full text-sm"
                     >
-                      <service.icon className="w-4 h-4 text-amber-500" />
+                      <service.icon className="w-4 h-4 text-brand-gold" />
                       <span className="text-gray-700">{service.title}</span>
                     </Link>
                   </MenuItem>
@@ -186,7 +186,7 @@ export default function Header() {
               <button
                 key={item.label}
                 onClick={() => handleNavClick(item.href)}
-                className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm cursor-pointer"
+                className="nav-item text-gray-700 hover:text-brand-navy font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm cursor-pointer"
               >
                 {item.label}
               </button>
@@ -195,7 +195,7 @@ export default function Header() {
             {/* Blog link */}
             <Link
               href="/blog"
-              className="nav-item text-gray-700 hover:text-gray-900 font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm"
+              className="nav-item text-gray-700 hover:text-brand-navy font-medium transition-colors relative px-4 py-2 flex items-center justify-center text-sm"
             >
               Blog
             </Link>
@@ -205,14 +205,15 @@ export default function Header() {
           <div className="hidden lg:flex items-center gap-3">
             <Link href={isAuthenticated ? '/dashboard' : '/login'}>
               <Button
-                variant="outline"
+                variant="brand-outline"
                 className="rounded-full px-6 text-sm cursor-pointer"
               >
                 {isAuthenticated ? 'Dashboard' : 'Login'}
               </Button>
             </Link>
             <Button
-              className="bg-black text-white hover:bg-gray-800 rounded-full px-6 text-sm cursor-pointer"
+              variant="brand"
+              className="rounded-full px-6 text-sm cursor-pointer"
               onClick={() => handleNavClick('#contacto')}
             >
               Contáctanos
@@ -242,7 +243,7 @@ export default function Header() {
             <nav className="flex flex-col space-y-2">
               {/* Services Collapsible */}
               <Collapsible open={servicesOpen} onOpenChange={setServicesOpen}>
-                <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-700 hover:text-[#F1AD32] font-medium transition-colors px-4 py-3 rounded hover:bg-[#F1AD32]/10 cursor-pointer">
+                <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-700 hover:text-brand-navy font-medium transition-colors px-4 py-3 rounded hover:bg-brand-gold-soft cursor-pointer">
                   <span>Servicios</span>
                   <ChevronDown className={cn("h-4 w-4 transition-transform", servicesOpen && "rotate-180")} />
                 </CollapsibleTrigger>
@@ -265,7 +266,7 @@ export default function Header() {
 
                   {/* Insurance Collapsible */}
                   <Collapsible open={insuranceOpen} onOpenChange={setInsuranceOpen}>
-                    <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-600 hover:text-[#F1AD32] font-medium transition-colors px-4 py-2 rounded hover:bg-[#F1AD32]/10 cursor-pointer">
+                    <CollapsibleTrigger className="flex items-center justify-between w-full text-gray-600 hover:text-brand-navy font-medium transition-colors px-4 py-2 rounded hover:bg-brand-gold-soft cursor-pointer">
                       <span className="text-sm">Seguros</span>
                       <ChevronDown className={cn("h-3 w-3 transition-transform", insuranceOpen && "rotate-180")} />
                     </CollapsibleTrigger>
@@ -275,9 +276,9 @@ export default function Header() {
                           key={service.href}
                           href={service.href}
                           onClick={() => setMobileMenuOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-amber-50 rounded text-sm"
+                          className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-brand-gold-soft rounded text-sm"
                         >
-                          <service.icon className="w-4 h-4 text-amber-500" />
+                          <service.icon className="w-4 h-4 text-brand-gold" />
                           <span>{service.title}</span>
                         </Link>
                       ))}
@@ -291,7 +292,7 @@ export default function Header() {
                 <button
                   key={item.label}
                   onClick={() => handleNavClick(item.href)}
-                  className="text-gray-700 hover:text-[#F1AD32] font-medium transition-colors px-4 py-3 rounded hover:bg-[#F1AD32]/10 text-left cursor-pointer"
+                  className="text-gray-700 hover:text-brand-navy font-medium transition-colors px-4 py-3 rounded hover:bg-brand-gold-soft text-left cursor-pointer"
                 >
                   {item.label}
                 </button>
@@ -301,21 +302,22 @@ export default function Header() {
               <Link
                 href="/blog"
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-gray-700 hover:text-[#F1AD32] font-medium transition-colors px-4 py-3 rounded hover:bg-[#F1AD32]/10 text-left"
+                className="text-gray-700 hover:text-brand-navy font-medium transition-colors px-4 py-3 rounded hover:bg-brand-gold-soft text-left"
               >
                 Blog
               </Link>
 
               <Link href={isAuthenticated ? '/dashboard' : '/login'} className="w-full">
                 <Button
-                  variant="outline"
+                  variant="brand-outline"
                   className="rounded-full w-full mt-4 cursor-pointer"
                 >
                   {isAuthenticated ? 'Dashboard' : 'Login'}
                 </Button>
               </Link>
               <Button
-                className="bg-black text-white hover:bg-gray-800 rounded-full w-full mt-2 cursor-pointer"
+                variant="brand"
+                className="rounded-full w-full mt-2 cursor-pointer"
                 onClick={() => handleNavClick('#contacto')}
               >
                 Contáctanos

@@ -9,10 +9,11 @@
   --foreground: oklch(0.145 0 0);
 
   /* Brand Colors - Landing Page */
-  --brand-orange: #F1AD32;
-  --brand-orange-light: #FEF3C7;
-  --brand-blue: #2563EB;
-  --brand-blue-light: #EFF6FF;
+  --brand-navy: #012A61;
+  --brand-navy-deep: #021C40;
+  --brand-gold: #E0A025;
+  --brand-gold-soft: #FBF1DC;
+  --surface-muted: #F5F6F8;
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
@@ -82,6 +83,11 @@
 }
 
 @theme inline {
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-navy-deep: var(--brand-navy-deep);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-gold-soft: var(--brand-gold-soft);
+  --color-surface-muted: var(--surface-muted);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -186,16 +192,16 @@
 .nav-item::after {
   width: 0%;
   height: 80%;
-  border-top: 2px solid #F1AD32; /* orange-500 */
-  border-bottom: 2px solid #F1AD32; /* orange-500 */
+  border-top: 2px solid var(--brand-gold);
+  border-bottom: 2px solid var(--brand-gold);
   transition: all 0.3s ease;
 }
 
 .nav-item::before {
   width: 120%;
   height: 0%;
-  border-left: 2px solid #F1AD32; /* orange-500 */
-  border-right: 2px solid #F1AD32; /* orange-500 */
+  border-left: 2px solid var(--brand-gold);
+  border-right: 2px solid var(--brand-gold);
   transition: all 0.5s ease;
 }
 

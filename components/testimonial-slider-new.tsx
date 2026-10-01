@@ -47,21 +47,21 @@ const TestimonialCard = memo(({
   }
 
   const cardStyles = {
-    prev: "group p-6 rounded-2xl bg-white border border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 h-64 flex flex-col justify-between",
+    prev: "group p-6 rounded-2xl bg-white/5 border border-white/10 transition-all duration-300 h-64 flex flex-col justify-between",
     current: "group p-8 md:p-10 rounded-3xl bg-white border border-gray-200 shadow-2xl hover:shadow-3xl transition-all duration-300 min-h-[280px] flex flex-col justify-between",
-    next: "group p-6 rounded-2xl bg-white border border-gray-200 shadow-xl hover:shadow-2xl transition-all duration-300 h-64 flex flex-col justify-between"
+    next: "group p-6 rounded-2xl bg-white/5 border border-white/10 transition-all duration-300 h-64 flex flex-col justify-between"
   }
 
   const quoteIconStyles = {
-    prev: "w-8 h-8 text-gray-400 mb-2",
-    current: "w-12 h-12 text-orange-500 mb-4",
-    next: "w-8 h-8 text-gray-400 mb-2"
+    prev: "w-8 h-8 text-brand-gold/60 mb-2",
+    current: "w-12 h-12 text-brand-gold mb-4",
+    next: "w-8 h-8 text-brand-gold/60 mb-2"
   }
 
   const textStyles = {
-    prev: "text-sm font-medium text-gray-700 leading-relaxed line-clamp-3",
+    prev: "text-sm font-medium text-white/80 leading-relaxed line-clamp-3",
     current: "text-lg md:text-xl font-medium text-gray-800 leading-relaxed text-center",
-    next: "text-sm font-medium text-gray-700 leading-relaxed line-clamp-3"
+    next: "text-sm font-medium text-white/80 leading-relaxed line-clamp-3"
   }
 
   const avatarContainerStyles = {
@@ -71,27 +71,27 @@ const TestimonialCard = memo(({
   }
 
   const avatarStyles = {
-    prev: "w-10 h-10 bg-gradient-to-br from-orange-200 to-blue-200 rounded-full flex items-center justify-center mr-3 shadow-md",
-    current: "w-14 h-14 bg-gradient-to-br from-orange-400 to-blue-400 rounded-full flex items-center justify-center mr-4 shadow-lg",
-    next: "w-10 h-10 bg-gradient-to-br from-orange-200 to-blue-200 rounded-full flex items-center justify-center mr-3 shadow-md"
+    prev: "w-10 h-10 bg-brand-gold/15 rounded-full flex items-center justify-center mr-3",
+    current: "w-14 h-14 bg-brand-navy rounded-full flex items-center justify-center mr-4 shadow-lg",
+    next: "w-10 h-10 bg-brand-gold/15 rounded-full flex items-center justify-center mr-3"
   }
 
   const avatarIconStyles = {
-    prev: "w-5 h-5 text-gray-700",
-    current: "w-7 h-7 text-white",
-    next: "w-5 h-5 text-gray-700"
+    prev: "w-5 h-5 text-brand-gold",
+    current: "w-7 h-7 text-brand-gold",
+    next: "w-5 h-5 text-brand-gold"
   }
 
   const nameStyles = {
-    prev: "font-semibold text-gray-900 text-sm",
-    current: "font-bold text-gray-900 text-lg",
-    next: "font-semibold text-gray-900 text-sm"
+    prev: "font-semibold text-white text-sm",
+    current: "font-figtree font-bold text-brand-navy text-lg",
+    next: "font-semibold text-white text-sm"
   }
 
   const roleStyles = {
-    prev: "text-xs text-gray-600",
+    prev: "text-xs text-white/60",
     current: "text-sm text-gray-600",
-    next: "text-xs text-gray-600"
+    next: "text-xs text-white/60"
   }
 
   const currentCardStyle = variant === "current"
@@ -175,8 +175,8 @@ export default function TestimonialSlider() {
               className={cn(
                 "w-3 h-3 rounded-full transition-all duration-300",
                 index === currentIndex
-                  ? "bg-gradient-to-r from-orange-500 to-blue-600 scale-110"
-                  : "bg-gray-300 hover:bg-gray-400",
+                  ? "bg-brand-gold scale-110"
+                  : "bg-white/30 hover:bg-white/50",
               )}
             />
           </button>

@@ -19,40 +19,40 @@ const SERVICES: ServiceCard[] = [
     description: 'Afiliación a entidades promotoras de salud para trabajadores y sus familias.',
     id: 1,
     icon: <ShieldPlus size={64} weight="bold" />,
-    accentColor: 'text-blue-400',
-    bgGradient: 'from-blue-500/10 to-blue-600/5'
+    accentColor: 'text-brand-gold',
+    bgGradient: 'from-white/5 to-white/0'
   },
   {
     title: 'Pensión',
     description: 'Gestión de afiliaciones a fondos de pensiones obligatorias y voluntarias.',
     id: 2,
     icon: <TrendUp size={64} weight="bold" />,
-    accentColor: 'text-emerald-400',
-    bgGradient: 'from-emerald-500/10 to-emerald-600/5'
+    accentColor: 'text-brand-gold',
+    bgGradient: 'from-white/5 to-white/0'
   },
   {
     title: 'ARL (Riesgos Laborales)',
     description: 'Protección integral contra accidentes laborales y enfermedades profesionales.',
     id: 3,
     icon: <HardHat size={64} weight="fill" />,
-    accentColor: 'text-orange-400',
-    bgGradient: 'from-orange-500/10 to-orange-600/5'
+    accentColor: 'text-brand-gold',
+    bgGradient: 'from-white/5 to-white/0'
   },
   {
     title: 'Caja de Compensación',
     description: 'Servicios de bienestar, subsidios y beneficios para trabajadores y familias.',
     id: 4,
     icon: <HandHeart size={64} weight="fill" />,
-    accentColor: 'text-purple-400',
-    bgGradient: 'from-purple-500/10 to-purple-600/5'
+    accentColor: 'text-brand-gold',
+    bgGradient: 'from-white/5 to-white/0'
   },
   {
     title: 'Asesoría Integral',
     description: 'Acompañamiento completo en seguridad social y gestión de nómina.',
     id: 5,
     icon: <Handshake size={64} weight="bold" />,
-    accentColor: 'text-pink-400',
-    bgGradient: 'from-pink-500/10 to-pink-600/5'
+    accentColor: 'text-brand-gold',
+    bgGradient: 'from-white/5 to-white/0'
   }
 ]
 
@@ -138,7 +138,7 @@ export default function ServicesSlider() {
             }}
             className="absolute inset-0"
           >
-            <div className="h-full w-full relative rounded-full overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl hover:shadow-[0_0_40px_rgba(255,255,255,0.1)] transition-shadow duration-300 cursor-grab active:cursor-grabbing">
+            <div className="h-full w-full relative rounded-full overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl hover:shadow-[0_0_40px_rgba(224,160,37,0.15)] transition-shadow duration-300 cursor-grab active:cursor-grabbing">
               {/* Accent gradient background */}
               <div className={`absolute inset-0 bg-gradient-to-br ${currentService.bgGradient} opacity-50`} />
 
@@ -181,7 +181,7 @@ export default function ServicesSlider() {
           >
             <div className={`h-2 rounded-full transition-all duration-300 ${
               currentIndex === index
-                ? 'bg-white w-12'
+                ? 'bg-brand-gold w-12'
                 : 'bg-white/30 w-2 group-hover:bg-white/50 group-hover:w-6'
             }`} />
           </button>

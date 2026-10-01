@@ -144,12 +144,12 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
     description: 'Para Empresas e Independientes. Su tranquilidad y la de sus colaboradores es nuestro compromiso.',
     iconType: 'shield',
     services: [
-      '✓ Gestión integral para Empresas y PYMES',
-      '✓ Afiliaciones para Empleadores de Personal Doméstico',
-      '✓ Soluciones para Trabajadores Independientes (Contratistas, Profesionales)',
-      '✓ Afiliaciones para Colombianos residentes en el exterior',
-      '✓ Traslados de EPS Garantizados (devolución si no se logra)',
-      '✓ Inclusión de Beneficiarios (Pago de UPC Adicional)'
+      'Gestión integral para Empresas y PYMES',
+      'Afiliaciones para Empleadores de Personal Doméstico',
+      'Soluciones para Trabajadores Independientes (Contratistas, Profesionales)',
+      'Afiliaciones para Colombianos residentes en el exterior',
+      'Traslados de EPS Garantizados (devolución si no se logra)',
+      'Inclusión de Beneficiarios (Pago de UPC Adicional)'
     ],
     bgColor: 'bg-blue-50',
     textColor: 'text-gray-900',
@@ -161,14 +161,14 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
     description: 'Ahorre tiempo y evite sanciones. Nosotros nos encargamos de la complejidad.',
     iconType: 'file',
     services: [
-      '✓ Liquidación de planillas para Empresas (masivas e individuales)',
-      '✓ Liquidación para Contratistas por prestación de servicios',
-      '✓ Planillas para Empleados del Servicio Doméstico',
-      '✓ Expertos en Liquidación Masiva y Correcciones',
-      '✓ Gestión de Moras (M), Órdenes Judiciales (J) y Correcciones (N)',
-      '✓ Cumplimiento normativo UGPP garantizado',
-      '✓ Pagos 100% seguros y trazables',
-      '✓ Reportes en tiempo real'
+      'Liquidación de planillas para Empresas (masivas e individuales)',
+      'Liquidación para Contratistas por prestación de servicios',
+      'Planillas para Empleados del Servicio Doméstico',
+      'Expertos en Liquidación Masiva y Correcciones',
+      'Gestión de Moras (M), Órdenes Judiciales (J) y Correcciones (N)',
+      'Cumplimiento normativo UGPP garantizado',
+      'Pagos 100% seguros y trazables',
+      'Reportes en tiempo real'
     ],
     bgColor: 'bg-green-50',
     textColor: 'text-gray-900'
@@ -179,14 +179,14 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
     description: 'Optimizamos el reembolso ante EPS, ARL y Fondos de Pensiones. Su derecho es nuestro compromiso.',
     iconType: 'heart',
     services: [
-      '✓ Incapacidades de Origen Común (días 3-180 ante EPS)',
-      '✓ Incapacidades de Origen Común prolongadas (días 181-540 ante Fondo de Pensiones)',
-      '✓ Accidentes y Enfermedades de Origen Laboral (ARL)',
-      '✓ Licencias de Maternidad',
-      '✓ Licencias de Paternidad',
-      '✓ Gestión completa de documentación',
-      '✓ Seguimiento hasta la aprobación',
-      '✓ Mejora del flujo de caja empresarial'
+      'Incapacidades de Origen Común (días 3-180 ante EPS)',
+      'Incapacidades de Origen Común prolongadas (días 181-540 ante Fondo de Pensiones)',
+      'Accidentes y Enfermedades de Origen Laboral (ARL)',
+      'Licencias de Maternidad',
+      'Licencias de Paternidad',
+      'Gestión completa de documentación',
+      'Seguimiento hasta la aprobación',
+      'Mejora del flujo de caja empresarial'
     ],
     bgColor: 'bg-purple-50',
     textColor: 'text-gray-900'
@@ -197,15 +197,15 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
     description: 'Intermediación de seguros con las mejores compañías del mercado.',
     iconType: 'star',
     services: [
-      '✓ Seguro de Vehículos (Todo Riesgo, SOAT)',
-      '✓ Seguros de Salud (Medicina Prepagada, Emergédica)',
-      '✓ Seguros de Vida, Educación y Ahorro',
-      '✓ Seguro para Mascotas',
-      '✓ Seguros para Empresas (Responsabilidad Civil, Incendio)',
-      '✓ Seguros de Hogar',
-      '✓ Seguros de Viajes',
-      '✓ Accidentes Personales',
-      '✓ Títulos de Capitalización'
+      'Seguro de Vehículos (Todo Riesgo, SOAT)',
+      'Seguros de Salud (Medicina Prepagada, Emergédica)',
+      'Seguros de Vida, Educación y Ahorro',
+      'Seguro para Mascotas',
+      'Seguros para Empresas (Responsabilidad Civil, Incendio)',
+      'Seguros de Hogar',
+      'Seguros de Viajes',
+      'Accidentes Personales',
+      'Títulos de Capitalización'
     ],
     bgColor: 'bg-amber-50',
     textColor: 'text-gray-900'

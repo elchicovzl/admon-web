@@ -25,13 +25,11 @@ const ServiceCard = memo(function ServiceCard({
   description,
   services,
   isPopular,
-  bgColor,
-  textColor,
   iconType,
 }: ServiceCardProps) {
   const { scrollToSection } = useSmoothScroll()
   const getIcon = (type: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart') => {
-    const iconProps = { size: 32, className: "text-gray-900" }
+    const iconProps = { size: 32, className: "text-brand-navy" }
 
     switch (type) {
       case 'clock':
@@ -51,31 +49,32 @@ const ServiceCard = memo(function ServiceCard({
     }
   }
   return (
-    <div className={cn("relative flex flex-col p-8 rounded-xl shadow-lg border border-gray-200 h-full", bgColor, textColor)}>
+    <div className={cn("relative flex flex-col p-8 rounded-2xl shadow-sm border border-gray-200 bg-white h-full")}>
       {isPopular && (
-        <div className="absolute -top-3 right-6 bg-black text-white text-xs font-medium px-3 py-1 rounded-full flex items-center space-x-1">
-          <span className="w-2 h-2 bg-white rounded-full" />
+        <div className="absolute -top-3 right-6 bg-brand-gold text-brand-navy text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1">
+          <span className="w-2 h-2 bg-brand-navy rounded-full" />
           <span>Más Solicitado</span>
         </div>
       )}
 
       <div className="mb-6">
-        <div className="mb-4">{getIcon(iconType)}</div>
-        <h3 className="text-2xl font-bold mb-2">{name}</h3>
+        <div className="mb-4 inline-flex p-3 bg-brand-gold-soft rounded-xl">{getIcon(iconType)}</div>
+        <h3 className="text-2xl font-figtree font-bold text-brand-navy mb-2">{name}</h3>
         <p className="text-gray-600 text-sm">{description}</p>
       </div>
 
       <div className="flex flex-col space-y-3 mb-8">
         <Link href={`/servicios/${id}`}>
-          <Button className="bg-black text-white hover:bg-gray-800 rounded-full px-6 py-3 text-base font-medium w-full">
+          <Button variant="brand" size="lg" className="w-full cursor-pointer">
             Conocer Más
             <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </Link>
         <Button
-          variant="outline"
+          variant="brand-outline"
+          size="lg"
           onClick={() => scrollToSection('contacto')}
-          className="rounded-full px-6 py-3 text-base font-medium border-2 border-gray-300 hover:bg-gray-50 bg-transparent text-gray-900"
+          className="cursor-pointer"
         >
           Solicitar Cotización
         </Button>
@@ -84,7 +83,7 @@ const ServiceCard = memo(function ServiceCard({
       <ul className="space-y-3 text-gray-700 flex-grow">
         {services.map((service, index) => (
           <li key={index} className="flex items-start text-sm">
-            <CheckCircle className="w-4 h-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+            <CheckCircle className="w-4 h-4 text-brand-gold mr-2 flex-shrink-0 mt-0.5" />
             <span>{service}</span>
           </li>
         ))}
