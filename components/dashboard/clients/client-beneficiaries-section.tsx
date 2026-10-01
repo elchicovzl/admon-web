@@ -188,6 +188,7 @@ export function ClientBeneficiariesSection({
       PPT: 'PPT',
       PEP: 'PEP',
       NUIP: 'NUIP',
+      SALVOCONDUCTO: 'SC',
       NIT: 'NIT',
     }
     return labels[type]
@@ -375,6 +376,8 @@ export function ClientBeneficiariesSection({
                           <SelectItem value={IdentificationType.PPT}>PPT</SelectItem>
                           <SelectItem value={IdentificationType.PEP}>PEP</SelectItem>
                           <SelectItem value={IdentificationType.NUIP}>NUIP</SelectItem>
+
+                          <SelectItem value={IdentificationType.SALVOCONDUCTO}>Salvoconducto</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />

@@ -600,7 +600,7 @@ export function AffiliationCreateWizard({
                   {/* AFFILIATED-AS ROLE (only when the client has more than one type) */}
                   {selectedClient && selectedClient.clientTypes.length > 1 && (
                     <FormItem className="flex flex-col">
-                      <FormLabel>¿Como qué se afilia en este trámite? *</FormLabel>
+                      <FormLabel>Tipo de cotizante *</FormLabel>
                       <Select
                         value={affiliatedAs ?? undefined}
                         onValueChange={(value) => setAffiliatedAs(value as ClientType)}
