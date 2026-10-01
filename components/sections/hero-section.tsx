@@ -25,7 +25,7 @@ const HeroContent = memo(({ isMobile }: { isMobile?: boolean }) => {
         Soluciones en {isMobile && <br />}<span className="text-brand-gold">Seguridad Social</span> {!isMobile && 'para tu Futuro'}
       </h1>
 
-      <p className={`text-lg ${isMobile ? 'md:text-xl' : 'md:text-2xl'} text-white/80 mb-8 ${isMobile ? 'max-w-2xl mx-auto' : 'max-w-lg'} leading-relaxed min-h-[${isMobile ? '60px' : '72px'}] ${isMobile ? 'md:min-h-[72px]' : 'md:min-h-[120px]'}`}>
+      <p className={`text-lg ${isMobile ? 'md:text-xl' : 'md:text-2xl'} text-white/80 mb-8 ${isMobile ? 'max-w-2xl mx-auto' : 'max-w-lg'} leading-relaxed min-h-[3.5rem] ${isMobile ? 'md:min-h-[4rem]' : 'md:min-h-[4.5rem]'}`}>
         {isMobile ? 'Afiliacion a' : 'Expertos en afiliacion a'}{' '}
         <span className="font-semibold text-brand-gold inline-block min-h-[1.5em]">
           <Typewriter

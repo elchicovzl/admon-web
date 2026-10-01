@@ -68,7 +68,7 @@ export function ServiceFeatures({ service }: ServiceFeaturesProps) {
                   <ul className="space-y-3">
                     {feature.included.map((item, itemIndex) => (
                       <li key={itemIndex} className="flex items-start gap-3">
-                        <CheckCircle className={`w-6 h-6 text-brand-gold flex-shrink-0 mt-0.5`} />
+                        <CheckCircle className="w-6 h-6 text-brand-gold flex-shrink-0 mt-0.5" />
                         <span className="text-gray-700">{item}</span>
                       </li>
                     ))}

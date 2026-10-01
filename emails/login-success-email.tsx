@@ -167,7 +167,7 @@ const securityHeaderStyle = {
   fontFamily: "'Figtree', Arial, sans-serif",
   fontSize: '15px',
   fontWeight: 'bold',
-  color: '#E0A025',
+  color: '#012A61',
   marginBottom: '12px',
 }
 

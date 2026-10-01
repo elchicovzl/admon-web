@@ -30,7 +30,8 @@ export function ServiceHero({ service }: ServiceHeroProps) {
 
   // Highlight the last word of the title in gold
   const titleWords = service.name.split(' ')
-  const titleLast = titleWords.pop() ?? ''
+  const hasHighlight = titleWords.length >= 2
+  const titleLast = hasHighlight ? (titleWords.pop() ?? '') : ''
   const titleStart = titleWords.join(' ')
 
   return (
@@ -60,8 +61,12 @@ export function ServiceHero({ service }: ServiceHeroProps) {
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-figtree font-bold text-white mb-6">
               {titleStart}
-              {titleStart && ' '}
-              <span className="text-brand-gold">{titleLast}</span>
+              {titleLast && (
+                <>
+                  {' '}
+                  <span className="text-brand-gold">{titleLast}</span>
+                </>
+              )}
             </h1>
 
             <p className="text-xl text-white/90 mb-4">
