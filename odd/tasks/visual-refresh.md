@@ -95,5 +95,29 @@ Progress:
 - Inline follow-up 29beac8: service pages used a placeholder WhatsApp number (`573001234567`, pre-existing since 2025-12-20) while Contacto uses the real one (`573197941064`); aligned both service components. Assess vs a4733f0: medium, 4 lines, `under_budget`.
 - Open items for the user: real photos for Beneficios/Nosotros (stock illustrations remain); `pricing-card.tsx`/`pricing-section.tsx` keep old pastel props but only `app/page-legacy.tsx` renders them; OTP code color gold on light gray may need a contrast check; hero keeps a pre-existing gap under the typed tagline on desktop; Google Maps embed to verify in a real browser.
 
+## Phase 3 (authorized by the user on 2026-10-01, "continua con la fase 3")
+Branch `feat/visual-refresh-phase-3` from origin/master (2178063, PR #40 merged). Baselines: tsc 36, vitest 29/791. Delivery: single-pr.
+
+Scope (cleanup and polish; no new surfaces):
+- Dead code: `app/page-legacy.tsx` is not a route in the App Router (only `page.tsx` mounts) and is the sole consumer of `components/pricing-section.tsx` and `components/pricing-card.tsx`, which still carry old pastel colors. Delete the three files.
+- Hero tagline gap: `hero-section.tsx` builds `min-h-[${…}]` by string interpolation; Tailwind cannot generate interpolated classes, so only the static `md:min-h-[120px]` applies and produces the empty band under the typed tagline. Replace with static classes sized to the tagline's two lines.
+- OTP email contrast: `emails/otp-email.tsx` renders the code in gold `#E0A025` on a light box; switch the code to navy `#012A61` on the gold-soft box, keep the gold dashed border.
+- Advisory follow-ups from the Phase 2 review: drop the unread `color` field from `TimelineItem` and the timeline data in `data/services.ts`; guard the gold last-word highlight in `service-hero.tsx` so single-word names render plainly; replace the interpolation-free template literal className in `service-features.tsx:71` with a plain string.
+- Still open (user input needed): real photography for Beneficios/Nosotros; Google Maps embed check in a real browser.
+
+Tasks:
+- [x] T9 — Delete `app/page-legacy.tsx`, `components/pricing-section.tsx`, `components/pricing-card.tsx`; confirm nothing else imports them. Route: delegated.
+- [x] T10 — Hero tagline static min-height. Route: delegated, same writer.
+- [x] T11 — OTP email code contrast. Route: delegated, same writer.
+- [x] T12 — Timeline `color` cleanup, title-split guard, template literal cleanup. Route: delegated, same writer.
+- [x] T13 — Verify (tsc 36, vitest, Playwright hero at 1440/390, service page hero), RDD assess, PR. Route: inline.
+
+Progress:
+- T9–T12 done (commit ecc8f8c, delegated writer): three dead files removed (only other mention is a line in `docs/CLAUDE_LANDING.md`, left as is); hero tagline on static `min-h-[3.5rem] md:min-h-[4rem|4.5rem]`; OTP code navy on gold-soft, and the security-box header in `login-success-email.tsx` moved from gold to navy by the same rule; `TimelineItem.color` removed from type and data; single-word service names no longer emit an empty prefix span; plain-string className in `service-features.tsx`. Evidence: tsc 35 (< 36 baseline), vitest 29/791; orchestrator reviewed hero at 1440 (gap gone) and the service page hero.
+- Note: local `master` lagged origin again when assessing (reported 1510 lines including Phase 2); fixed with `git branch -f master origin/master` before the real assessment: medium, 743 lines (mostly deletions), `slice_budget_reached`, consent granted by the user, one reliability lens.
+
+- RDD on master..ecc8f8c: approved and acknowledged (lineage review-fdf2f575e4ca4780) with 3 advisory suggestions/warnings (non-blocking): `hero-section.tsx:28` (tagline min-height), `service-hero.tsx:33-34` (title split), `data/services.ts:548` (timeline data).
+- Still open for the user: real photography for Beneficios/Nosotros; Google Maps embed check in a real browser; `docs/CLAUDE_LANDING.md` still mentions `page-legacy`.
+
 ## Next step
-Phase 2 PR review/merge. Phase 3 candidates: real photography, `page-legacy`/pricing cleanup or removal, OTP contrast, hero tagline spacing, `color` field cleanup in `data/services.ts` timeline data.
+Phase 3 PR review/merge. The visual refresh is complete unless the user supplies photos (that would be a small Phase 4: swap the Beneficios/Nosotros illustrations).
