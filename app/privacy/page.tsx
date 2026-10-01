@@ -59,8 +59,8 @@ export default function PrivacyPage() {
                 1. Información General
               </h2>
               <p className="text-gray-700 mb-4">
-                <strong>ADMINISTRACIÓN SEGURA</strong>, con domicilio en Cra 43 # 33 - 57 local 156,
-                Plazuelas de San Diego, Medellín, Colombia, es responsable del tratamiento de los datos
+                <strong>ADMINISTRACIÓN SEGURA</strong>, con domicilio en Cra 43 A # 34 - 95, Centro Comercial Almacentro,
+                Local 320, Medellín, Antioquia, Colombia, es responsable del tratamiento de los datos
                 personales que usted nos proporciona, los cuales serán protegidos conforme a la Ley 1581
                 de 2012 (Ley de Protección de Datos Personales) y demás normativa aplicable en Colombia.
               </p>
@@ -209,7 +209,7 @@ export default function PrivacyPage() {
               <ul className="list-none text-gray-700 mb-4 space-y-2">
                 <li><strong>Correo electrónico:</strong> <Link href="mailto:contacto@administracionsegura.co" className="text-[#00A86B] hover:underline">contacto@administracionsegura.co</Link></li>
                 <li><strong>Teléfono:</strong> <Link href="tel:+573197941064" className="text-[#00A86B] hover:underline">+57 (319) 794-1064</Link></li>
-                <li><strong>Dirección:</strong> Cra 43 # 33 - 57 local 156, Plazuelas de San Diego, Medellín, Colombia</li>
+                <li><strong>Dirección:</strong> Cra 43 A # 34 - 95, Centro Comercial Almacentro, Local 320, Medellín, Antioquia, Colombia</li>
               </ul>
             </section>
           </div>

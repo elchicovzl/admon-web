@@ -44,6 +44,7 @@ const PERSON_ID_TYPES: { value: IdentificationType; label: string }[] = [
   { value: IdentificationType.PPT, label: 'Permiso de Protección Temporal (PPT)' },
   { value: IdentificationType.PEP, label: 'Permiso Especial de Permanencia (PEP)' },
   { value: IdentificationType.NUIP, label: 'NUIP' },
+  { value: IdentificationType.SALVOCONDUCTO, label: 'Salvoconducto' },
 ]
 
 type MaskConfig =
@@ -59,6 +60,7 @@ const ID_MASK_CONFIG: Record<IdentificationType, MaskConfig> = {
   PPT:                { type: 'regex',   mask: /^[A-Za-z0-9\-]{1,20}$/, placeholder: 'PPT-12345678' },
   PEP:                { type: 'regex',   mask: /^[A-Za-z0-9\-]{1,20}$/, placeholder: 'PEP12345678' },
   NUIP:               { type: 'pattern', mask: '0000000000',    placeholder: '1234567890' },
+  SALVOCONDUCTO:      { type: 'regex',   mask: /^[A-Za-z0-9\-]{1,20}$/, placeholder: 'SC-12345678' },
   NIT:                { type: 'pattern', mask: '000000000-0',   placeholder: '123456789-0' },
 }
 
