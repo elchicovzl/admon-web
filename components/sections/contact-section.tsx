@@ -105,7 +105,7 @@ export default function ContactSection() {
   }
 
   return (
-    <section className="bg-brand-navy-deep text-white py-16 px-4" id="contacto">
+    <section className="bg-brand-navy text-white py-16 px-4" id="contacto">
       <div className="max-w-6xl mx-auto">
         {/* Interactive Map - Full Width */}
         <div className="mb-16">
