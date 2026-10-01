@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { SectionLabel } from '@/components/ui/section-label'
 import { ServicePageData } from '@/data/services'
 
 interface ServiceProcessProps {
@@ -38,10 +38,8 @@ export function ServiceProcess({ service }: ServiceProcessProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-16">
-          <Badge className={`${service.theme.badgeBg} ${service.theme.badgeText} mb-4`}>
-            Proceso
-          </Badge>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 font-serif">
+          <SectionLabel className="mb-4">Proceso</SectionLabel>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold text-brand-navy mb-4">
             ¿Cómo Funciona?
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -72,14 +70,14 @@ export function ServiceProcess({ service }: ServiceProcessProps) {
               `}>
                 {/* Step number */}
                 <div className={`
-                  ${service.theme.iconBg} w-16 h-16 rounded-2xl
+                  bg-brand-gold w-16 h-16 rounded-2xl
                   flex items-center justify-center mb-6
                 `}>
-                  <span className="text-white text-2xl font-bold">{step.step}</span>
+                  <span className="text-brand-navy text-2xl font-bold">{step.step}</span>
                 </div>
 
                 {/* Content */}
-                <h3 className="text-xl font-bold text-gray-900 mb-3">
+                <h3 className="text-xl font-bold text-brand-navy mb-3">
                   {step.title}
                 </h3>
                 <p className="text-gray-600">

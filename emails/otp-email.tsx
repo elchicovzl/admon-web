@@ -78,7 +78,7 @@ const introStyle = {
 
 const otpContainerStyle = {
   background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-  border: '3px dashed #F1AD32',
+  border: '3px dashed #E0A025',
   borderRadius: '12px',
   padding: '30px 20px',
   textAlign: 'center' as const,
@@ -90,7 +90,7 @@ const otpCodeStyle = {
   fontSize: '48px',
   fontWeight: 700,
   letterSpacing: '12px',
-  color: '#F1AD32',
+  color: '#E0A025',
   margin: 0,
 }
 

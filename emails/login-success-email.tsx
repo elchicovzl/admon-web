@@ -118,8 +118,8 @@ const messageStyle = {
 }
 
 const detailsBoxStyle = {
-  backgroundColor: '#e7f3ff',
-  borderLeft: '5px solid #2563EB',
+  backgroundColor: '#e8eef7',
+  borderLeft: '5px solid #012A61',
   borderRadius: '8px',
   padding: '20px',
   margin: '25px 0',
@@ -129,7 +129,7 @@ const detailsHeaderStyle = {
   fontFamily: "'Figtree', Arial, sans-serif",
   fontSize: '15px',
   fontWeight: 'bold',
-  color: '#2563EB',
+  color: '#012A61',
   marginBottom: '15px',
 }
 
@@ -142,7 +142,7 @@ const detailsLabelStyle = {
   fontFamily: "'Inter', Arial, sans-serif",
   fontSize: '14px',
   fontWeight: 'bold',
-  color: '#2563EB',
+  color: '#012A61',
   padding: '8px 0',
   verticalAlign: 'top' as const,
   width: '40%',
@@ -156,8 +156,8 @@ const detailsValueStyle = {
 }
 
 const securityBoxStyle = {
-  backgroundColor: '#fff4e6',
-  borderLeft: '5px solid #F1AD32',
+  backgroundColor: '#FBF1DC',
+  borderLeft: '5px solid #E0A025',
   borderRadius: '8px',
   padding: '20px',
   margin: '25px 0',
@@ -167,7 +167,7 @@ const securityHeaderStyle = {
   fontFamily: "'Figtree', Arial, sans-serif",
   fontSize: '15px',
   fontWeight: 'bold',
-  color: '#F1AD32',
+  color: '#E0A025',
   marginBottom: '12px',
 }
 

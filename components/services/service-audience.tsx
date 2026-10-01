@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { SectionLabel } from '@/components/ui/section-label'
 import { ServiceIcon } from './service-icon'
 import { ServicePageData } from '@/data/services'
 
@@ -33,10 +33,8 @@ export function ServiceAudience({ service }: ServiceAudienceProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-16">
-          <Badge className={`${service.theme.badgeBg} ${service.theme.badgeText} mb-4`}>
-            Para Quién
-          </Badge>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 font-serif">
+          <SectionLabel className="mb-4">Para Quién</SectionLabel>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold text-brand-navy mb-4">
             ¿A Quiénes Ayudamos?
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -58,18 +56,18 @@ export function ServiceAudience({ service }: ServiceAudienceProps) {
             >
               {/* Icon */}
               <div className={`
-                ${service.theme.iconBg} p-4 rounded-xl inline-flex mb-6
+                bg-brand-gold-soft p-4 rounded-xl inline-flex mb-6
                 group-hover:scale-110 transition-transform duration-300
               `}>
                 <ServiceIcon
                   iconType={audience.icon}
-                  className="text-white"
+                  className="text-brand-navy"
                   size={28}
                 />
               </div>
 
               {/* Content */}
-              <h3 className="text-xl font-bold text-gray-900 mb-3">
+              <h3 className="text-xl font-bold text-brand-navy mb-3">
                 {audience.title}
               </h3>
               <p className="text-gray-600">
@@ -79,7 +77,7 @@ export function ServiceAudience({ service }: ServiceAudienceProps) {
               {/* Bottom gradient line on hover */}
               <div className={`
                 absolute bottom-0 left-0 right-0 h-1 rounded-b-2xl
-                bg-gradient-to-r ${service.theme.iconBg.replace('bg-', 'from-')} to-transparent
+                bg-gradient-to-r from-brand-gold to-transparent
                 opacity-0 group-hover:opacity-100 transition-opacity duration-300
               `} />
             </div>

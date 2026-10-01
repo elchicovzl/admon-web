@@ -75,7 +75,7 @@ export function EmailStepForm({ onOtpSent }: EmailStepFormProps) {
                   autoComplete="email"
                   autoFocus
                   disabled={isLoading}
-                  className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-[#F1AD32] focus:ring-[#F1AD32] transition-all duration-300 hover:bg-white/10"
+                  className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus-visible:border-brand-gold focus-visible:ring-brand-gold/50 transition-all duration-300 hover:bg-white/10"
                   {...field}
                 />
               </FormControl>
@@ -86,7 +86,8 @@ export function EmailStepForm({ onOtpSent }: EmailStepFormProps) {
 
         <Button
           type="submit"
-          className="w-full bg-[#F1AD32] hover:bg-[#f59e0b] text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+          variant="brand"
+          className="w-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
           disabled={isLoading}
         >
           {isLoading ? (
