@@ -25,7 +25,7 @@ export function ServiceHero({ service }: ServiceHeroProps) {
   }
 
   const handleWhatsAppClick = () => {
-    window.open('https://wa.me/573001234567?text=Hola, estoy interesado en el servicio de ' + service.name, '_blank')
+    window.open('https://wa.me/573197941064?text=Hola, estoy interesado en el servicio de ' + service.name, '_blank')
   }
 
   // Highlight the last word of the title in gold
