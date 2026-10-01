@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { SectionLabel } from '@/components/ui/section-label'
 import { ServiceIcon } from './service-icon'
 import { ServicePageData, getRelatedServices } from '@/data/services'
 import { ArrowRight } from 'lucide-react'
@@ -37,14 +36,12 @@ export function ServiceRelated({ currentSlug }: ServiceRelatedProps) {
   }
 
   return (
-    <section id="related-section" className="py-20 bg-gray-50">
+    <section id="related-section" className="py-20 bg-surface-muted">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-16">
-          <Badge className="bg-gray-200 text-gray-700 mb-4">
-            Más Servicios
-          </Badge>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 font-serif">
+          <SectionLabel className="mb-4">Más Servicios</SectionLabel>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold text-brand-navy mb-4">
             Otros Servicios
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -67,18 +64,18 @@ export function ServiceRelated({ currentSlug }: ServiceRelatedProps) {
             >
               {/* Icon */}
               <div className={`
-                ${service.theme.iconBg} p-4 rounded-xl inline-flex mb-6
+                bg-brand-gold-soft p-4 rounded-xl inline-flex mb-6
                 group-hover:scale-110 transition-transform duration-300
               `}>
                 <ServiceIcon
                   iconType={service.iconType}
-                  className="text-white"
+                  className="text-brand-navy"
                   size={28}
                 />
               </div>
 
               {/* Content */}
-              <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-gray-700 transition-colors">
+              <h3 className="text-xl font-bold text-brand-navy mb-2 group-hover:text-brand-navy/80 transition-colors">
                 {service.name}
               </h3>
               <p className="text-gray-600 mb-4">
@@ -86,7 +83,7 @@ export function ServiceRelated({ currentSlug }: ServiceRelatedProps) {
               </p>
 
               {/* Link indicator */}
-              <div className={`flex items-center ${service.theme.accentColor} font-medium`}>
+              <div className={`flex items-center text-brand-navy font-semibold`}>
                 <span>Conocer más</span>
                 <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>

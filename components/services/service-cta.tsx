@@ -46,60 +46,62 @@ export function ServiceCTA({ service }: ServiceCTAProps) {
   }
 
   const handleWhatsAppClick = () => {
-    window.open('https://wa.me/573001234567?text=Hola, estoy interesado en el servicio de ' + service.name, '_blank')
+    window.open('https://wa.me/573197941064?text=Hola, estoy interesado en el servicio de ' + service.name, '_blank')
   }
 
   return (
     <section
       id="cta-section"
-      className="py-20 lg:py-28 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative overflow-hidden"
+      className="py-20 lg:py-28 bg-brand-navy-deep relative overflow-hidden"
     >
       {/* Decorative elements */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-gold/10 rounded-full blur-3xl" />
       <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-white/5 rounded-full blur-3xl" />
 
       <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <div className={isVisible ? 'animate-fade-in-up' : 'opacity-0'}>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6 font-serif">
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold text-white mb-6">
             ¿Listo para comenzar con {service.name}?
           </h2>
-          <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto">
+          <p className="text-xl text-white/80 mb-10 max-w-2xl mx-auto">
             Contáctenos hoy y descubra cómo podemos ayudarle a simplificar su gestión
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
-              onClick={handleWhatsAppClick}
-              className="bg-green-500 hover:bg-green-600 text-white rounded-full px-8 py-6 text-lg"
-            >
-              <WhatsAppIcon className="mr-2 w-5 h-5" />
-              WhatsApp
-            </Button>
-            <Button
               onClick={handleContactClick}
-              className="bg-white text-slate-900 hover:bg-gray-100 rounded-full px-8 py-6 text-lg font-medium"
+              variant="brand"
+              size="xl"
             >
               <Phone className="mr-2 w-5 h-5" />
               Contáctenos
             </Button>
+            <Button
+              onClick={handleWhatsAppClick}
+              variant="brand-outline-light"
+              size="xl"
+            >
+              <WhatsAppIcon className="mr-2 w-5 h-5" />
+              WhatsApp
+            </Button>
           </div>
 
           {/* Trust indicators */}
-          <div className="mt-12 flex flex-wrap justify-center gap-8 text-gray-400">
+          <div className="mt-12 flex flex-wrap justify-center gap-8 text-white/60">
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span>Asesoría gratuita</span>
             </div>
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span>Respuesta en 24h</span>
             </div>
             <div className="flex items-center gap-2">
-              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span>Sin compromiso</span>

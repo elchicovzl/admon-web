@@ -151,7 +151,7 @@ export function OtpVerificationForm({
           <Button
             variant="link"
             onClick={handleResend}
-            className="text-[#F1AD32] hover:text-[#f59e0b]"
+            className="text-brand-gold hover:text-brand-gold/80"
           >
             <RotateCw className="mr-2 h-4 w-4" />
             Reenviar código

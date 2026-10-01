@@ -23,7 +23,7 @@ export function EmailHeader({ title, subtitle }: EmailHeaderProps) {
 }
 
 const headerStyle = {
-  background: '#020617',
+  background: '#012A61',
   color: '#ffffff',
   padding: '40px 30px',
   textAlign: 'center' as const,

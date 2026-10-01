@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { SectionLabel } from '@/components/ui/section-label'
 import { ServicePageData } from '@/data/services'
 import { ArrowRight } from 'lucide-react'
 
@@ -9,12 +9,10 @@ interface ServiceTimelineProps {
   service: ServicePageData
 }
 
-const colorMap: Record<string, { bg: string; border: string; text: string }> = {
-  gray: { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-700' },
-  blue: { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-700' },
-  purple: { bg: 'bg-purple-100', border: 'border-purple-300', text: 'text-purple-700' },
-  amber: { bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-700' },
-  green: { bg: 'bg-green-100', border: 'border-green-300', text: 'text-green-700' },
+const timelineColors = {
+  bg: 'bg-brand-gold-soft',
+  border: 'border-brand-gold',
+  text: 'text-brand-navy',
 }
 
 export function ServiceTimeline({ service }: ServiceTimelineProps) {
@@ -43,14 +41,12 @@ export function ServiceTimeline({ service }: ServiceTimelineProps) {
   }
 
   return (
-    <section id="timeline-section" className={`py-20 ${service.theme.lightBg}`}>
+    <section id="timeline-section" className="py-20 bg-surface-muted">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-16">
-          <Badge className={`${service.theme.badgeBg} ${service.theme.badgeText} mb-4`}>
-            Conoce las Reglas
-          </Badge>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 font-serif">
+          <SectionLabel className="mb-4">Conoce las Reglas</SectionLabel>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold text-brand-navy mb-4">
             Responsabilidad de Pagos
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
@@ -67,7 +63,7 @@ export function ServiceTimeline({ service }: ServiceTimelineProps) {
             {/* Timeline items */}
             <div className="relative flex justify-between">
               {timelineItems.map((item, index) => {
-                const colors = colorMap[item.color] || colorMap.gray
+                const colors = timelineColors
                 return (
                   <div
                     key={index}
@@ -102,7 +98,7 @@ export function ServiceTimeline({ service }: ServiceTimelineProps) {
                       <div className={`text-sm font-bold ${colors.text} mb-2`}>
                         {item.period}
                       </div>
-                      <div className="text-lg font-bold text-gray-900 mb-2">
+                      <div className="text-lg font-bold text-brand-navy mb-2">
                         {item.responsible}
                       </div>
                       <p className="text-sm text-gray-600">
@@ -125,7 +121,7 @@ export function ServiceTimeline({ service }: ServiceTimelineProps) {
             {/* Timeline items */}
             <div className="space-y-8">
               {timelineItems.map((item, index) => {
-                const colors = colorMap[item.color] || colorMap.gray
+                const colors = timelineColors
                 return (
                   <div
                     key={index}
@@ -153,7 +149,7 @@ export function ServiceTimeline({ service }: ServiceTimelineProps) {
                       <div className={`text-sm font-bold ${colors.text} mb-2`}>
                         {item.period}
                       </div>
-                      <div className="text-lg font-bold text-gray-900 mb-2">
+                      <div className="text-lg font-bold text-brand-navy mb-2">
                         {item.responsible}
                       </div>
                       <p className="text-sm text-gray-600">
@@ -169,12 +165,12 @@ export function ServiceTimeline({ service }: ServiceTimelineProps) {
 
         {/* Additional note */}
         <div className={`
-          mt-12 text-center p-6 bg-white rounded-xl shadow-lg border ${service.theme.borderColor}
+          mt-12 text-center p-6 bg-white rounded-xl shadow-lg border border-brand-gold/40
           ${isVisible ? 'animate-fade-in-up' : 'opacity-0'}
         `}
         style={{ animationDelay: '0.6s' }}
         >
-          <p className={`text-lg font-medium ${service.theme.accentColor}`}>
+          <p className={`text-lg font-semibold text-brand-navy`}>
             Dominamos estas reglas para que usted no tenga que hacerlo.
           </p>
           <p className="text-gray-600 mt-2">

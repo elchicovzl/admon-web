@@ -4,8 +4,6 @@ export interface ServiceCategoryData {
   description: string
   iconType: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart'
   services: string[]
-  bgColor: string
-  textColor: string
   isPopular?: boolean
 }
 
@@ -16,17 +14,6 @@ export interface ServiceCategoryData {
 export type ServiceIconType =
   | 'shield' | 'file' | 'heart' | 'star'
   | 'car' | 'stethoscope' | 'umbrella' | 'paw-print' | 'building-2' | 'package'
-
-export interface ServiceTheme {
-  primary: string
-  bgGradient: string
-  iconBg: string
-  accentColor: string
-  lightBg: string
-  borderColor: string
-  badgeBg: string
-  badgeText: string
-}
 
 export interface TargetAudienceItem {
   icon: string
@@ -68,7 +55,6 @@ export interface ServicePageData {
   fullDescription: string
 
   // Visual
-  theme: ServiceTheme
   iconType: ServiceIconType
   badge?: {
     text: string
@@ -93,50 +79,6 @@ export interface ServicePageData {
   parentCategory?: string
 }
 
-// Temas de color por servicio
-export const serviceThemes: Record<string, ServiceTheme> = {
-  'afiliaciones-seguridad-social': {
-    primary: 'blue',
-    bgGradient: 'from-blue-50 via-white to-blue-50/30',
-    iconBg: 'bg-blue-500',
-    accentColor: 'text-blue-600',
-    lightBg: 'bg-blue-50/50',
-    borderColor: 'border-blue-200',
-    badgeBg: 'bg-blue-100',
-    badgeText: 'text-blue-800'
-  },
-  'gestion-pila': {
-    primary: 'green',
-    bgGradient: 'from-green-50 via-white to-green-50/30',
-    iconBg: 'bg-green-500',
-    accentColor: 'text-green-600',
-    lightBg: 'bg-green-50/50',
-    borderColor: 'border-green-200',
-    badgeBg: 'bg-green-100',
-    badgeText: 'text-green-800'
-  },
-  'recobro-incapacidades': {
-    primary: 'purple',
-    bgGradient: 'from-purple-50 via-white to-purple-50/30',
-    iconBg: 'bg-purple-500',
-    accentColor: 'text-purple-600',
-    lightBg: 'bg-purple-50/50',
-    borderColor: 'border-purple-200',
-    badgeBg: 'bg-purple-100',
-    badgeText: 'text-purple-800'
-  },
-  'seguros': {
-    primary: 'amber',
-    bgGradient: 'from-amber-50 via-white to-amber-50/30',
-    iconBg: 'bg-amber-500',
-    accentColor: 'text-amber-600',
-    lightBg: 'bg-amber-50/50',
-    borderColor: 'border-amber-200',
-    badgeBg: 'bg-amber-100',
-    badgeText: 'text-amber-800'
-  }
-}
-
 export const serviceCategoriesData: ServiceCategoryData[] = [
   {
     id: 'afiliaciones-seguridad-social',
@@ -151,8 +93,6 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Traslados de EPS Garantizados (devolución si no se logra)',
       'Inclusión de Beneficiarios (Pago de UPC Adicional)'
     ],
-    bgColor: 'bg-blue-50',
-    textColor: 'text-gray-900',
     isPopular: true
   },
   {
@@ -169,9 +109,7 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Cumplimiento normativo UGPP garantizado',
       'Pagos 100% seguros y trazables',
       'Reportes en tiempo real'
-    ],
-    bgColor: 'bg-green-50',
-    textColor: 'text-gray-900'
+    ]
   },
   {
     id: 'recobro-incapacidades',
@@ -187,9 +125,7 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Gestión completa de documentación',
       'Seguimiento hasta la aprobación',
       'Mejora del flujo de caja empresarial'
-    ],
-    bgColor: 'bg-purple-50',
-    textColor: 'text-gray-900'
+    ]
   },
   {
     id: 'seguros',
@@ -206,9 +142,7 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Seguros de Viajes',
       'Accidentes Personales',
       'Títulos de Capitalización'
-    ],
-    bgColor: 'bg-amber-50',
-    textColor: 'text-gray-900'
+    ]
   }
 ]
 
@@ -344,7 +278,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Afiliaciones a Seguridad Social',
     shortDescription: 'Para Empresas e Independientes',
     fullDescription: 'Su tranquilidad y la de sus colaboradores es nuestro compromiso. Nos especializamos en facilitar y gestionar todos los trámites relacionados con la Seguridad Social en Colombia, asegurando que siempre estés protegido y al día con tus obligaciones.',
-    theme: serviceThemes['afiliaciones-seguridad-social'],
     iconType: 'shield',
     badge: {
       text: 'Más Solicitado',
@@ -439,7 +372,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Gestión y Liquidación de Planilla PILA',
     shortDescription: 'Ahorre tiempo y evite sanciones',
     fullDescription: 'El cálculo y pago de la Planilla Integrada de Liquidación de Aportes (PILA) puede ser un proceso complejo y propenso a errores que derivan en sanciones. Nuestro servicio está diseñado para liberarlo de esa carga, garantizando que los aportes a la seguridad social se realicen de manera correcta y puntual.',
-    theme: serviceThemes['gestion-pila'],
     iconType: 'file',
     targetAudience: [
       {
@@ -540,7 +472,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Recobro de Incapacidades y Licencias',
     shortDescription: 'Optimizamos el reembolso ante EPS, ARL y Fondos de Pensiones',
     fullDescription: 'El pago de incapacidades y licencias es una obligación del empleador, pero su recobro es un derecho fundamental. Sin embargo, el proceso para obtener el reembolso del dinero pagado a sus colaboradores puede ser un laberinto burocrático. Nuestro servicio se encarga de todo el proceso de principio a fin.',
-    theme: serviceThemes['recobro-incapacidades'],
     iconType: 'heart',
     targetAudience: [
       {
@@ -652,7 +583,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Seguro de Vehículos',
     shortDescription: 'Protección integral para su vehículo',
     fullDescription: 'Ofrecemos las mejores opciones de seguros de vehículos del mercado colombiano. Desde pólizas todo riesgo hasta SOAT, le asesoramos para encontrar la cobertura perfecta para sus necesidades y presupuesto.',
-    theme: serviceThemes['seguros'],
     iconType: 'car',
     parentCategory: 'seguros',
     targetAudience: [
@@ -725,7 +655,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Seguros de Salud',
     shortDescription: 'Medicina prepagada y planes de salud',
     fullDescription: 'Acceda a los mejores servicios médicos con nuestras opciones de medicina prepagada y planes de salud. Le asesoramos para encontrar la cobertura ideal para usted y su familia.',
-    theme: serviceThemes['seguros'],
     iconType: 'stethoscope',
     parentCategory: 'seguros',
     targetAudience: [
@@ -798,7 +727,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Seguros de Vida, Educación y Ahorro',
     shortDescription: 'Proteja el futuro de su familia',
     fullDescription: 'Asegure el bienestar financiero de sus seres queridos con nuestros seguros de vida. Además, planifique la educación de sus hijos y construya un patrimonio con nuestros productos de ahorro e inversión.',
-    theme: serviceThemes['seguros'],
     iconType: 'umbrella',
     parentCategory: 'seguros',
     targetAudience: [
@@ -880,7 +808,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Seguro para Mascotas',
     shortDescription: 'Protección para su mejor amigo',
     fullDescription: 'Su mascota es parte de la familia. Protéjala con nuestros planes de seguro que cubren gastos veterinarios, accidentes y enfermedades. Porque ellos también merecen la mejor atención.',
-    theme: serviceThemes['seguros'],
     iconType: 'paw-print',
     parentCategory: 'seguros',
     targetAudience: [
@@ -953,7 +880,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Seguros para Empresas',
     shortDescription: 'Protección integral para su negocio',
     fullDescription: 'Proteja su empresa con nuestras soluciones de seguros corporativos. Desde responsabilidad civil hasta incendio y robo, ofrecemos coberturas diseñadas para las necesidades específicas de cada negocio.',
-    theme: serviceThemes['seguros'],
     iconType: 'building-2',
     parentCategory: 'seguros',
     targetAudience: [
@@ -1037,7 +963,6 @@ export const servicePages: ServicePageData[] = [
     name: 'Otros Productos de Seguros',
     shortDescription: 'Hogar, viajes, accidentes personales y más',
     fullDescription: 'Complementamos nuestra oferta con productos de seguros para cada aspecto de su vida. Desde la protección de su hogar hasta seguros de viaje y accidentes personales, tenemos la solución que necesita.',
-    theme: serviceThemes['seguros'],
     iconType: 'package',
     parentCategory: 'seguros',
     targetAudience: [

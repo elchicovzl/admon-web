@@ -65,5 +65,35 @@ Out of scope: hero layout redesign, replacing illustrations/photos, services gri
 
 - Native review (RDD): branch range master..24a6d4b assessed high (`hot_path` heuristic on the file name `security-social-section.tsx`), consent granted by the user, four lenses (risk, resilience, readability, reliability) captured in process, outcome approved, acknowledgement burned (lineage review-676e9524e482bfab, consumed revision sha256:4c3fdf27…). Preflight was previously blocked by the untracked `.atl/.skill-registry.cache.json`; it is now ignored via `.git/info/exclude` (local only).
 
+## Phase 2 (authorized by the user on 2026-09-30, "dale con la fase 2")
+Branch `feat/visual-refresh-phase-2` from origin/master (db4561c, PR #39 merged). Baselines: tsc 36, vitest 29/791. Delivery: single-pr for the phase.
+
+Scope:
+- Hero: replace the circular services carousel with a CSS-built dashboard mock (navy/gold; no screenshot because the dashboard needs an OTP login) that shows what the client gets: affiliations table, status badges, a floating "Afiliación aprobada" card. Keep headline, typed tagline, CTAs and trust line.
+- Services grid: four cards without an orphan (`md:grid-cols-2 xl:grid-cols-4`), equal heights, feature lists capped with a link to the detail page; remove dead `bgColor`/`textColor` from `data/services.ts`.
+- Service detail pages (`components/services/*`, `app/servicios/[slug]`) on the brand palette: `ServiceTheme` per-service colors collapse into the single brand look.
+- Login page, auth forms and transactional emails on the palette (`app/login/page.tsx`, `components/auth/*`, `emails/*`). Emails use inline styles: gold `#E0A025`, navy `#012A61`.
+- Assumption: real photos are not available in the repo; stock illustrations stay in Beneficios/Nosotros until the user supplies photos. Open item, not a task.
+
+Tasks:
+- [x] T4 — Hero with dashboard mock. New `components/ui/hero-dashboard-mock.tsx`; `hero-section.tsx` two columns; `services-slider.tsx` removed if unused. Route: delegated (writer trigger).
+- [x] T5 — Services grid + data cleanup (`services-section.tsx`, `service-card.tsx`, `data/services.ts`). Route: delegated, same writer as T4.
+- [x] T6 — Service detail pages on the palette. Route: delegated.
+- [x] T7 — Login, auth forms and emails on the palette. Route: delegated, same writer as T6.
+- [x] T8 — Verify (tsc 36, vitest, Playwright `/`, `/servicios/<slug>`, `/login` at 1440 and 390), PR. Route: inline.
+
+Progress:
+- Incident: the branch was first cut from a stale local `master`; a writer started on pre-Phase-1 code and was stopped. Branch reset to origin/master; a `git stash -u` + drop during the reset briefly lost the user's pre-existing `.atl/skill-registry.md` modification, restored from the dangling stash commit (8504c26).
+
+- T4+T5 done (commit 4a7a3c2, delegated writer): `hero-dashboard-mock.tsx` (static server component: navy sidebar strip, three stat tiles, four-row status table, two floating pills hidden below `md`, gold glow); `services-slider.tsx` deleted (typed tagline already lived in the hero); services grid `md:2 / xl:4` with feature lists capped at 5 + "Ver todos los servicios" link and bottom-aligned buttons; `bgColor`/`textColor` removed from `data/services.ts` and the unused `ServiceCategory` in `lib/types.ts`. Evidence: tsc 36, vitest 29/791; orchestrator reviewed captures at 1440 and 390 (no overflow). Leftover `bgColor`/`textColor` only in `pricing-card.tsx`/`pricing-section.tsx`, rendered solely by `app/page-legacy.tsx` (not in scope). Known nit: the hero keeps a pre-existing empty gap under the typed tagline on desktop (`min-h`).
+
+- RDD on 4a7a3c2 (base master, committed-only): medium, `review_due` (`slice_budget_reached`), consent granted by the user, one reliability lens captured, approved and acknowledged (lineage review-f09c42325e1d6214). Reviewed boundary advances to 4a7a3c2.
+
+- T6+T7 done (commit dc102f6, delegated writer): `components/services/*` read brand classes directly; `ServiceTheme`, `serviceThemes` and the `theme` field deleted from `data/services.ts`; service hero navy with gold last word; step chips gold; CTA `brand-navy-deep`; login gradient navy with one gold and one white blob; auth forms `brand` button, gold focus ring and resend link; emails `#F1AD32`→`#E0A025`, headers/accents `#012A61`, gold-soft box `#FBF1DC`, semantic warning/success colors kept. Evidence: tsc 36, vitest 29/791, forbidden-token grep empty; orchestrator reviewed captures of `/servicios/afiliaciones-seguridad-social` (4 chunks at 1440), 390 top, and `/login` at 1440. Inline follow-up a4733f0: `pulse-glow` keyframes recolored from blue to gold (`rgba(224,160,37,…)`). Writer notes: emails have no buttons; `service-timeline.tsx` no longer reads the per-item `color` field (still in data, cleanup candidate); OTP code gold on light gray may be low contrast; OTP step and rendered emails not captured.
+
+- RDD on 4a7a3c2..a4733f0 (committed-only): high (`hot_path` on `components/auth/email-step-form.tsx`), consent granted by the user, four lenses captured; the resilience capture was refused once on admission (reviewer evidence reported the candidate could not be inspected) and was relaunched exactly once on the same reoffered slot, then admitted; outcome approved with 11 advisory (non-blocking, informational) findings, acknowledged and burned (lineage review-1cf3733c7a2d0676). Advisory locations for later work: `service-timeline.tsx:12-16` (single-value color map), `service-hero.tsx:31-34` (title split by last word, untested), `service-hero.tsx:78-79` and `service-cta.tsx:79-86` (CTA handlers), `service-features.tsx:71`, `app/globals.css:288-289`, `email-step-form.tsx:89` (className tokens unverified by the reviewer), `service-related.tsx:5` (Button import removed).
+- Inline follow-up 29beac8: service pages used a placeholder WhatsApp number (`573001234567`, pre-existing since 2025-12-20) while Contacto uses the real one (`573197941064`); aligned both service components. Assess vs a4733f0: medium, 4 lines, `under_budget`.
+- Open items for the user: real photos for Beneficios/Nosotros (stock illustrations remain); `pricing-card.tsx`/`pricing-section.tsx` keep old pastel props but only `app/page-legacy.tsx` renders them; OTP code color gold on light gray may need a contrast check; hero keeps a pre-existing gap under the typed tagline on desktop; Google Maps embed to verify in a real browser.
+
 ## Next step
-Phase 1 PR review/merge. Phase 2 candidates: hero layout redesign with a dashboard mock, real photos instead of stock illustrations, services grid 2x2/4-col, service detail pages and login/emails on the brand palette, `data/services.ts` color field cleanup.
+Phase 2 PR review/merge. Phase 3 candidates: real photography, `page-legacy`/pricing cleanup or removal, OTP contrast, hero tagline spacing, `color` field cleanup in `data/services.ts` timeline data.

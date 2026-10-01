@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Eye, TrendingUp } from 'lucide-react'
 import { Typewriter } from 'react-simple-typewriter'
-import ServicesSlider from '@/components/ui/services-slider'
+import { HeroDashboardMock } from '@/components/ui/hero-dashboard-mock'
 import { SectionLabel } from '@/components/ui/section-label'
 import Squares from '@/components/ui/squares-background'
 import { memo } from 'react'
@@ -103,23 +103,18 @@ export default function HeroSection() {
             <HeroContent />
           </div>
 
-          {/* Right side with new services slider */}
-          <div className="relative z-10 flex justify-center lg:justify-end">
-            <div className="relative w-full">
-              {/* Subtle gradient backdrop */}
-              <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-brand-gold/5 rounded-3xl blur-2xl" />
-
-              {/* Services Slider */}
-              <div className="relative z-10">
-                <ServicesSlider />
-              </div>
-            </div>
+          {/* Right side: dashboard mock */}
+          <div className="relative z-10 pb-10">
+            <HeroDashboardMock />
           </div>
         </div>
 
-        {/* Mobile Layout - Text Only */}
+        {/* Mobile Layout - copy with mock below */}
         <div className="lg:hidden text-center relative z-10">
           <HeroContent isMobile />
+          <div className="mt-14 pb-6 text-left">
+            <HeroDashboardMock />
+          </div>
         </div>
       </div>
     </section>
