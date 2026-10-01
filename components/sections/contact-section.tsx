@@ -105,11 +105,11 @@ export default function ContactSection() {
   }
 
   return (
-    <section className="bg-slate-900 text-white py-16 px-4" id="contacto">
+    <section className="bg-brand-navy-deep text-white py-16 px-4" id="contacto">
       <div className="max-w-6xl mx-auto">
         {/* Interactive Map - Full Width */}
         <div className="mb-16">
-          <div className="bg-slate-800 rounded-xl overflow-hidden shadow-2xl">
+          <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
             <div className="relative h-80 w-full">
               <iframe
                 src="https://www.google.com/maps?q=Centro+Comercial+Almacentro,+Cra+43A+%2334-95,+Medell%C3%ADn,+Antioquia&output=embed"
@@ -124,16 +124,15 @@ export default function ContactSection() {
               />
             </div>
 
-            <div className="p-6 bg-slate-800">
+            <div className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold text-lg">Administración Segura</h4>
-                  <p className="text-slate-400 text-sm">Cra 43 A # 34 - 95, Centro Comercial Almacentro, Local 320</p>
+                  <p className="text-white/70 text-sm">Cra 43 A # 34 - 95, Centro Comercial Almacentro, Local 320</p>
                 </div>
                 <Button
-                  variant="outline"
+                  variant="brand-outline-light"
                   size="sm"
-                  className="border-slate-600 text-slate-300 hover:bg-slate-700 bg-transparent"
                   onClick={() =>
                     window.open("https://maps.google.com/?q=Centro+Comercial+Almacentro,+Cra+43A+%2334-95,+Medell%C3%ADn,+Antioquia", "_blank")
                   }
@@ -142,8 +141,8 @@ export default function ContactSection() {
                 </Button>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-700">
-                <div className="flex items-center space-x-4 text-sm text-slate-400">
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="flex items-center space-x-4 text-sm text-white/70">
                   <div className="flex items-center space-x-1">
                     <div className={`w-2 h-2 rounded-full ${businessStatus.isOpen ? 'bg-green-500' : 'bg-red-500'}`}></div>
                     <span>{businessStatus.isOpen ? 'Abierto ahora' : 'Cerrado'}</span>
@@ -160,16 +159,16 @@ export default function ContactSection() {
         <div className="grid lg:grid-cols-2 gap-12">
           {/* Contact Info - Left Column */}
           <div>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-8 text-balance">Encuéntranos</h2>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold mb-8 text-balance">Encuéntranos</h2>
 
             <div className="space-y-8">
               <div className="flex items-start space-x-4">
-                <div className="bg-blue-600 p-3 rounded-lg">
+                <div className="bg-brand-gold/15 text-brand-gold p-3 rounded-lg">
                   <MapPin className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold mb-2">Nuestra Ubicación</h3>
-                  <p className="text-slate-300 leading-relaxed">
+                  <h3 className="text-xl font-figtree font-bold mb-2">Nuestra Ubicación</h3>
+                  <p className="text-white/80 leading-relaxed">
                     Cra 43 A # 34 - 95, Centro Comercial Almacentro, Local 320
                     <br />
                     Medellín, Colombia
@@ -178,14 +177,14 @@ export default function ContactSection() {
               </div>
 
               <div className="flex items-start space-x-4">
-                <div className="bg-blue-600 p-3 rounded-lg">
+                <div className="bg-brand-gold/15 text-brand-gold p-3 rounded-lg">
                   <Mail className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold mb-2">Correo Electrónico</h3>
+                  <h3 className="text-xl font-figtree font-bold mb-2">Correo Electrónico</h3>
                   <a
                     href="mailto:admon.segura.med@gmail.com"
-                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                    className="text-brand-gold hover:text-brand-gold/80 transition-colors"
                   >
                     admon.segura.med@gmail.com
                   </a>
@@ -193,24 +192,24 @@ export default function ContactSection() {
               </div>
 
               <div className="flex items-start space-x-4">
-                <div className="bg-blue-600 p-3 rounded-lg">
+                <div className="bg-brand-gold/15 text-brand-gold p-3 rounded-lg">
                   <Phone className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold mb-2">Número de Teléfono</h3>
-                  <a href="tel:+573197941064" className="text-blue-400 hover:text-blue-300 transition-colors">
+                  <h3 className="text-xl font-figtree font-bold mb-2">Número de Teléfono</h3>
+                  <a href="tel:+573197941064" className="text-brand-gold hover:text-brand-gold/80 transition-colors">
                     +57 (319) 794-1064
                   </a>
                 </div>
               </div>
 
               <div className="flex items-start space-x-4">
-                <div className="bg-blue-600 p-3 rounded-lg">
+                <div className="bg-brand-gold/15 text-brand-gold p-3 rounded-lg">
                   <Clock className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-semibold mb-2">Horarios de Atención</h3>
-                  <div className="text-slate-300 space-y-1">
+                  <h3 className="text-xl font-figtree font-bold mb-2">Horarios de Atención</h3>
+                  <div className="text-white/80 space-y-1">
                     <p>Lunes a Viernes: 8:00 AM - 5:00 PM</p>
                     <p>Sábado y Domingo: Cerrado</p>
                   </div>
@@ -220,15 +219,13 @@ export default function ContactSection() {
 
             <div className="mt-8 grid grid-cols-2 gap-4">
               <Button
-                variant="outline"
-                className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white bg-transparent"
+                variant="brand-outline-light"
                 onClick={() => window.open("https://wa.me/573197941064", "_blank")}
               >
                 WhatsApp
               </Button>
               <Button
-                variant="outline"
-                className="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white bg-transparent"
+                variant="brand-outline-light"
                 onClick={() => window.open("tel:+573197941064")}
               >
                 Llamar Ahora
@@ -238,7 +235,7 @@ export default function ContactSection() {
 
           {/* Contact Form - Right Column */}
           <div>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-8 text-balance">Envíanos un mensaje</h2>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold mb-8 text-balance">Envíanos un mensaje</h2>
 
             {/* Status Messages */}
             {status.type === 'success' && (
@@ -278,7 +275,7 @@ export default function ContactSection() {
                     value={formData.fullName}
                     onChange={handleInputChange}
                     disabled={isPending}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
+                    className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus:border-brand-gold focus-visible:border-brand-gold disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -289,7 +286,7 @@ export default function ContactSection() {
                     value={formData.email}
                     onChange={handleInputChange}
                     disabled={isPending}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
+                    className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus:border-brand-gold focus-visible:border-brand-gold disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -302,7 +299,7 @@ export default function ContactSection() {
                     value={formData.subject}
                     onChange={handleInputChange}
                     disabled={isPending}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
+                    className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus:border-brand-gold focus-visible:border-brand-gold disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -312,7 +309,7 @@ export default function ContactSection() {
                     value={formData.phone}
                     onChange={handleInputChange}
                     disabled={isPending}
-                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 disabled:opacity-50"
+                    className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus:border-brand-gold focus-visible:border-brand-gold disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -325,7 +322,7 @@ export default function ContactSection() {
                   onChange={handleInputChange}
                   disabled={isPending}
                   rows={4}
-                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-400 resize-none disabled:opacity-50"
+                  className="bg-white/5 border-white/15 text-white placeholder:text-white/50 focus:border-brand-gold focus-visible:border-brand-gold resize-none disabled:opacity-50"
                 />
               </div>
 
@@ -335,9 +332,9 @@ export default function ContactSection() {
                   checked={formData.acceptTerms}
                   onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, acceptTerms: checked as boolean }))}
                   disabled={isPending}
-                  className="border-slate-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                  className="border-white/30 data-[state=checked]:bg-brand-gold data-[state=checked]:border-brand-gold data-[state=checked]:text-brand-navy"
                 />
-                <label htmlFor="terms" className="text-sm text-slate-300 leading-relaxed">
+                <label htmlFor="terms" className="text-sm text-white/80 leading-relaxed">
                   Al marcar esta casilla, aceptas el uso de nuestros términos del "Formulario" y consientes el uso de
                   cookies en el navegador.
                 </label>
@@ -347,7 +344,9 @@ export default function ContactSection() {
                 <Button
                   type="submit"
                   disabled={isPending}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-8 w-full disabled:opacity-50"
+                  variant="brand"
+                  size="xl"
+                  className="w-full disabled:opacity-50"
                 >
                   {isPending ? (
                     <>

@@ -2,14 +2,13 @@ import { processSteps } from '@/data/features'
 import CardSwap, { Card } from '@/components/ui/card-swap'
 import ScrollStack, { ScrollStackItem } from '@/components/ui/scroll-stack'
 import { memo } from 'react'
+import { SectionLabel } from '@/components/ui/section-label'
 
 // Memoized header component to avoid duplication
 const ProcessHeader = memo(({ isMobile }: { isMobile?: boolean }) => (
   <div className={isMobile ? 'text-center mb-12' : 'text-left'}>
-    <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-blue-50 text-blue-700 mb-4 shadow-sm border border-blue-200/50">
-      <span className="w-2 h-2 bg-gradient-to-r from-blue-500 to-blue-400 rounded-full mr-2"></span>CÓMO FUNCIONA
-    </span>
-    <h2 className="text-3xl md:text-4xl lg:text-5xl font-normal text-gray-900 leading-tight">
+    <SectionLabel className="mb-4">Cómo funciona</SectionLabel>
+    <h2 className="text-3xl md:text-4xl lg:text-5xl font-figtree font-bold text-brand-navy leading-tight">
       3 pasos para tu tranquilidad
     </h2>
   </div>
@@ -19,19 +18,13 @@ ProcessHeader.displayName = 'ProcessHeader'
 
 // Memoized card content component to avoid duplication
 const ProcessStepCard = memo(({ step, isMobile }: { step: typeof processSteps[0]; isMobile?: boolean }) => (
-  <div className={`${isMobile ? 'p-3' : 'p-8'} h-full flex flex-col justify-center bg-gradient-to-br from-gray-50/50 to-white/80 rounded-xl`}>
+  <div className={`${isMobile ? 'p-3' : 'p-8'} h-full flex flex-col justify-center bg-white border border-gray-200 rounded-2xl`}>
     <div
-      className={`w-16 ${isMobile ? 'h-18' : 'h-16'} flex items-center justify-center rounded-xl text-2xl font-bold mb-6 mx-auto shadow-sm`}
-      style={{
-        background: `linear-gradient(135deg, ${step.backgroundColor}, ${step.backgroundColor}dd)`,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-      }}
+      className={`w-16 ${isMobile ? 'h-18' : 'h-16'} flex items-center justify-center rounded-xl text-2xl font-bold mb-6 mx-auto shadow-sm bg-brand-gold text-brand-navy`}
     >
-      <span style={{ color: step.color === step.backgroundColor ? '#fff' : step.color }}>
-        {step.step}
-      </span>
+      {step.step}
     </div>
-    <h3 className={`text-2xl font-bold text-gray-900 mb-4 text-center ${isMobile ? 'leading-tight' : ''}`}>
+    <h3 className={`text-2xl font-figtree font-bold text-brand-navy mb-4 text-center ${isMobile ? 'leading-tight' : ''}`}>
       {step.title}
     </h3>
     <p className={`text-gray-600 leading-relaxed text-center ${isMobile ? 'text-sm' : ''}`}>
@@ -44,13 +37,7 @@ ProcessStepCard.displayName = 'ProcessStepCard'
 
 export default function ProcessSection() {
   return (
-    <section className="relative py-20 bg-gradient-to-b from-white via-blue-50/40 to-white border-t border-blue-100/50" id="process">
-      {/* Decorative Blobs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-72 h-72 bg-[#F1AD32]/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl" />
-      </div>
-
+    <section className="relative py-20 bg-white" id="process">
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Desktop Layout */}
         <div className="hidden lg:grid lg:grid-cols-2 gap-12 items-center">
