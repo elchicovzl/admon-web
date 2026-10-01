@@ -4,8 +4,6 @@ export interface ServiceCategoryData {
   description: string
   iconType: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart'
   services: string[]
-  bgColor: string
-  textColor: string
   isPopular?: boolean
 }
 
@@ -151,8 +149,6 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Traslados de EPS Garantizados (devolución si no se logra)',
       'Inclusión de Beneficiarios (Pago de UPC Adicional)'
     ],
-    bgColor: 'bg-blue-50',
-    textColor: 'text-gray-900',
     isPopular: true
   },
   {
@@ -169,9 +165,7 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Cumplimiento normativo UGPP garantizado',
       'Pagos 100% seguros y trazables',
       'Reportes en tiempo real'
-    ],
-    bgColor: 'bg-green-50',
-    textColor: 'text-gray-900'
+    ]
   },
   {
     id: 'recobro-incapacidades',
@@ -187,9 +181,7 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Gestión completa de documentación',
       'Seguimiento hasta la aprobación',
       'Mejora del flujo de caja empresarial'
-    ],
-    bgColor: 'bg-purple-50',
-    textColor: 'text-gray-900'
+    ]
   },
   {
     id: 'seguros',
@@ -206,9 +198,7 @@ export const serviceCategoriesData: ServiceCategoryData[] = [
       'Seguros de Viajes',
       'Accidentes Personales',
       'Títulos de Capitalización'
-    ],
-    bgColor: 'bg-amber-50',
-    textColor: 'text-gray-900'
+    ]
   }
 ]
 

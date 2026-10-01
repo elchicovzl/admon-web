@@ -14,10 +14,10 @@ interface ServiceCardProps {
   description: string
   services: string[]
   isPopular?: boolean
-  bgColor: string
-  textColor: string
   iconType: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart'
 }
+
+const MAX_VISIBLE_FEATURES = 5
 
 const ServiceCard = memo(function ServiceCard({
   id,
@@ -28,6 +28,8 @@ const ServiceCard = memo(function ServiceCard({
   iconType,
 }: ServiceCardProps) {
   const { scrollToSection } = useSmoothScroll()
+  const visibleServices = services.slice(0, MAX_VISIBLE_FEATURES)
+  const hasMore = services.length > MAX_VISIBLE_FEATURES
   const getIcon = (type: 'clock' | 'chart' | 'star' | 'shield' | 'file' | 'heart') => {
     const iconProps = { size: 32, className: "text-brand-navy" }
 
@@ -63,7 +65,26 @@ const ServiceCard = memo(function ServiceCard({
         <p className="text-gray-600 text-sm">{description}</p>
       </div>
 
-      <div className="flex flex-col space-y-3 mb-8">
+      <ul className="space-y-3 text-gray-700 mb-6">
+        {visibleServices.map((service, index) => (
+          <li key={index} className="flex items-start text-sm">
+            <CheckCircle className="w-4 h-4 text-brand-gold mr-2 flex-shrink-0 mt-0.5" />
+            <span>{service}</span>
+          </li>
+        ))}
+      </ul>
+
+      {hasMore && (
+        <Button
+          asChild
+          variant="link"
+          className="mb-6 h-auto self-start p-0 text-sm font-semibold text-brand-navy"
+        >
+          <Link href={`/servicios/${id}`}>Ver todos los servicios</Link>
+        </Button>
+      )}
+
+      <div className="flex flex-col space-y-3 mt-auto">
         <Link href={`/servicios/${id}`}>
           <Button variant="brand" size="lg" className="w-full cursor-pointer">
             Conocer Más
@@ -79,15 +100,6 @@ const ServiceCard = memo(function ServiceCard({
           Solicitar Cotización
         </Button>
       </div>
-
-      <ul className="space-y-3 text-gray-700 flex-grow">
-        {services.map((service, index) => (
-          <li key={index} className="flex items-start text-sm">
-            <CheckCircle className="w-4 h-4 text-brand-gold mr-2 flex-shrink-0 mt-0.5" />
-            <span>{service}</span>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 })

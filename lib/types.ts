@@ -91,8 +91,6 @@ export interface ServiceCategory {
   description: string
   icon: React.ReactNode
   services: string[]
-  bgColor: string
-  textColor: string
   isPopular?: boolean
 }
 
