@@ -44,7 +44,6 @@ export interface TimelineItem {
   period: string
   responsible: string
   description: string
-  color: string
 }
 
 export interface ServicePageData {
@@ -546,26 +545,22 @@ export const servicePages: ServicePageData[] = [
       {
         period: 'Días 1-2',
         responsible: 'Empleador',
-        description: 'Pagados por el empleador al 100%. No hay recobro.',
-        color: 'gray'
+        description: 'Pagados por el empleador al 100%. No hay recobro.'
       },
       {
         period: 'Días 3-180',
         responsible: 'EPS',
-        description: 'El recobro se gestiona ante la EPS. Nos encargamos de toda la documentación.',
-        color: 'blue'
+        description: 'El recobro se gestiona ante la EPS. Nos encargamos de toda la documentación.'
       },
       {
         period: 'Días 181-540',
         responsible: 'Fondo de Pensiones',
-        description: 'Requiere concepto de rehabilitación favorable de la EPS. Si la EPS falla, vigilamos que continúe pagando.',
-        color: 'purple'
+        description: 'Requiere concepto de rehabilitación favorable de la EPS. Si la EPS falla, vigilamos que continúe pagando.'
       },
       {
         period: 'Días 541+',
         responsible: 'EPS (condiciones especiales)',
-        description: 'Gestionamos la continuidad del pago por parte de la EPS bajo las condiciones específicas que exige la ley.',
-        color: 'amber'
+        description: 'Gestionamos la continuidad del pago por parte de la EPS bajo las condiciones específicas que exige la ley.'
       }
     ],
     seo: {
