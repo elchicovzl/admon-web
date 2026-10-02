@@ -175,12 +175,13 @@ export class AlegraClient {
   //
   // Differences vs /invoices (see mem: finances/v2-estimates-api-shape):
   //   - No `status` parameter — estimates don't have a status field
-  //   - No date_after/date_before — only exact `date` filter; range filtering
-  //     is done by walking pages in `lib/alegra/estimates-range.ts`
+  //   - Supports date_after / date_before (verified 2026-10-02) as well as an
+  //     exact `date`; the range walk in `lib/alegra/date-range-walk.ts` uses
+  //     them to narrow the pages it reads
   //   - Default order_direction on the API is ASC; we force DESC for UI parity
   //     with the invoices list (newest first)
   //   - Default order_field on the API is `id` (creation order) — we force
-  //     `date`. See the note on `listEstimates` below; this one has teeth.
+  //     `date`. See the note on `listEstimates` below.
   // ---------------------------------------------------------------------------
 
   /**
@@ -189,32 +190,24 @@ export class AlegraClient {
    * Both ordering defaults are forced here rather than left to the API:
    *
    *   order_direction: 'DESC'  — newest first, matching the invoices list.
-   *   order_field:     'date'  — sort by the DOCUMENT date, not by id.
+   *   order_field:     'date'  — sort by the DOCUMENT date.
    *
-   * That second one is not cosmetic. The API defaults to ordering by `id`,
-   * i.e. creation order, and a cotización can be created today carrying last
-   * month's date. Every caller that reasons about "the most recent N" or
-   * stops paginating once it sees an out-of-range date is silently wrong
-   * under an id-ordered list — which is exactly how the "Cotizado mes"
-   * KPI ended up summing the wrong 30 documents.
+   * Not `id`: Alegra sorts `id` as a STRING (`1, 10, 100…`; DESC opens on 999
+   * while the newest estimate is 1267), so the newest documents end up
+   * unreachable and the list opens months in the past (verified 2026-10-02).
    *
-   * Forcing it at the transport closes the whole class of bug instead of
-   * patching each call site. `...params` still spreads last, so a caller
-   * with a genuine reason to sort differently can override.
+   * Ordering by `date` does not tie-break documents of the same day in a
+   * stable way, so a date group straddling a page boundary can repeat or lose
+   * rows. That is handled by the boundary refetch in `collectByDateRange`
+   * (exact `date` filter), not by the sort order.
+   *
+   * `...params` still spreads last, so a caller with a genuine reason to sort
+   * differently can override.
    */
   async listEstimates(params: ListEstimatesParams = {}): Promise<EstimateListResponse> {
     const normalized: ListEstimatesParams = {
       metadata: true,
-      // Se ordena por `id` y no por `date` a propósito. Alegra no desempata de
-      // forma estable entre documentos del mismo día, así que paginar sobre un
-      // orden por fecha repite y pierde filas en los bordes de página — medido
-      // contra la cuenta real: 81 filas para 73 cotizaciones distintas. El `id`
-      // es único, así que la paginación se vuelve determinista.
-      //
-      // El costo es perder el corte temprano por fecha: el id ordena por
-      // creación, no por la fecha del documento. Lo compensa el margen de
-      // páginas de collectByDateRange (ver `orden: 'id'` ahí).
-      order_field: 'id',
+      order_field: 'date',
       order_direction: 'DESC',
       ...params,
     }
@@ -228,8 +221,7 @@ export class AlegraClient {
    * aparece como línea en una cotización o factura — "Independiente 03",
    * "Administracion", "Recaudo para Terceros".
    *
-   * Se ordena por `id` y no por `name` por la misma razón que los documentos
-   * (ver date-range-walk): Alegra no desempata de forma estable, y un orden
+   * Se ordena por `id` y no por `name`: Alegra no desempata de forma estable, y un orden
    * que no desempata hace que paginar repita filas y pierda otras. Con nombres
    * repetidos — que los hay, porque `name` no es único en Alegra — eso se
    * traduce en servicios que la sincronización nunca ve y termina apagando.
@@ -260,8 +252,8 @@ export class AlegraClient {
   // because the API defaults to id (creation order) and the date-range walk
   // stops early on the first out-of-range date.
   //
-  // Like /estimates, /bills has NO date_after / date_before — only an exact
-  // `date`. Range queries go through `lib/alegra/date-range-walk.ts`.
+  // Unlike /estimates, /bills has NO working date_after / date_before — only an
+  // exact `date`. Range queries go through `lib/alegra/date-range-walk.ts`.
   // ---------------------------------------------------------------------------
 
   /** List purchase invoices (bills) with optional filters. */
@@ -269,9 +261,8 @@ export class AlegraClient {
     const normalized: ListBillsParams = {
       metadata: true,
 
-      // /bills NO acepta order_field: 'id' — solo date/name/dueDate. Se queda
-      // en 'date' y depende del descarte de repetidos de collectByDateRange,
-      // que cubre el síntoma más visible aunque no la inestabilidad de fondo.
+      // /bills does not accept ordering by id — only date/name/dueDate. Same-date
+      // instability is covered by the boundary refetch in collectByDateRange.
       order_field: 'date',
       order_direction: 'DESC',
       ...params,
@@ -302,8 +293,9 @@ export class AlegraClient {
   //     `bills` and `categories` are opt-in fields, and `bills` is precisely
   //     the one the expense side depends on.
   //
-  // ⚠️ /payments has NO date filter at all — not even exact `date`. It is the
-  // most restricted list endpoint of the four; every date-scoped read walks.
+  // ⚠️ /payments has NO date RANGE filter (date_after / date_before are
+  // ignored); only an exact `date` works (verified 2026-10-02). Range reads
+  // walk, using the exact filter to settle dates that straddle a page boundary.
   // ---------------------------------------------------------------------------
 
   /** Extra fields required for expense classification. See the note above. */
@@ -313,16 +305,10 @@ export class AlegraClient {
   async listPayments(params: ListPaymentsParams = {}): Promise<PaymentListResponse> {
     const normalized: ListPaymentsParams = {
       metadata: true,
-      // Se ordena por `id` y no por `date` a propósito. Alegra no desempata de
-      // forma estable entre documentos del mismo día, así que paginar sobre un
-      // orden por fecha repite y pierde filas en los bordes de página — medido
-      // contra la cuenta real: 81 filas para 73 cotizaciones distintas. El `id`
-      // es único, así que la paginación se vuelve determinista.
-      //
-      // El costo es perder el corte temprano por fecha: el id ordena por
-      // creación, no por la fecha del documento. Lo compensa el margen de
-      // páginas de collectByDateRange (ver `orden: 'id'` ahí).
-      order_field: 'id',
+      // Sorted by `date`, not `id`: Alegra sorts `id` as a string (see
+      // `listEstimates`). Unstable same-date pagination is answered by the
+      // walk's boundary refetch via the exact `date` filter.
+      order_field: 'date',
       order_direction: 'DESC',
       fields: AlegraClient.PAYMENT_FIELDS,
       ...params,

@@ -425,6 +425,71 @@ describe('AlegraClient — listInvoices', () => {
 })
 
 // -----------------------------------------------------------------------------
+// listEstimates / listPayments — ordering and date filters
+// -----------------------------------------------------------------------------
+
+describe('AlegraClient — orden y filtros de fecha', () => {
+  function stubEmptyList() {
+    const fetchMock = vi.fn().mockResolvedValue(buildResponse({ json: buildEmptyInvoicesResponse() }))
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  function paramsOf(fetchMock: ReturnType<typeof vi.fn>): URLSearchParams {
+    return new URL(fetchMock.mock.calls[0]![0] as string).searchParams
+  }
+
+  it('listEstimates ordena por date DESC por defecto (id se ordena como string)', async () => {
+    const fetchMock = stubEmptyList()
+    await new AlegraClient().listEstimates()
+
+    const params = paramsOf(fetchMock)
+    expect(params.get('order_field')).toBe('date')
+    expect(params.get('order_direction')).toBe('DESC')
+  })
+
+  it('listPayments ordena por date DESC por defecto', async () => {
+    const fetchMock = stubEmptyList()
+    await new AlegraClient().listPayments()
+
+    const params = paramsOf(fetchMock)
+    expect(params.get('order_field')).toBe('date')
+    expect(params.get('order_direction')).toBe('DESC')
+  })
+
+  it('permite sobrescribir el orden en ambos', async () => {
+    const estimates = stubEmptyList()
+    await new AlegraClient().listEstimates({ order_field: 'id', order_direction: 'ASC' })
+    expect(paramsOf(estimates).get('order_field')).toBe('id')
+    expect(paramsOf(estimates).get('order_direction')).toBe('ASC')
+
+    const payments = stubEmptyList()
+    await new AlegraClient().listPayments({ order_field: 'number', order_direction: 'ASC' })
+    expect(paramsOf(payments).get('order_field')).toBe('number')
+    expect(paramsOf(payments).get('order_direction')).toBe('ASC')
+  })
+
+  it('listEstimates reenvía date_after y date_before', async () => {
+    const fetchMock = stubEmptyList()
+    await new AlegraClient().listEstimates({ date_after: '2026-09-01', date_before: '2026-09-30' })
+
+    const params = paramsOf(fetchMock)
+    expect(params.get('date_after')).toBe('2026-09-01')
+    expect(params.get('date_before')).toBe('2026-09-30')
+  })
+
+  it('listEstimates y listPayments reenvían la fecha exacta', async () => {
+    const estimates = stubEmptyList()
+    await new AlegraClient().listEstimates({ date: '2026-10-02' })
+    expect(paramsOf(estimates).get('date')).toBe('2026-10-02')
+
+    const payments = stubEmptyList()
+    await new AlegraClient().listPayments({ date: '2026-10-01' })
+    expect(paramsOf(payments).get('date')).toBe('2026-10-01')
+  })
+})
+
+// -----------------------------------------------------------------------------
 // getCompany
 // -----------------------------------------------------------------------------
 
