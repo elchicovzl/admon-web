@@ -49,7 +49,7 @@ Out of scope: UI changes, cache TTLs, Control module logic (it only consumes `Da
 - [x] T2 — Deterministic walk with `fetchByDate` boundary refetch and `total` guard. Route: delegated.
 - [x] T3 — Cache range readers wired to the new walk. Route: delegated.
 - [x] T4 — Tests. Route: delegated.
-- [ ] T5 — Verify, live check, PR. Route: inline.
+- [x] T5 — Verify, live check, PR. Route: inline.
 
 ## Acceptance criteria
 - `rg -n "order_field: 'id'|orden: 'id'|OrdenDeLista|margenPaginas" lib` is empty.
@@ -62,5 +62,7 @@ Out of scope: UI changes, cache TTLs, Control module logic (it only consumes `Da
 - T1–T4 done (commit 11f46f6, delegated writer): `listEstimates`/`listPayments` default to `date DESC`; `date_after`/`date_before` on estimates params, `date` on payments; walk hook is `fetchDatePage(date, start, limit)` (`DatePageFetcher<T>` exported, `DateRangeOptions<T>` generic), paginated with the same short-page/total guards, counted in `pagesFetched`; a refetched date becomes authoritative (later rows of that date are ignored); hook hitting `maxPages` marks `truncated`. `orden`/`margenPaginas`/`OrdenDeLista` removed; cache readers pass range filters and the hook. Evidence: vitest 29 files / 798 tests (+7: boundary straddle with unstable tie-break, three-page straddle, out-of-range straddle, total guard, hook truncation, client default order + overrides), tsc 36 = baseline (the `lib/alegra` hits are the pre-existing `transformers.test.ts` readonly-tuple errors). Acceptance grep note: `order_field: 'id'` still appears in `listItems` (`/items`, out of scope) and in two tests that assert the override path; accepted.
 - Live check (orchestrator, `tsx` script against the real API with the user's credentials, 2026-10-02): `listEstimates({limit:3})` → `1267/1265/2026-10-02, 1266/1264/2026-10-01, 1265/1263/2026-09-28`; September walk with `date_after/date_before` + hook → 67 items, 67 unique, `truncated: false`, 5 upstream pages (3 list + 2 exact-date); April → 62/62, not truncated, 3 pages. Acceptance criteria met.
 
+- RDD on master..27ebd74 (committed-only): medium, `slice_budget_reached`, consent granted by the user, one reliability lens, approved and acknowledged (lineage review-894e9f1c8474df5b) with 3 advisory findings (non-blocking): `date-range-walk.ts:196-219` (exact-date refetch loop), `:227` (replaceDate), `cache.ts:433-446` (payments hook). Preflight needed `.codegraph/` added to `.git/info/exclude` (local only; `codegraph init` left an untracked `.codegraph/.gitignore`).
+
 ## Next step
-T5: native review (RDD), push, PR. User rotates the Alegra token afterwards.
+PR review/merge. User rotates the Alegra token (credentials were shared in chat for the live checks). Follow-up candidates: `listItems` still sorts `/items` by `id` (string sort is harmless there but inconsistent); the Control module consumers could surface `pagesFetched` for observability.
