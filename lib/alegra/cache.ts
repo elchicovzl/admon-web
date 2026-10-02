@@ -217,10 +217,11 @@ export interface EstimatesRangeQuery {
  * Every estimate whose `date` falls in [dateFrom, dateTo], paginating as far
  * as needed instead of trusting a single 30-row page.
  *
- * `order_field: 'date'` is now forced inside `AlegraClient.listEstimates`
- * (see the note there), so it isn't repeated here. It remains load-bearing:
- * the walk stops at the first document older than the range, which is only a
- * valid shortcut while the list is genuinely date-sorted.
+ * `order_field: 'date'` is forced inside `AlegraClient.listEstimates` (see the
+ * note there), so it isn't repeated here. It remains load-bearing: the walk
+ * stops at the first document older than the range, which is only a valid
+ * shortcut while the list is genuinely date-sorted. `date_after` /
+ * `date_before` narrow the walk server-side.
  *
  * `clientName` goes to the API as a real server-side filter, so combining it
  * with a date range narrows the walk instead of widening it.
@@ -241,11 +242,23 @@ export function getCachedEstimatesInRange(
           getAlegraClient().listEstimates({
             start,
             limit,
+            date_after: dateFrom ?? undefined,
+            date_before: dateTo ?? undefined,
             client_name: clientName ?? undefined,
           }),
-        // 'id': /estimates se pide ordenado por id, que es único y hace la
-        // paginación determinista. Ver la nota en AlegraClient.listEstimates.
-        { dateFrom, dateTo, label: 'cotizaciones', orden: 'id' },
+        {
+          dateFrom,
+          dateTo,
+          label: 'cotizaciones',
+          // Exact-date refetch for dates that straddle a page boundary.
+          fetchDatePage: (date, start, limit) =>
+            getAlegraClient().listEstimates({
+              date,
+              start,
+              limit,
+              client_name: clientName ?? undefined,
+            }),
+        },
       ),
     ['alegra', 'estimates', 'range', key, String(ttl)],
     {
@@ -309,8 +322,7 @@ export interface BillsRangeQuery {
 /**
  * Every bill whose `date` falls in [dateFrom, dateTo].
  *
- * /bills supports only an exact `date`, so a range needs the walk — same
- * situation as /estimates. `provider_name` and `status` ARE real server-side
+ * /bills supports only an exact `date`, so a range needs the walk. `provider_name` and `status` ARE real server-side
  * filters, so passing them narrows the walk rather than widening it.
  */
 export function getCachedBillsInRange(
@@ -330,9 +342,21 @@ export function getCachedBillsInRange(
             status: status ?? undefined,
             type: type ?? undefined,
           }),
-        // 'fecha': /bills no acepta order_field: 'id', así que acá el corte
-        // temprano sigue siendo válido y la paginación sigue siendo inestable.
-        { dateFrom, dateTo, label: 'facturas de compra', orden: 'fecha' },
+        {
+          dateFrom,
+          dateTo,
+          label: 'facturas de compra',
+          // Exact-date refetch for dates that straddle a page boundary.
+          fetchDatePage: (date, start, limit) =>
+            getAlegraClient().listBills({
+              date,
+              start,
+              limit,
+              provider_name: providerName ?? undefined,
+              status: status ?? undefined,
+              type: type ?? undefined,
+            }),
+        },
       ),
     ['alegra', 'bills', 'range', key, String(ttl)],
     {
@@ -386,8 +410,8 @@ export interface PaymentsRangeQuery {
 /**
  * Every payment whose `date` falls in [dateFrom, dateTo].
  *
- * /payments has NO date filter whatsoever, so the walk is the ONLY way to
- * scope by date here — there is no single-page shortcut to fall back on.
+ * /payments has no date RANGE filter (only an exact `date`), so the walk is the
+ * only way to scope by range here — there is no single-page shortcut.
  * `type` is a real server-side filter and narrows the walk substantially,
  * which is why the expense KPI always passes `type: 'out'`.
  */
@@ -406,9 +430,20 @@ export function getCachedPaymentsInRange(
             limit,
             type: type ?? undefined,
           }),
-        // 'id': /payments también acepta orden por id. Misma razón que
-        // cotizaciones — paginación determinista sobre una clave única.
-        { dateFrom, dateTo, label: 'pagos', orden: 'id' },
+        {
+          dateFrom,
+          dateTo,
+          label: 'pagos',
+          // /payments has no range filter, but its exact `date` filter settles
+          // dates that straddle a page boundary.
+          fetchDatePage: (date, start, limit) =>
+            getAlegraClient().listPayments({
+              date,
+              start,
+              limit,
+              type: type ?? undefined,
+            }),
+        },
       ),
     ['alegra', 'payments', 'range', key, String(ttl)],
     {

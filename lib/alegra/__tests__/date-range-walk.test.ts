@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   collectByDateRange,
   ALEGRA_WALK_PAGE_SIZE,
+  type DatePageFetcher,
   type PageFetcher,
 } from '../date-range-walk'
 import type { EstimateListItem, EstimateListResponse } from '../types'
@@ -351,10 +352,10 @@ describe('collectByDateRange — paginación inestable de Alegra', () => {
     // los documentos que vienen después del solapamiento.
     const fetchPage = vi.fn(async (start: number) =>
       start === 0
-        ? { data: [{ id: 1, date: '2026-04-20' }, { id: 2, date: '2026-04-19' }], total: 4 }
+        ? { data: [{ id: 1, date: '2026-04-20' }, { id: 2, date: '2026-04-19' }], total: 5 }
         : start === 2
-          ? { data: [{ id: 2, date: '2026-04-19' }, { id: 3, date: '2026-04-18' }], total: 4 }
-          : { data: [{ id: 4, date: '2026-04-17' }], total: 4 },
+          ? { data: [{ id: 2, date: '2026-04-19' }, { id: 3, date: '2026-04-18' }], total: 5 }
+          : { data: [{ id: 4, date: '2026-04-17' }], total: 5 },
     )
 
     const result = await collectByDateRange(fetchPage, {
@@ -368,150 +369,202 @@ describe('collectByDateRange — paginación inestable de Alegra', () => {
   })
 })
 
-describe('collectByDateRange — orden por id (paginación estable)', () => {
-  /**
-   * Con orden por id NO se puede cortar al ver una fecha vieja: el id ordena
-   * por creación, no por la fecha del documento. Un documento del rango puede
-   * aparecer después de otros más viejos.
-   */
-  it('NO corta al ver un documento más viejo que el rango', async () => {
-    const fetchPage = vi.fn(async (start: number) =>
-      start === 0
-        ? { data: [{ id: 9, date: '2026-04-20' }, { id: 8, date: '2026-01-05' }], total: 4 }
-        : start === 2
-          ? { data: [{ id: 7, date: '2026-04-02' }, { id: 6, date: '2026-04-01' }], total: 4 }
-          : { data: [], total: 4 },
-    )
+// -----------------------------------------------------------------------------
+// Total guard — Alegra answers HTTP 500 past the end
+// -----------------------------------------------------------------------------
+
+describe('collectByDateRange — guarda de total', () => {
+  it('nunca pide una página con start >= total', async () => {
+    // 60 rows, pageSize 30: two full pages, and the third request would be
+    // start=60 — which Alegra answers with a 500.
+    const all = repeat('2026-07-15', 60)
+    const fetchPage = fetcherOver(all, 60)
 
     const result = await collectByDateRange(fetchPage, {
-      dateFrom: '2026-04-01',
-      dateTo: '2026-04-30',
-      pageSize: 2,
-      orden: 'id',
+      dateFrom: '2026-07-01',
+      dateTo: null,
+      pageSize: 30,
     })
 
-    // Con orden por fecha, el id 8 habría cortado el recorrido y se habrían
-    // perdido el 7 y el 6.
-    expect(result.items.map((i) => i.id)).toEqual([9, 7, 6])
-  })
-
-  it('CON orden por fecha sí corta, que es el comportamiento viejo', async () => {
-    const fetchPage = vi.fn(async (start: number) =>
-      start === 0
-        ? { data: [{ id: 9, date: '2026-04-20' }, { id: 8, date: '2026-01-05' }], total: 4 }
-        : { data: [{ id: 7, date: '2026-04-02' }], total: 4 },
-    )
-
-    const result = await collectByDateRange(fetchPage, {
-      dateFrom: '2026-04-01',
-      dateTo: '2026-04-30',
-      pageSize: 2,
-      orden: 'fecha',
-    })
-
-    expect(result.items.map((i) => i.id)).toEqual([9])
-  })
-
-  it('se detiene tras el margen de páginas sin nada del rango', async () => {
-    // Sin este freno, con orden por id habría que leer la cuenta entera.
-    const vacia = { data: [{ id: 1, date: '2020-01-01' }, { id: 2, date: '2020-01-02' }], total: 99 }
-    const fetchPage = vi.fn(async (start: number) =>
-      start === 0
-        ? { data: [{ id: 9, date: '2026-04-20' }, { id: 8, date: '2026-04-19' }], total: 99 }
-        : vacia,
-    )
-
-    const result = await collectByDateRange(fetchPage, {
-      dateFrom: '2026-04-01',
-      dateTo: '2026-04-30',
-      pageSize: 2,
-      orden: 'id',
-      margenPaginas: 2,
-    })
-
-    expect(result.items.map((i) => i.id)).toEqual([9, 8])
-    // 1 con datos + 2 de margen
-    expect(fetchPage).toHaveBeenCalledTimes(3)
+    expect(fetchPage).toHaveBeenCalledTimes(2)
+    expect(fetchPage).not.toHaveBeenCalledWith(60, expect.anything())
+    expect(result.items).toHaveLength(60)
     expect(result.truncated).toBe(false)
   })
 
-  it('el margen se reinicia si vuelve a aparecer algo del rango', async () => {
-    // Un hueco de una página no puede dar por terminado el recorrido.
-    const fetchPage = vi.fn(async (start: number) =>
-      start === 0
-        ? { data: [{ id: 9, date: '2026-04-20' }], total: 99 }
-        : start === 1
-          ? { data: [{ id: 8, date: '2020-01-01' }], total: 99 }
-          : start === 2
-            ? { data: [{ id: 7, date: '2026-04-05' }], total: 99 }
-            : { data: [], total: 99 },
-    )
-
-    const result = await collectByDateRange(fetchPage, {
-      dateFrom: '2026-04-01',
-      dateTo: '2026-04-30',
-      pageSize: 1,
-      orden: 'id',
-      margenPaginas: 2,
+  it('llegar al total cuenta como rango cubierto aunque sea el tope de páginas', async () => {
+    const all = repeat('2026-07-15', 60)
+    const result = await collectByDateRange(fetcherOver(all, 60), {
+      dateFrom: '2026-07-01',
+      dateTo: null,
+      pageSize: 30,
+      maxPages: 2,
     })
 
-    expect(result.items.map((i) => i.id)).toEqual([9, 7])
+    expect(result.truncated).toBe(false)
   })
 })
 
-describe('collectByDateRange — el margen no puede cortar antes de llegar', () => {
-  /**
-   * Regresión concreta: con orden por id se arranca por lo más nuevo, así que
-   * un rango viejo tiene por delante páginas que no le pertenecen. Con el
-   * margen contando desde el principio, abril-2026 devolvía CERO mientras
-   * agosto devolvía bien.
-   */
-  it('sigue leyendo aunque las primeras páginas no traigan nada del rango', async () => {
-    const paginas = [
-      [{ id: 20, date: '2026-08-10' }], // fuera del rango
-      [{ id: 19, date: '2026-07-10' }], // fuera
-      [{ id: 18, date: '2026-06-10' }], // fuera
-      [{ id: 17, date: '2026-04-20' }], // ¡adentro!
-      [{ id: 16, date: '2026-04-05' }], // adentro
-      [{ id: 15, date: '2026-03-10' }], // fuera
-      [{ id: 14, date: '2026-03-09' }], // fuera → acá sí corta
-      [{ id: 13, date: '2026-03-08' }],
+// -----------------------------------------------------------------------------
+// Same-date group across a page boundary (unstable tie-break)
+// -----------------------------------------------------------------------------
+
+describe('collectByDateRange — fecha repartida entre páginas', () => {
+  const D = '2026-04-20'
+  const OLDER = '2026-04-10'
+
+  // Page 0 ends with the D group a,b,c. The second request tie-breaks
+  // differently: page 1 starts with c again (repeated) and d. The unstable
+  // list never returns e, which is also dated D.
+  const page0 = [
+    { id: 'a', date: D },
+    { id: 'b', date: D },
+    { id: 'c', date: D },
+  ]
+  const page1 = [
+    { id: 'c', date: D },
+    { id: 'd', date: D },
+    { id: 'f', date: OLDER },
+  ]
+  const page2 = [{ id: 'g', date: '2026-04-05' }]
+  const pages = [page0, page1, page2]
+  const unstableFetcher: PageFetcher<{ id: string; date: string }> = async (start, limit) => ({
+    data: pages[start / limit] ?? [],
+    total: 7,
+  })
+
+  const exactSet = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, date: D }))
+  const exactFetcher = () =>
+    vi.fn<DatePageFetcher<{ id: string; date: string }>>(async (date, start, limit) => ({
+      data: date === D ? exactSet.slice(start, start + limit) : [],
+      total: date === D ? exactSet.length : 0,
+    }))
+
+  it('sin hook: deduplica pero pierde lo que el desempate dejó afuera', async () => {
+    const result = await collectByDateRange(unstableFetcher, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 3,
+    })
+
+    // c is deduplicated, but e is lost: the known limit of the fallback.
+    expect(result.items.map((i) => i.id)).toEqual(['a', 'b', 'c', 'd', 'f', 'g'])
+  })
+
+  it('con hook: reemplaza la fecha por el conjunto exacto, sin repetidos', async () => {
+    const fetchDatePage = exactFetcher()
+
+    const result = await collectByDateRange(unstableFetcher, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 3,
+      fetchDatePage,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g'])
+    expect(result.truncated).toBe(false)
+    // Only D is refetched; its 5 rows take two pages of 3.
+    expect(fetchDatePage).toHaveBeenCalledTimes(2)
+    for (const call of fetchDatePage.mock.calls) expect(call[0]).toBe(D)
+    // 3 main pages + 2 exact-date pages.
+    expect(result.pagesFetched).toBe(5)
+  })
+
+  it('ignora filas posteriores de una fecha ya resuelta', async () => {
+    // D spans three pages; after the first refetch the exact set is final.
+    const long = [
+      [{ id: 'a', date: D }, { id: 'b', date: D }],
+      [{ id: 'b', date: D }, { id: 'c', date: D }],
+      [{ id: 'c', date: D }, { id: 'z', date: D }],
+      [{ id: 'f', date: OLDER }],
     ]
-    const fetchPage = vi.fn(async (start: number) => ({
-      data: paginas[start] ?? [],
-      total: 99,
+    const fetchPage: PageFetcher<{ id: string; date: string }> = async (start, limit) => ({
+      data: long[start / limit] ?? [],
+      total: 7,
+    })
+    const fetchDatePage = vi.fn<DatePageFetcher<{ id: string; date: string }>>(async (_d, start, limit) => ({
+      data: ['a', 'b', 'c', 'd'].map((id) => ({ id, date: D })).slice(start, start + limit),
+      total: 4,
     }))
 
     const result = await collectByDateRange(fetchPage, {
       dateFrom: '2026-04-01',
-      dateTo: '2026-04-30',
-      pageSize: 1,
-      orden: 'id',
-      margenPaginas: 2,
+      dateTo: null,
+      pageSize: 2,
+      fetchDatePage,
     })
 
-    expect(result.items.map((i) => i.id)).toEqual([17, 16])
-    // 3 de arranque + 2 con datos + 2 de margen = 7. La página 8 no se pide.
-    expect(fetchPage).toHaveBeenCalledTimes(7)
+    // 'z' came from an unstable page after D was settled: the exact set wins.
+    expect(result.items.map((i) => i.id)).toEqual(['a', 'b', 'c', 'd', 'f'])
+    expect(fetchDatePage).toHaveBeenCalledTimes(2)
   })
 
-  it('si el rango no aparece nunca, recorre hasta el tope y avisa', async () => {
-    const fetchPage = vi.fn(async () => ({
-      data: [{ id: 1, date: '2020-01-01' }],
+  it('no dispara el hook cuando cada fecha cabe dentro de una página', async () => {
+    const all = [
+      { id: 'a', date: '2026-04-22' },
+      { id: 'b', date: '2026-04-21' },
+      { id: 'c', date: '2026-04-21' },
+      { id: 'd', date: '2026-04-20' },
+      { id: 'e', date: '2026-04-19' },
+    ]
+    const fetchPage: PageFetcher<(typeof all)[number]> = async (start, limit) => ({
+      data: all.slice(start, start + limit),
+      total: all.length,
+    })
+    const fetchDatePage = vi.fn<DatePageFetcher<(typeof all)[number]>>(async () => ({ data: [], total: 0 }))
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: null,
+      pageSize: 3,
+      fetchDatePage,
+    })
+
+    expect(result.items).toHaveLength(5)
+    expect(fetchDatePage).not.toHaveBeenCalled()
+  })
+
+  it('no refetchea una fecha fuera del rango', async () => {
+    // The straddling date is newer than dateTo, so it is not part of the answer.
+    const out = '2026-05-10'
+    const fetchPage: PageFetcher<{ id: string; date: string }> = async (start, limit) => ({
+      data: [
+        [{ id: 'a', date: out }, { id: 'b', date: out }],
+        [{ id: 'b', date: out }, { id: 'c', date: D }],
+      ][start / limit] ?? [],
+      total: 4,
+    })
+    const fetchDatePage = vi.fn<DatePageFetcher<{ id: string; date: string }>>(async () => ({ data: [], total: 0 }))
+
+    const result = await collectByDateRange(fetchPage, {
+      dateFrom: '2026-04-01',
+      dateTo: '2026-04-30',
+      pageSize: 2,
+      fetchDatePage,
+    })
+
+    expect(result.items.map((i) => i.id)).toEqual(['c'])
+    expect(fetchDatePage).not.toHaveBeenCalled()
+  })
+
+  it('marca truncated si el refetch de la fecha alcanza el tope de páginas', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fetchDatePage = vi.fn<DatePageFetcher<{ id: string; date: string }>>(async (_d, start, limit) => ({
+      data: Array.from({ length: limit }, (_, i) => ({ id: `x${start + i}`, date: D })),
       total: 999,
     }))
 
-    const result = await collectByDateRange(fetchPage, {
+    const result = await collectByDateRange(unstableFetcher, {
       dateFrom: '2026-04-01',
       dateTo: '2026-04-30',
-      pageSize: 1,
-      orden: 'id',
-      maxPages: 4,
+      pageSize: 3,
+      maxPages: 2,
+      fetchDatePage,
     })
 
-    expect(result.items).toHaveLength(0)
-    // Cero resultados sin aviso sería indistinguible de "no hay nada".
     expect(result.truncated).toBe(true)
-    expect(fetchPage).toHaveBeenCalledTimes(4)
+    // The partial exact set never drops rows already held.
+    expect(result.items.map((i) => i.id)).toEqual(expect.arrayContaining(['a', 'c', 'd']))
+    warnSpy.mockRestore()
   })
 })

@@ -3,19 +3,19 @@
  *
  * THE PROBLEM
  * -----------
- * Three of the four list endpoints this dashboard uses cannot filter by a
- * date RANGE server-side:
+ * Not every list endpoint this dashboard uses can narrow by a date RANGE
+ * server-side (verified against the live API, 2026-10-02):
  *
- *   /invoices  → supports date_after / date_before      ✅ no walk needed
- *   /estimates → only an exact `date`                   ❌ needs a walk
- *   /bills     → only an exact `date`                   ❌ needs a walk
- *   /payments  → NO date filter at all                  ❌ needs a walk
+ *   /invoices  → date_after / date_before               ✅ no walk needed
+ *   /estimates → date_after / date_before, exact date   ✅ narrows the walk
+ *   /bills     → exact `date` only (range params ignored) ❌ needs a walk
+ *   /payments  → exact `date` only (range params ignored) ❌ needs a walk
  *
- * All three cap `limit` at 30. The naive approach — fetch one page, filter it
+ * All of them cap `limit` at 30. The naive approach — fetch one page, filter it
  * in memory — silently undercounts as soon as the range holds more than 30
  * documents, and presents the short result as if it were complete. That bug
  * shipped once already in the "Cotizado mes" KPI; this module exists so it
- * cannot ship again for bills or payments.
+ * cannot ship again.
  *
  * THE APPROACH
  * ------------
@@ -30,7 +30,20 @@
  * The early stop is only valid if the API really sorts by `date` descending.
  * Alegra's defaults do NOT guarantee that (see `AlegraClient.listEstimates`),
  * so every fetcher passed in here MUST come from a client method that forces
- * `order_field: 'date'` and `order_direction: 'DESC'`.
+ * `order_field: 'date'` and `order_direction: 'DESC'`. (Ordering by `id` is
+ * not an alternative: Alegra sorts it as a STRING, so 999 > 1267.)
+ *
+ * UNSTABLE TIES, AND HOW THE WALK ANSWERS THEM
+ * --------------------------------------------
+ * Within one date the tie-break is undocumented and not stable between
+ * requests, so a date group that straddles a page boundary can repeat some
+ * rows and lose others. When the walk sees the same date on both sides of a
+ * boundary it refetches that date through `fetchDatePage` (the endpoint's
+ * exact `date` filter), paginating it completely, and replaces whatever it had
+ * collected for that date with the exact set.
+ *
+ * Alegra answers HTTP 500, not an empty page, when `start` is at or beyond the
+ * total — so the walk never requests a page whose `start >= total`.
  *
  * TRUNCATION IS REPORTED, NEVER SILENT
  * ------------------------------------
@@ -96,44 +109,30 @@ export interface DateRangeResult<T> {
 /** Fetches one page. Injected so this module is testable without network. */
 export type PageFetcher<T> = (start: number, limit: number) => Promise<ListPage<T>>
 
-/**
- * Cómo viene ordenada la lista, que decide cuándo se puede dejar de leer.
- *
- * `'fecha'` — el orden es por `date` DESC. Permite cortar apenas aparece un
- *   documento más viejo que el rango, pero la paginación NO es estable: entre
- *   documentos del mismo día el desempate cambia de una petición a otra, así
- *   que en los bordes de página se repiten y se pierden filas.
- *
- * `'id'` — el orden es por `id` DESC. La clave es única, así que la paginación
- *   es estable y no hay repetidos ni faltantes. A cambio se pierde el corte por
- *   fecha: el id ordena por creación, no por la fecha del documento, y una
- *   cotización puede crearse hoy llevando fecha del mes pasado. Se compensa
- *   siguiendo unas páginas de más — ver `margenPaginas`.
- *
- * Se usa `'id'` donde el endpoint lo permite. `/bills` solo acepta
- * date/name/dueDate, así que se queda en `'fecha'` y depende del descarte de
- * repetidos para el caso más visible.
- */
-export type OrdenDeLista = 'fecha' | 'id'
+/** Fetches one page of the documents dated exactly `date`. */
+export type DatePageFetcher<T> = (
+  date: string,
+  start: number,
+  limit: number,
+) => Promise<ListPage<T>>
 
-export interface DateRangeOptions {
+export interface DateRangeOptions<T = DatedDocument> {
   dateFrom: string | null
   dateTo: string | null
+  /** Page cap for the main walk, and per date for exact-date refetches. */
   maxPages?: number
   pageSize?: number
   /** Noun used in the truncation warning, e.g. "cotizaciones". */
   label?: string
-  /** Cómo viene ordenada la lista. Por defecto 'fecha', el comportamiento viejo. */
-  orden?: OrdenDeLista
   /**
-   * Con `orden: 'id'`, cuántas páginas seguidas sin nada del rango hay que ver
-   * antes de dar el recorrido por terminado.
-   *
-   * Dos es suficiente: un documento del rango creado mucho después aparece
-   * temprano en un orden por id descendente, y el caso contrario —creado mucho
-   * antes de su propia fecha— exige haber fechado un documento hacia adelante.
+   * Exact-date fetcher backed by the endpoint's `date` filter. When given, a
+   * date seen on both sides of a page boundary is refetched completely and
+   * its rows are replaced by the exact set, which makes the result immune to
+   * Alegra's unstable same-date tie-break. Paginated internally with the same
+   * `pageSize`, short-page and total guards. Its pages count in `pagesFetched`.
+   * Without it the walk only dedupes by `id` (rows can still be lost).
    */
-  margenPaginas?: number
+  fetchDatePage?: DatePageFetcher<T>
 }
 
 /**
@@ -154,29 +153,108 @@ export async function collectByDateRange<T extends DatedDocument>(
     dateTo,
     pageSize = ALEGRA_WALK_PAGE_SIZE,
     label = 'documentos',
-    orden = 'fecha',
-    margenPaginas = 2,
-    /**
-     * Con orden por id hace falta más recorrido: no se puede cortar al ver una
-     * fecha vieja, así que llegar a un mes de hace medio año exige pasar por
-     * todo lo posterior. Diez páginas alcanzaban para el corte por fecha; para
-     * el orden estable se duplican.
-     */
-    maxPages = orden === 'id' ? ALEGRA_WALK_MAX_PAGES * 2 : ALEGRA_WALK_MAX_PAGES,
-  }: DateRangeOptions,
+    maxPages = ALEGRA_WALK_MAX_PAGES,
+    fetchDatePage,
+  }: DateRangeOptions<T>,
 ): Promise<DateRangeResult<T>> {
   const items: T[] = []
   // Identidades ya vistas, para descartar lo que la paginación repita.
   const vistos = new Set<string>()
+  // Dates already replaced by their exact set; later rows of those dates are
+  // ignored because the exact set is authoritative.
+  const exactDates = new Set<string>()
 
   let pagesFetched = 0
   let total = 0
   // "Covered" means we proved there is nothing left to read — either we saw a
-  // document older than the range, or the API ran out of rows.
+  // document older than the range, the API ran out of rows, or `total` was
+  // reached.
   let rangeCovered = false
+  // An exact-date refetch hit the page cap before finishing.
+  let exactTruncated = false
 
-  // Solo para orden 'id': páginas seguidas sin nada del rango.
-  let paginasEnBlanco = 0
+  const inRange = (date: string) =>
+    !(dateFrom && date < dateFrom) && !(dateTo && date > dateTo)
+
+  /** Add a row unless its id was already seen. */
+  const push = (row: T) => {
+    if (row.id !== undefined && row.id !== null) {
+      const identidad = String(row.id)
+      if (vistos.has(identidad)) return
+      vistos.add(identidad)
+    }
+    items.push(row)
+  }
+
+  /** Fetch every row dated exactly `date`, paginating with the usual guards. */
+  const fetchExactDate = async (date: string, fetcher: DatePageFetcher<T>) => {
+    const exact: T[] = []
+    const seen = new Set<string>()
+    let exactTotal = 0
+    let complete = false
+
+    for (let p = 0; p < maxPages; p++) {
+      const response = await fetcher(date, p * pageSize, pageSize)
+      pagesFetched++
+      if (p === 0) exactTotal = response.total
+
+      for (const row of response.data) {
+        if (row.date !== date) continue
+        if (row.id !== undefined && row.id !== null) {
+          const identidad = String(row.id)
+          if (seen.has(identidad)) continue
+          seen.add(identidad)
+        }
+        exact.push(row)
+      }
+
+      if (response.data.length < pageSize) {
+        complete = true
+        break
+      }
+      if (exactTotal > 0 && (p + 1) * pageSize >= exactTotal) {
+        complete = true
+        break
+      }
+    }
+
+    return { exact, complete }
+  }
+
+  /** Replace everything collected for `date` with the exact set. */
+  const replaceDate = async (date: string, fetcher: DatePageFetcher<T>) => {
+    const { exact, complete } = await fetchExactDate(date, fetcher)
+    exactDates.add(date)
+
+    if (!complete) {
+      // Partial exact set: never drop rows we already hold, only add new ones.
+      exactTruncated = true
+      for (const row of exact) push(row)
+      return
+    }
+
+    const firstIdx = items.findIndex((row) => row.date === date)
+    const kept: T[] = []
+    for (const row of items) {
+      if (row.date === date) {
+        if (row.id !== undefined && row.id !== null) vistos.delete(String(row.id))
+      } else {
+        kept.push(row)
+      }
+    }
+    const at = firstIdx < 0 ? kept.length : firstIdx
+    // Rows before `firstIdx` are never of `date`, so the index is unchanged.
+    kept.splice(at, 0, ...exact)
+    for (const row of exact) {
+      if (row.id !== undefined && row.id !== null) vistos.add(String(row.id))
+    }
+    items.length = 0
+    items.push(...kept)
+  }
+
+  // Date of the last dated row of the previous page, to detect a date group
+  // that straddles a page boundary.
+  let previousLastDate: string | null = null
 
   for (let page = 0; page < maxPages; page++) {
     const response = await fetchPage(page * pageSize, pageSize)
@@ -194,37 +272,45 @@ export async function collectByDateRange<T extends DatedDocument>(
     }
 
     let hitOlderThanRange = false
-    let agregadosEnLaPagina = 0
 
     for (const row of rows) {
       // Undated documents can't be positioned in a date-sorted walk.
       if (!row.date) continue
 
-      // Con orden por fecha, el primero por debajo del piso prueba que los que
-      // siguen también lo están. Con orden por id eso no vale: el id ordena por
-      // creación, no por la fecha del documento.
-      if (orden === 'fecha' && dateFrom && row.date < dateFrom) {
+      // The list is date DESC, so the first row below the floor proves every
+      // following row is also out of range.
+      if (dateFrom && row.date < dateFrom) {
         hitOlderThanRange = true
         break
       }
-
-      if (dateFrom && row.date < dateFrom) continue
 
       // Newer than the ceiling — skip it, but keep walking. These sit at the
       // head of a DESC list and are not evidence that we're done.
       if (dateTo && row.date > dateTo) continue
 
-      // Repetido por el solapamiento de páginas: se descarta en silencio.
-      // Un documento sin `id` no se puede deduplicar y pasa tal cual.
-      if (row.id !== undefined && row.id !== null) {
-        const identidad = String(row.id)
-        if (vistos.has(identidad)) continue
-        vistos.add(identidad)
-      }
+      if (exactDates.has(row.date)) continue
 
-      items.push(row)
-      agregadosEnLaPagina++
+      // Repeated rows (unstable tie-break) are dropped silently. A document
+      // without `id` can't be deduplicated and passes through.
+      push(row)
     }
+
+    const firstDated = rows.find((row) => row.date)?.date ?? null
+    const lastDated = [...rows].reverse().find((row) => row.date)?.date ?? null
+
+    // Same date on both sides of the boundary: the tie-break of an unstable
+    // list may have dropped or repeated rows of that date, so fetch it exactly.
+    if (
+      fetchDatePage &&
+      page > 0 &&
+      firstDated &&
+      firstDated === previousLastDate &&
+      inRange(firstDated) &&
+      !exactDates.has(firstDated)
+    ) {
+      await replaceDate(firstDated, fetchDatePage)
+    }
+    previousLastDate = lastDated
 
     if (hitOlderThanRange) {
       rangeCovered = true
@@ -237,29 +323,16 @@ export async function collectByDateRange<T extends DatedDocument>(
       break
     }
 
-    if (orden === 'id') {
-      /**
-       * El margen solo corre DESPUÉS de haber entrado al rango.
-       *
-       * Con orden por id se arranca por los documentos más nuevos, así que un
-       * rango viejo tiene por delante varias páginas que no le pertenecen. Si
-       * el margen contara desde el principio, cortaría antes de llegar — y así
-       * fue: abril-2026 devolvía cero mientras agosto devolvía bien.
-       */
-      if (agregadosEnLaPagina > 0) {
-        paginasEnBlanco = 0
-      } else if (items.length > 0) {
-        paginasEnBlanco++
-      }
-
-      if (items.length > 0 && paginasEnBlanco >= margenPaginas) {
-        rangeCovered = true
-        break
-      }
+    // Alegra answers HTTP 500 past the end, so never ask for `start >= total`.
+    if (total > 0 && (page + 1) * pageSize >= total) {
+      rangeCovered = true
+      break
     }
   }
 
-  if (!rangeCovered) {
+  const truncated = !rangeCovered || exactTruncated
+
+  if (truncated) {
     console.warn(
       `[Alegra] rango de ${label} truncado en ${pagesFetched} páginas ` +
         `(${items.length} ${label}). El total mostrado es un piso, no el valor real.`,
@@ -268,7 +341,7 @@ export async function collectByDateRange<T extends DatedDocument>(
 
   return {
     items,
-    truncated: !rangeCovered,
+    truncated,
     pagesFetched,
     total,
   }

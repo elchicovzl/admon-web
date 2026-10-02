@@ -409,9 +409,9 @@ export type EstimateDetail = z.infer<typeof EstimateDetailSchema>
 /**
  * Client method parameter types (not Zod schemas — just TS interfaces).
  *
- * NOTE: /estimates does NOT support `date_after` / `date_before` /
- * `dueDate_after` / `dueDate_before` — only exact `date` and `dueDate`.
- * Date-range filtering goes through `lib/alegra/date-range-walk.ts`.
+ * NOTE: /estimates supports `date_after` / `date_before` (verified
+ * 2026-10-02) plus an exact `date`. `dueDate_after` / `dueDate_before` are not
+ * supported. Range reads go through `lib/alegra/date-range-walk.ts`.
  */
 export interface ListEstimatesParams {
   start?: number
@@ -423,7 +423,12 @@ export interface ListEstimatesParams {
   client_id?: string
   number?: string
   client_name?: string
+  /** Exact date, YYYY-MM-DD. */
   date?: string
+  /** Inclusive lower bound, YYYY-MM-DD. */
+  date_after?: string
+  /** Inclusive upper bound, YYYY-MM-DD. */
+  date_before?: string
   // Index signature required because `AlegraClient.request()` accepts
   // `Record<string, unknown>`. See ListInvoicesParams for the same rationale.
   [key: string]: unknown
@@ -585,7 +590,7 @@ export interface ListBillsParams {
   start?: number
   limit?: number
   status?: BillStatus | string
-  /** EXACT date only — /bills has no date_after / date_before. */
+  /** EXACT date only — /bills ignores date_after / date_before. */
   date?: string
   dueDate?: string
   provider_name?: string
@@ -759,15 +764,17 @@ export const PaymentDetailSchema = PaymentListItemSchema
 export type PaymentDetail = z.infer<typeof PaymentDetailSchema>
 
 /**
- * ⚠️ /payments has NO date filter of any kind — not even an exact `date`.
- * It is the most restricted of the four list endpoints. Any date-scoped
- * query MUST go through the date-range walk.
+ * ⚠️ /payments has NO date RANGE filter: `date_after` / `date_before` are
+ * ignored. Only an exact `date` works (verified 2026-10-02). Any range query
+ * MUST go through the date-range walk.
  */
 export interface ListPaymentsParams {
   start?: number
   limit?: number
   type?: PaymentType
   client_id?: string
+  /** Exact date, YYYY-MM-DD. */
+  date?: string
   metadata?: boolean
   order_field?: 'id' | 'number' | 'date' | 'type'
   order_direction?: 'ASC' | 'DESC'
