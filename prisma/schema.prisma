@@ -81,6 +81,7 @@ model User {
   contraparte                    Contraparte?             @relation("ContraparteUser")
   createdContrapartes            Contraparte[]            @relation("ContraparteCreatedBy")
   createdMovimientos             Movimiento[]             @relation("MovimientoCreatedBy")
+  createdRecibosPago             ReciboPago[]             @relation("ReciboPagoCreatedBy")
   createdPrestamos               Prestamo[]               @relation("PrestamoCreatedBy")
   createdServiciosReferenciados  ServicioReferenciado[]   @relation("ServicioCreatedBy")
   createdCierres                 CierreMensual[]          @relation("CierreCreatedBy")
@@ -1105,6 +1106,7 @@ model Contraparte {
   createdBy   User          @relation("ContraparteCreatedBy", fields: [createdById], references: [id])
 
   movimientos          Movimiento[]
+  recibos              ReciboPago[]
   prestamos            Prestamo[]
   serviciosComoCliente   ServicioReferenciado[] @relation("ServicioCliente")
   serviciosComoProveedor ServicioReferenciado[] @relation("ServicioProveedor")
@@ -1340,6 +1342,9 @@ model Movimiento {
 
   // Desglose por servicio de Alegra. Ver MovimientoDetalleServicio.
   detalleServicios MovimientoDetalleServicio[]
+
+  // Recibo de pago emitido para este ingreso (máximo uno). Ver ReciboPago.
+  recibo ReciboPago?
 
   @@map("movimientos")
   @@index([periodo, bolsilloId])
@@ -1596,4 +1601,51 @@ model CierreMensual {
   @@map("cierres_mensuales")
   @@index([periodo])
   @@index([bolsilloId, periodo])
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// ReciboPago — comprobante de un ingreso cobrado sin factura electrónica.
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Es un documento propio de Control: nunca va a Alegra ni a la DIAN. Tiene su
+// propio consecutivo y no es una factura de venta.
+//
+// INMUTABLE, igual que Movimiento: no hay updatedAt. Las líneas del recibo son
+// las filas de MovimientoDetalleServicio del movimiento, así que los montos no
+// se duplican acá. "Anulado" tampoco se guarda: se deriva de que el movimiento
+// tenga un contra-movimiento (`anuladoPor`), y el número nunca se libera.
+//
+// El nombre y el documento del cliente son una FOTO al momento de emitir, para
+// que editar la contraparte después no cambie un recibo ya entregado.
+model ReciboPago {
+  id String @id @default(cuid())
+
+  // Gapless: sale de Consecutivo dentro de la misma transacción que crea el
+  // recibo, no de un autoincrement (que deja huecos al hacer rollback).
+  numero Int @unique
+
+  movimientoId String     @unique
+  movimiento   Movimiento @relation(fields: [movimientoId], references: [id])
+
+  contraparteId String
+  contraparte   Contraparte @relation(fields: [contraparteId], references: [id])
+
+  clienteNombre    String
+  clienteDocumento String?
+
+  createdAt   DateTime @default(now())
+  createdById String
+  createdBy   User     @relation("ReciboPagoCreatedBy", fields: [createdById], references: [id])
+
+  @@map("recibos_pago")
+  @@index([contraparteId])
+}
+
+// Contadores consecutivos por clave (hoy solo 'RECIBO_PAGO'). Se incrementa
+// dentro de la transacción del documento que numera.
+model Consecutivo {
+  clave  String @id
+  ultimo Int    @default(0)
+
+  @@map("consecutivos")
 }
