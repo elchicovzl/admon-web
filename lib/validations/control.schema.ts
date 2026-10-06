@@ -220,6 +220,25 @@ const movimientoBaseSchema = z.object({
    */
   servicioAlegraId: cuid('Servicio inválido').optional().nullable(),
 
+  /**
+   * Desglose por servicio con monto propio por línea (un INGRESO cobrado con
+   * varios servicios). Excluyente con `servicioAlegraId`, que es la forma de
+   * una sola línea con el monto entero. La suma contra `monto` la valida la
+   * action con `sumarMontos`, no acá.
+   */
+  servicios: z
+    .array(
+      z.object({
+        servicioAlegraId: cuid('Servicio inválido'),
+        monto,
+      })
+    )
+    .min(1, 'Agregá al menos un servicio')
+    .optional(),
+
+  /** Emitir recibo de pago junto con el ingreso (solo INGRESO). */
+  emitirRecibo: z.boolean().optional(),
+
   notas,
 })
 
@@ -257,8 +276,42 @@ export const createMovimientoSchema = movimientoBaseSchema
     message: 'El servicio de Alegra solo aplica a un ingreso',
     path: ['servicioAlegraId'],
   })
+  .refine((data) => !(data.servicios && data.servicioAlegraId), {
+    message: 'Enviá un solo servicio o una lista de servicios, no ambos',
+    path: ['servicios'],
+  })
+  .refine((data) => !data.servicios || data.tipo === TipoMovimiento.INGRESO, {
+    message: 'Los servicios solo aplican a un ingreso',
+    path: ['servicios'],
+  })
+  .refine((data) => !data.emitirRecibo || data.tipo === TipoMovimiento.INGRESO, {
+    message: 'El recibo de pago solo aplica a un ingreso',
+    path: ['emitirRecibo'],
+  })
+  .refine((data) => !data.emitirRecibo || Boolean(data.contraparteId), {
+    message: 'El recibo requiere un cliente',
+    path: ['contraparteId'],
+  })
+  .refine(
+    (data) => !data.emitirRecibo || Boolean(data.servicios || data.servicioAlegraId),
+    {
+      message: 'El recibo requiere al menos un servicio',
+      path: ['servicios'],
+    }
+  )
 
 export type CreateMovimientoInput = z.infer<typeof createMovimientoSchema>
+
+/**
+ * Emitir recibo de pago sobre un ingreso ya registrado. `contraparteId` solo
+ * se usa si el movimiento no tiene cliente: si lo tiene, manda el del movimiento.
+ */
+export const emitirReciboSchema = z.object({
+  movimientoId: cuid('Movimiento inválido'),
+  contraparteId: cuid('Cliente inválido').optional(),
+})
+
+export type EmitirReciboInput = z.infer<typeof emitirReciboSchema>
 
 /**
  * Anulación. No se edita ni se borra el original: se crea su espejo.

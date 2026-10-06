@@ -187,6 +187,8 @@ export interface MovimientoListItem {
    * ahí con su contra-movimiento al lado.
    */
   estaAnulado: boolean
+  /** Recibo de pago emitido para este ingreso, si lo hay. */
+  recibo: { id: string; numero: number } | null
 }
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@
  * Alegra invoice. It never goes to Alegra or DIAN.
  */
 
-import { sumarMontos } from '@/lib/utils/control-ledger'
+import { redondearMonto, sumarMontos } from '@/lib/utils/control-ledger'
 
 /** Key of the `Consecutivo` row that numbers receipts. */
 export const CLAVE_CONSECUTIVO_RECIBO = 'RECIBO_PAGO'
@@ -18,8 +18,15 @@ export const CLAVE_CONSECUTIVO_RECIBO = 'RECIBO_PAGO'
 // Número
 // ---------------------------------------------------------------------------
 
-/** 1 → "RP-0001". Numbers above 9999 keep all their digits ("RP-12345"). */
+/**
+ * 1 → "RP-0001". Numbers above 9999 keep all their digits ("RP-12345").
+ * Throws on anything that is not a positive integer: a receipt number comes
+ * from the counter and must never be printed as "RP-0000" or "RP-1.5".
+ */
 export function formatearNumeroRecibo(numero: number): string {
+  if (!Number.isInteger(numero) || numero < 1) {
+    throw new Error(`Número de recibo inválido: ${numero}`)
+  }
   return `RP-${String(numero).padStart(4, '0')}`
 }
 
@@ -171,7 +178,11 @@ export function validarEmisionRecibo(
   if (input.lineas.some((linea) => !(linea.monto > 0))) {
     return { ok: false, error: 'Cada servicio del recibo debe tener un monto mayor a cero.' }
   }
-  if (sumarMontos(input.lineas.map((linea) => linea.monto)) !== input.monto) {
+  // Round first: `monto` may be an unrounded float (0.1 + 0.2), while the sum
+  // of the lines is already in whole cents.
+  if (
+    sumarMontos(input.lineas.map((linea) => linea.monto)) !== redondearMonto(input.monto)
+  ) {
     return {
       ok: false,
       error: 'La suma de los servicios debe ser igual al monto del ingreso.',
@@ -211,6 +222,10 @@ export interface DatosRecibo {
 
 /** Builds the plain view model the PDF renders. No Prisma types, no I/O. */
 export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
+  // A receipt whose lines do not add up to its total must never be printed.
+  if (sumarMontos(input.lineas.map((l) => l.monto)) !== redondearMonto(input.monto)) {
+    throw new Error('La suma de los servicios no coincide con el monto del recibo')
+  }
   return {
     numeroFormateado: formatearNumeroRecibo(input.numero),
     fecha: input.fecha,

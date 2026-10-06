@@ -14,7 +14,7 @@ import {
   armarDatosRecibo,
   type EntradaValidarEmisionRecibo,
 } from '../control-recibo'
-import { EMISOR_RECIBO, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
+import { EMISOR_RECIBO, PLACEHOLDER_EMISOR, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
 
 describe('formatearNumeroRecibo', () => {
   it('pads to 4 digits', () => {
@@ -26,6 +26,13 @@ describe('formatearNumeroRecibo', () => {
   it('keeps all digits of larger numbers', () => {
     expect(formatearNumeroRecibo(12345)).toBe('RP-12345')
   })
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'throws on invalid number %s',
+    (n) => {
+      expect(() => formatearNumeroRecibo(n)).toThrow('Número de recibo inválido')
+    }
+  )
 
   it('exposes the counter key', () => {
     expect(CLAVE_CONSECUTIVO_RECIBO).toBe('RECIBO_PAGO')
@@ -153,6 +160,12 @@ describe('validarEmisionRecibo', () => {
     })
   })
 
+  it('rounds an unrounded float amount before comparing', () => {
+    expect(
+      rechazo({ monto: 0.30000000000000004, lineas: [{ monto: 0.1 }, { monto: 0.2 }] })
+    ).toEqual({ ok: true })
+  })
+
   it('reports the first broken rule in order', () => {
     const r = rechazo({ tipo: 'EGRESO', tieneRecibo: true, cliente: null, lineas: [] })
     expect(r).toEqual({ ok: false, error: 'Solo se puede emitir recibo para un ingreso.' })
@@ -194,6 +207,22 @@ describe('armarDatosRecibo', () => {
     })
   })
 
+  it('throws when the lines do not sum the amount', () => {
+    expect(() =>
+      armarDatosRecibo({
+        numero: 1,
+        fecha,
+        clienteNombre: 'Ana',
+        clienteDocumento: null,
+        lineas: [{ servicio: 'X', referencia: null, monto: 100 }],
+        monto: 101,
+        bolsilloNombre: 'Caja',
+        concepto: 'c',
+        anulado: false,
+      })
+    ).toThrow('no coincide')
+  })
+
   it('carries the annulled flag and a null document', () => {
     const datos = armarDatosRecibo({
       numero: 1,
@@ -213,8 +242,25 @@ describe('armarDatosRecibo', () => {
 })
 
 describe('emisorReciboCompleto', () => {
-  it('is false while legal data is pending', () => {
-    expect(EMISOR_RECIBO.nit).toBe('PENDIENTE')
-    expect(emisorReciboCompleto()).toBe(false)
+  const completo = {
+    razonSocial: 'Empresa S.A.S.',
+    nit: '900123456-7',
+    direccion: 'Calle 1 # 2-3',
+    ciudad: 'Bogotá',
+    telefono: '3000000000',
+    email: 'contacto@example.com',
+    logoPath: 'public/images/logo-wordmark.png',
+  }
+
+  it('is true when no field is a placeholder', () => {
+    expect(emisorReciboCompleto(completo)).toBe(true)
+  })
+
+  it('is false when any field is still the placeholder', () => {
+    expect(emisorReciboCompleto({ ...completo, nit: PLACEHOLDER_EMISOR })).toBe(false)
+  })
+
+  it('defaults to the real issuer config', () => {
+    expect(emisorReciboCompleto()).toBe(emisorReciboCompleto(EMISOR_RECIBO))
   })
 })
