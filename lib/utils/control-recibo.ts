@@ -242,3 +242,71 @@ export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
     anulado: input.anulado,
   }
 }
+
+// ---------------------------------------------------------------------------
+// Ayudas de interfaz
+// ---------------------------------------------------------------------------
+
+/**
+ * Sum of the amounts typed in the income form. Lines without an amount yet
+ * count as zero, so the live helper works while the user is still typing. The
+ * server re-validates with the same `sumarMontos`.
+ */
+export function sumaDeLineas(lineas: ReadonlyArray<{ monto?: number | null }>): number {
+  return sumarMontos(lineas.map((linea) => linea.monto ?? 0))
+}
+
+/**
+ * The income form keeps `servicios: []` while the user has no breakdown, but
+ * the schema rejects an empty array (`min(1)`). An empty list means "no
+ * breakdown", so it becomes `undefined` before validation. Any other value is
+ * returned untouched.
+ */
+export function normalizarEntradaMovimiento<T extends { servicios?: unknown[] | null }>(
+  valores: T
+): T {
+  if (Array.isArray(valores.servicios) && valores.servicios.length === 0) {
+    return { ...valores, servicios: undefined }
+  }
+  return valores
+}
+
+/** A line is still empty when it has neither a service nor an amount. */
+export function esLineaVacia(linea: {
+  servicioAlegraId?: string | null
+  monto?: number | null
+}): boolean {
+  return !linea.servicioAlegraId && (linea.monto === undefined || linea.monto === null)
+}
+
+/** Download URL of a receipt PDF (route handler `recibos/[id]/pdf`). */
+export function rutaPdfRecibo(reciboId: string): string {
+  return `/dashboard/control/recibos/${encodeURIComponent(reciboId)}/pdf`
+}
+
+export interface FilaEmitibleRecibo {
+  tipo: string
+  estaAnulado: boolean
+  anulaMovimientoId: string | null
+  tieneDocumentoAlegra: boolean
+  cantidadServicios: number
+  recibo: { id: string; numero: number } | null
+}
+
+/**
+ * Whether the movements table should offer "Emitir recibo" for a row. It is a
+ * UI filter over the same rules `validarEmisionRecibo` enforces on the server
+ * (the client and the sum of the lines are checked there): an income that is
+ * not annulled, not itself a reversal, without an Alegra document, without a
+ * receipt, and with a service breakdown already saved.
+ */
+export function puedeEmitirReciboDeFila(fila: FilaEmitibleRecibo): boolean {
+  return (
+    fila.tipo === 'INGRESO' &&
+    !fila.estaAnulado &&
+    fila.anulaMovimientoId === null &&
+    !fila.tieneDocumentoAlegra &&
+    fila.cantidadServicios > 0 &&
+    fila.recibo === null
+  )
+}

@@ -147,6 +147,10 @@ function filaMovimiento(overrides: Record<string, unknown> = {}) {
     createdBy: { name: 'Ivone', email: 'ivone@test.com' },
     anuladoPor: null,
     recibo: null,
+    alegraInvoiceId: null,
+    alegraEstimateId: null,
+    alegraPaymentId: null,
+    _count: { detalleServicios: 0 },
     ...overrides,
   }
 }
@@ -3186,6 +3190,21 @@ describe('recibo de pago', () => {
       )
       expect(prismaMock.$transaction).not.toHaveBeenCalled()
       expect(prismaMock.reciboPago.create).not.toHaveBeenCalled()
+    })
+
+    it('expone al listado si el ingreso tiene documento de Alegra y cuántas líneas lleva', async () => {
+      prismaMock.movimiento.create.mockResolvedValue(
+        filaMovimiento({
+          tipo: TipoMovimiento.INGRESO,
+          alegraEstimateId: '1234',
+          _count: { detalleServicios: 2 },
+        })
+      )
+
+      const res = await createMovimiento({ ...INGRESO_DOS_LINEAS })
+
+      expect(res.data?.tieneDocumentoAlegra).toBe(true)
+      expect(res.data?.cantidadServicios).toBe(2)
     })
 
     it('con recibo: movimiento, desglose y recibo en UNA transacción con el número del contador', async () => {

@@ -3,7 +3,9 @@
  *
  * Copy is neutral Spanish because the document goes to the client. It uses the
  * built-in Helvetica font (WinAnsi), which covers every accent and "Ñ" used in
- * Spanish; the smoke test checks that no glyph falls outside it.
+ * Spanish. The smoke test only checks that the render produces a PDF (with and
+ * without logo) and that the annulled render is larger; glyph coverage was
+ * inspected by hand on a real render, not asserted.
  */
 
 import {

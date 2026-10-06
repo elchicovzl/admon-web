@@ -3,13 +3,14 @@ import { getReciboParaPdf } from '@/lib/actions/control.actions'
 import { EMISOR_RECIBO, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
 import { renderizarReciboPdf } from '@/lib/pdf/recibo-pago-document'
 import { leerLogoRecibo } from '@/lib/pdf/recibo-pago-logo'
+import {
+  ERROR_NO_AUTENTICADO,
+  ERROR_RECIBO_NO_ENCONTRADO,
+  ERROR_SIN_ACCESO_CONTROL,
+} from '@/lib/utils/control-errores'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-// Exact messages produced by `requireControlAuth` in control.actions.ts.
-const NO_AUTENTICADO = 'No autenticado'
-const SIN_ACCESO = 'No tenés acceso al módulo Control'
 
 const SIN_CACHE = { 'Cache-Control': 'no-store' }
 
@@ -21,14 +22,14 @@ export async function GET(
   const resultado = await getReciboParaPdf(id)
 
   if (!resultado.success || !resultado.data) {
-    const error = resultado.error ?? 'Recibo no encontrado'
-    if (error === NO_AUTENTICADO) {
+    const error = resultado.error ?? ERROR_RECIBO_NO_ENCONTRADO
+    if (error === ERROR_NO_AUTENTICADO) {
       return NextResponse.json({ error }, { status: 401, headers: SIN_CACHE })
     }
-    if (error === SIN_ACCESO) {
+    if (error === ERROR_SIN_ACCESO_CONTROL) {
       return NextResponse.json({ error }, { status: 403, headers: SIN_CACHE })
     }
-    const status = error === 'Recibo no encontrado' ? 404 : 500
+    const status = error === ERROR_RECIBO_NO_ENCONTRADO ? 404 : 500
     return NextResponse.json({ error }, { status, headers: SIN_CACHE })
   }
 
