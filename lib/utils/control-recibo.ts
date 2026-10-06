@@ -256,6 +256,29 @@ export function sumaDeLineas(lineas: ReadonlyArray<{ monto?: number | null }>): 
   return sumarMontos(lineas.map((linea) => linea.monto ?? 0))
 }
 
+/**
+ * The income form keeps `servicios: []` while the user has no breakdown, but
+ * the schema rejects an empty array (`min(1)`). An empty list means "no
+ * breakdown", so it becomes `undefined` before validation. Any other value is
+ * returned untouched.
+ */
+export function normalizarEntradaMovimiento<T extends { servicios?: unknown[] | null }>(
+  valores: T
+): T {
+  if (Array.isArray(valores.servicios) && valores.servicios.length === 0) {
+    return { ...valores, servicios: undefined }
+  }
+  return valores
+}
+
+/** A line is still empty when it has neither a service nor an amount. */
+export function esLineaVacia(linea: {
+  servicioAlegraId?: string | null
+  monto?: number | null
+}): boolean {
+  return !linea.servicioAlegraId && (linea.monto === undefined || linea.monto === null)
+}
+
 /** Download URL of a receipt PDF (route handler `recibos/[id]/pdf`). */
 export function rutaPdfRecibo(reciboId: string): string {
   return `/dashboard/control/recibos/${encodeURIComponent(reciboId)}/pdf`

@@ -13,6 +13,8 @@ import {
   validarEmisionRecibo,
   armarDatosRecibo,
   sumaDeLineas,
+  esLineaVacia,
+  normalizarEntradaMovimiento,
   puedeEmitirReciboDeFila,
   type EntradaValidarEmisionRecibo,
   type FilaEmitibleRecibo,
@@ -305,5 +307,37 @@ describe('puedeEmitirReciboDeFila', () => {
     ['ya tiene recibo', { recibo: { id: 'r1', numero: 1 } }],
   ])('no ofrece emitir si %s', (_motivo, cambio) => {
     expect(puedeEmitirReciboDeFila({ ...base, ...cambio })).toBe(false)
+  })
+})
+
+describe('normalizarEntradaMovimiento', () => {
+  it('drops an empty servicios array', () => {
+    const resultado = normalizarEntradaMovimiento({ concepto: 'x', servicios: [] })
+    expect(resultado.servicios).toBeUndefined()
+    expect(resultado.concepto).toBe('x')
+  })
+
+  it('keeps a non-empty servicios array', () => {
+    const servicios = [{ servicioAlegraId: 's1', monto: 100 }]
+    const entrada = { concepto: 'x', servicios }
+    expect(normalizarEntradaMovimiento(entrada).servicios).toBe(servicios)
+  })
+
+  it('leaves input without servicios untouched', () => {
+    const entrada = { concepto: 'x' } as { concepto: string; servicios?: unknown[] }
+    expect(normalizarEntradaMovimiento(entrada)).toBe(entrada)
+  })
+})
+
+describe('esLineaVacia', () => {
+  it('is true with no service and no amount', () => {
+    expect(esLineaVacia({ servicioAlegraId: '', monto: undefined })).toBe(true)
+    expect(esLineaVacia({ servicioAlegraId: null, monto: null })).toBe(true)
+  })
+
+  it('is false when a service or an amount was filled', () => {
+    expect(esLineaVacia({ servicioAlegraId: 's1', monto: undefined })).toBe(false)
+    expect(esLineaVacia({ servicioAlegraId: '', monto: 500 })).toBe(false)
+    expect(esLineaVacia({ servicioAlegraId: 's1', monto: 500 })).toBe(false)
   })
 })

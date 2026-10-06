@@ -19,7 +19,12 @@ import type {
   ServicioAlegraListItem,
 } from '@/lib/types/control.types'
 import { formatearMonto, hoyComoFechaCalendario } from '@/lib/utils/control-format'
-import { rutaPdfRecibo, sumaDeLineas } from '@/lib/utils/control-recibo'
+import {
+  esLineaVacia,
+  normalizarEntradaMovimiento,
+  rutaPdfRecibo,
+  sumaDeLineas,
+} from '@/lib/utils/control-recibo'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -69,11 +74,11 @@ const LINEA_VACIA = { servicioAlegraId: '', monto: undefined } as unknown as Lin
  * is dropped before validation and never reaches the server.
  */
 const resolver: Resolver<CreateMovimientoInput> = (values, context, options) => {
-  const normalizados =
-    values.servicios && values.servicios.length === 0
-      ? { ...values, servicios: undefined }
-      : values
-  return zodResolver(createMovimientoSchema)(normalizados, context, options)
+  return zodResolver(createMovimientoSchema)(
+    normalizarEntradaMovimiento(values),
+    context,
+    options
+  )
 }
 
 interface Props {
@@ -165,10 +170,21 @@ export function MovimientoFormDialog({
     }
   }, [esIngreso, form, reemplazarLineas])
 
-  /** Un recibo necesita al menos un servicio: se deja una línea lista para llenar. */
+  /**
+   * Un recibo necesita al menos un servicio: se deja una línea lista para
+   * llenar. Al apagarlo se quitan las líneas que quedaron vacías; las que el
+   * usuario llenó se conservan.
+   */
   function cambiarEmitirRecibo(activo: boolean) {
     form.setValue('emitirRecibo', activo, { shouldValidate: form.formState.isSubmitted })
-    if (activo && lineas.fields.length === 0) lineas.append(LINEA_VACIA)
+    if (activo) {
+      if (lineas.fields.length === 0) lineas.append(LINEA_VACIA)
+      return
+    }
+    const vacias = (form.getValues('servicios') ?? []).flatMap((linea, indice) =>
+      esLineaVacia(linea) ? [indice] : []
+    )
+    if (vacias.length > 0) lineas.remove(vacias)
   }
 
   /**

@@ -114,9 +114,9 @@ export function MovimientosTable({ movimientos, contrapartes }: Props) {
             onClick: () => window.open(url, '_blank', 'noopener'),
           },
         })
-        // May be blocked by the browser outside a user gesture; the toast
-        // action above is the reliable path.
-        window.open(url, '_blank', 'noopener')
+        // No window.open here: after the awaited action the user gesture is
+        // gone and browsers block the popup. The toast action above runs inside
+        // a click, so it is the single download path.
         cerrarEmision()
       } else {
         toast.error(resultado.error ?? 'No se pudo emitir el recibo')
