@@ -20,7 +20,13 @@ export const EMISOR_RECIBO = {
   logoPath: 'public/images/logo-wordmark.png',
 } as const
 
-/** True only when no issuer field is still the 'PENDIENTE' placeholder. */
-export function emisorReciboCompleto(): boolean {
-  return Object.values(EMISOR_RECIBO).every((valor) => valor !== PLACEHOLDER_EMISOR)
+/**
+ * True only when no issuer field is still the 'PENDIENTE' placeholder.
+ * The issuer is injectable so the check is testable independent of the
+ * release state of `EMISOR_RECIBO`.
+ */
+export function emisorReciboCompleto(
+  emisor: Readonly<Record<string, string>> = EMISOR_RECIBO
+): boolean {
+  return Object.values(emisor).every((valor) => valor !== PLACEHOLDER_EMISOR)
 }

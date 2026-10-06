@@ -93,6 +93,7 @@ import {
   ingresosPorNaturaleza,
   repartirEntreServicios,
   sumarMontos,
+  redondearMonto,
   type LineaDeDocumento,
   type DetalleParaReporte,
   type MovimientoDeNomina,
@@ -106,6 +107,12 @@ import {
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
 import {
+  CLAVE_CONSECUTIVO_RECIBO,
+  armarDatosRecibo,
+  validarEmisionRecibo,
+  type DatosRecibo,
+} from '@/lib/utils/control-recibo'
+import {
   createBolsilloSchema,
   createCategoriaSchema,
   createTipoServicioSchema,
@@ -114,6 +121,7 @@ import {
   toggleEsNominaSchema,
   asignarCategoriaEgresoSchema,
   createContraparteSchema,
+  emitirReciboSchema,
   createMovimientoSchema,
   anularMovimientoSchema,
   createPrestamoSchema,
@@ -138,6 +146,7 @@ import {
   type AbonarPrestamoInput,
   type MarcarIncobrableInput,
   type CreateServicioInput,
+  type EmitirReciboInput,
   type RegistrarPataServicioInput,
   type RegistrarConteoInput,
   type AperturaInicialInput,
@@ -244,6 +253,7 @@ const movimientoSelect = {
   contraparte: { select: { id: true, nombre: true } },
   createdBy: { select: { name: true, email: true } },
   anuladoPor: { select: { id: true } },
+  recibo: { select: { id: true, numero: true } },
 } satisfies Prisma.MovimientoSelect
 
 type MovimientoRow = Prisma.MovimientoGetPayload<{ select: typeof movimientoSelect }>
@@ -274,7 +284,79 @@ function aMovimientoListItem(row: MovimientoRow): MovimientoListItem {
     createdBy: row.createdBy,
     anulaMovimientoId: row.anulaMovimientoId,
     estaAnulado: row.anuladoPor !== null,
+    recibo: row.recibo ? { id: row.recibo.id, numero: row.recibo.numero } : null,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Recibo de pago
+// ---------------------------------------------------------------------------
+
+/** A receipt rule or counter failure whose message is safe to show the user. */
+class ReciboError extends Error {}
+
+function esErrorPrisma(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code: unknown }).code === code
+  )
+}
+
+/** Translates an error raised while issuing a receipt into a user message. */
+function mensajeErrorRecibo(error: unknown): string {
+  if (error instanceof ReciboError) return error.message
+  // `movimientoId` is unique: a concurrent request already issued the receipt.
+  if (esErrorPrisma(error, 'P2002')) return 'Este ingreso ya tiene un recibo de pago.'
+  console.error('[control] error al emitir recibo', error)
+  return 'No se pudo emitir el recibo de pago'
+}
+
+/**
+ * Creates the receipt inside the caller's transaction, taking the next number
+ * from the counter. The increment locks the counter row until commit, so
+ * numbers are gapless: a rollback also rolls back the increment.
+ *
+ * The counter row is seeded by the migration; if it is missing we fail loudly
+ * instead of upserting, because two first receipts could race on the insert.
+ */
+async function crearReciboEnTransaccion(
+  tx: Prisma.TransactionClient,
+  datos: {
+    movimientoId: string
+    contraparte: { id: string; nombre: string; documento: string | null }
+    userId: string
+  }
+): Promise<{ id: string; numero: number }> {
+  let ultimo: number
+  try {
+    const contador = await tx.consecutivo.update({
+      where: { clave: CLAVE_CONSECUTIVO_RECIBO },
+      data: { ultimo: { increment: 1 } },
+      select: { ultimo: true },
+    })
+    ultimo = contador.ultimo
+  } catch (error) {
+    if (esErrorPrisma(error, 'P2025')) {
+      throw new ReciboError(
+        'El contador de recibos no está inicializado. Aplicá las migraciones pendientes.'
+      )
+    }
+    throw error
+  }
+
+  return tx.reciboPago.create({
+    data: {
+      numero: ultimo,
+      movimientoId: datos.movimientoId,
+      contraparteId: datos.contraparte.id,
+      clienteNombre: datos.contraparte.nombre,
+      clienteDocumento: datos.contraparte.documento,
+      createdById: datos.userId,
+    },
+    select: { id: true, numero: true },
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1026,42 +1108,240 @@ export async function createMovimiento(
     }
   }
 
-  const movimiento = await prisma.movimiento.create({
-    data: {
-      fecha,
-      periodo,
-      tipo: entrada.tipo,
-      monto: entrada.monto,
-      concepto: entrada.concepto,
-      bolsilloId: entrada.bolsilloId,
-      bolsilloDestinoId: entrada.bolsilloDestinoId ?? null,
-      categoriaId: entrada.categoriaId,
-      contraparteId: entrada.contraparteId ?? null,
-      prestamoId: entrada.prestamoId ?? null,
-      notas: entrada.notas ?? null,
-      createdById: auth.userId,
-      // Un cobro manual es el caso particular del general: UNA línea de
-      // desglose con el monto entero. Escribe en la misma tabla que el
-      // importador de Alegra, para que haya un solo lugar del que leer.
-      ...(entrada.servicioAlegraId
-        ? {
-            detalleServicios: {
-              create: [
-                { servicioAlegraId: entrada.servicioAlegraId, monto: entrada.monto },
-              ],
-            },
-          }
-        : {}),
-    },
-    select: movimientoSelect,
+  // Un cobro manual es el caso particular del general: el desglose es una
+  // lista de líneas. `servicioAlegraId` es UNA línea con el monto entero;
+  // `servicios` son varias, cada una con su monto. Escribe en la misma tabla
+  // que el importador de Alegra, para que haya un solo lugar del que leer.
+  const lineas = entrada.servicios
+    ? entrada.servicios.map((l) => ({ servicioAlegraId: l.servicioAlegraId, monto: l.monto }))
+    : entrada.servicioAlegraId
+      ? [{ servicioAlegraId: entrada.servicioAlegraId, monto: entrada.monto }]
+      : []
+
+  if (
+    entrada.servicios &&
+    sumarMontos(lineas.map((l) => l.monto)) !== redondearMonto(entrada.monto)
+  ) {
+    return {
+      success: false,
+      error: 'La suma de los servicios debe ser igual al monto del ingreso.',
+    }
+  }
+
+  const datosMovimiento = {
+    fecha,
+    periodo,
+    tipo: entrada.tipo,
+    monto: entrada.monto,
+    concepto: entrada.concepto,
+    bolsilloId: entrada.bolsilloId,
+    bolsilloDestinoId: entrada.bolsilloDestinoId ?? null,
+    categoriaId: entrada.categoriaId,
+    contraparteId: entrada.contraparteId ?? null,
+    prestamoId: entrada.prestamoId ?? null,
+    notas: entrada.notas ?? null,
+    createdById: auth.userId,
+    ...(lineas.length > 0 ? { detalleServicios: { create: lineas } } : {}),
+  }
+
+  if (!entrada.emitirRecibo) {
+    const movimiento = await prisma.movimiento.create({
+      data: datosMovimiento,
+      select: movimientoSelect,
+    })
+
+    revalidatePath(RUTA_CONTROL)
+
+    return {
+      success: true,
+      message: 'Movimiento registrado',
+      data: aMovimientoListItem(movimiento),
+    }
+  }
+
+  // Con recibo: movimiento, desglose y recibo en UNA transacción. Si algo
+  // falla, el número del contador también se revierte y no queda hueco.
+  // El schema ya exigió `contraparteId` cuando `emitirRecibo` es true.
+  const cliente = await prisma.contraparte.findUnique({
+    where: { id: entrada.contraparteId ?? '' },
+    select: { id: true, nombre: true, documento: true },
   })
 
-  revalidatePath(RUTA_CONTROL)
+  const validacion = validarEmisionRecibo({
+    tipo: entrada.tipo,
+    monto: entrada.monto,
+    alegraInvoiceId: null,
+    alegraEstimateId: null,
+    alegraPaymentId: null,
+    tieneRecibo: false,
+    cliente,
+    lineas,
+  })
+  if (!validacion.ok) return { success: false, error: validacion.error }
+  if (!cliente) return { success: false, error: 'El recibo requiere un cliente.' }
 
-  return {
-    success: true,
-    message: 'Movimiento registrado',
-    data: aMovimientoListItem(movimiento),
+  try {
+    const { movimiento, recibo } = await prisma.$transaction(async (tx) => {
+      const creado = await tx.movimiento.create({
+        data: datosMovimiento,
+        select: movimientoSelect,
+      })
+      const reciboCreado = await crearReciboEnTransaccion(tx, {
+        movimientoId: creado.id,
+        contraparte: cliente,
+        userId: auth.userId,
+      })
+      return { movimiento: creado, recibo: reciboCreado }
+    })
+
+    revalidatePath(RUTA_CONTROL)
+
+    return {
+      success: true,
+      message: 'Movimiento y recibo de pago registrados',
+      data: aMovimientoListItem({ ...movimiento, recibo }),
+    }
+  } catch (error) {
+    return { success: false, error: mensajeErrorRecibo(error) }
+  }
+}
+
+/**
+ * Emite el recibo de un ingreso que ya existe.
+ *
+ * No toca el libro (el movimiento es inmutable), así que se permite también en
+ * un periodo cerrado. El desglose debe existir ya: no se puede agregar después.
+ * Si el movimiento tiene cliente, manda ese; el de `input` solo se usa cuando
+ * el movimiento no tiene ninguno.
+ */
+export async function emitirReciboDeMovimiento(
+  input: EmitirReciboInput
+): Promise<ActionResponse<{ id: string; numero: number }>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = emitirReciboSchema.safeParse(input)
+  if (!validado.success) {
+    return { success: false, error: validado.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const movimiento = await prisma.movimiento.findUnique({
+    where: { id: validado.data.movimientoId },
+    select: {
+      id: true,
+      tipo: true,
+      monto: true,
+      alegraInvoiceId: true,
+      alegraEstimateId: true,
+      alegraPaymentId: true,
+      recibo: { select: { id: true } },
+      contraparte: { select: { id: true, nombre: true, documento: true } },
+      detalleServicios: { select: { monto: true } },
+    },
+  })
+  if (!movimiento) return { success: false, error: 'Movimiento no encontrado' }
+
+  const cliente =
+    movimiento.contraparte ??
+    (validado.data.contraparteId
+      ? await prisma.contraparte.findUnique({
+          where: { id: validado.data.contraparteId },
+          select: { id: true, nombre: true, documento: true },
+        })
+      : null)
+
+  const validacion = validarEmisionRecibo({
+    tipo: movimiento.tipo,
+    monto: decimalANumero(movimiento.monto),
+    alegraInvoiceId: movimiento.alegraInvoiceId,
+    alegraEstimateId: movimiento.alegraEstimateId,
+    alegraPaymentId: movimiento.alegraPaymentId,
+    tieneRecibo: movimiento.recibo !== null,
+    cliente,
+    lineas: movimiento.detalleServicios.map((d) => ({ monto: decimalANumero(d.monto) })),
+  })
+  if (!validacion.ok) return { success: false, error: validacion.error }
+  if (!cliente) return { success: false, error: 'El recibo requiere un cliente.' }
+
+  try {
+    const recibo = await prisma.$transaction((tx) =>
+      crearReciboEnTransaccion(tx, {
+        movimientoId: movimiento.id,
+        contraparte: cliente,
+        userId: auth.userId,
+      })
+    )
+
+    revalidatePath(RUTA_CONTROL)
+
+    return { success: true, message: 'Recibo de pago emitido', data: recibo }
+  } catch (error) {
+    return { success: false, error: mensajeErrorRecibo(error) }
+  }
+}
+
+/**
+ * Datos del recibo listos para pintar el PDF (la ruta del PDF llama acá).
+ *
+ * "Anulado" usa la misma regla que la tabla de movimientos: el movimiento tiene
+ * un contra-movimiento (`anuladoPor`, la relación inversa de `anulaMovimientoId`).
+ */
+export async function getReciboParaPdf(
+  reciboId: string
+): Promise<ActionResponse<DatosRecibo>> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const recibo = await prisma.reciboPago.findUnique({
+    where: { id: reciboId },
+    select: {
+      numero: true,
+      clienteNombre: true,
+      clienteDocumento: true,
+      movimiento: {
+        select: {
+          fecha: true,
+          concepto: true,
+          monto: true,
+          bolsillo: { select: { nombre: true } },
+          anuladoPor: { select: { id: true } },
+          detalleServicios: {
+            orderBy: { id: 'asc' },
+            select: {
+              monto: true,
+              servicio: { select: { nombre: true, referencia: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+  if (!recibo) return { success: false, error: 'Recibo no encontrado' }
+
+  const { movimiento } = recibo
+
+  try {
+    return {
+      success: true,
+      data: armarDatosRecibo({
+        numero: recibo.numero,
+        fecha: movimiento.fecha,
+        clienteNombre: recibo.clienteNombre,
+        clienteDocumento: recibo.clienteDocumento,
+        lineas: movimiento.detalleServicios.map((d) => ({
+          servicio: d.servicio.nombre,
+          referencia: d.servicio.referencia,
+          monto: decimalANumero(d.monto),
+        })),
+        monto: decimalANumero(movimiento.monto),
+        bolsilloNombre: movimiento.bolsillo.nombre,
+        concepto: movimiento.concepto,
+        anulado: movimiento.anuladoPor !== null,
+      }),
+    }
+  } catch (error) {
+    console.error('[control] recibo inconsistente', reciboId, error)
+    return { success: false, error: 'El recibo no se pudo armar: sus datos no cuadran' }
   }
 }
 

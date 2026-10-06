@@ -45,7 +45,7 @@ The Control module can issue a payment receipt ("Recibo de pago") for an income 
 
 ## Scope / Tasks
 - [x] T1 — Data model and pure logic: Prisma models + migration, `control-recibo.ts`, issuer config, unit tests. Route: delegated (writer trigger: 2+ non-trivial files).
-- [ ] T2 — Server actions and validation: multi-line income creation with optional receipt, issue receipt on an existing income, receipt read model for the PDF, receipt reference in the movements list; tests. Route: delegated.
+- [x] T2 — Server actions and validation: multi-line income creation with optional receipt, issue receipt on an existing income, receipt read model for the PDF, receipt reference in the movements list; tests. Route: delegated.
 - [ ] T3 — PDF: dependency, document component, route handler, smoke test that the output is a PDF. Route: delegated.
 - [ ] T4 — UI: multi-line income form with the receipt switch and download, table actions. Route: delegated.
 - [ ] T5 — Verify: tsc baseline, vitest, real PDF generated locally and inspected. Route: inline.
@@ -77,5 +77,9 @@ The Control module can issue a payment receipt ("Recibo de pago") for an income 
 - 2026-10-04: design agreed with the user in conversation; branch created. No code yet.
 - 2026-10-04: T1 done (route: delegated writer). Models + hand-written migration `20261004000000_add_recibos_pago` (local DB not verified, so no prisma command touched a database), `control-recibo.ts`, `recibo-emisor.ts` (placeholders), tests. Checks: prisma validate OK; vitest 30 files / 841 tests (baseline 29 / 798); tsc 35 errors (baseline 36), none in touched files.
 
+- 2026-10-05: orchestrator spot check of T1: hand-written migration SQL compared against `prisma migrate diff --from-empty` output — identical statements for `recibos_pago`/`consecutivos`; `control-recibo.test.ts` re-run, 43 passed. RDD on d00fa42..5593ae4 (committed-only): medium, `slice_budget_reached`, consent granted by the user, one reliability lens, approved and acknowledged (lineage review-d02e80733c06263e). Advisory findings carried into T2: (a) migration never inserts the `RECIBO_PAGO` row in `consecutivos` (concurrent first receipts could race on upsert); (b) `armarDatosRecibo` never checks that lines sum `monto`; (c) `validarEmisionRecibo` compares `input.monto` unrounded; (d) `formatearNumeroRecibo` accepts 0/negative/non-integer; (e) the `emisorReciboCompleto` test is anchored to the placeholder state.
+- A separate pre-existing working-tree change (`.atl/skill-registry.md`, not part of this feature) was reviewed on the user's consent and approved (lineage review-31f008f9c4b89961); its 3 advisory findings (absolute machine-specific paths, dropped conventions section) are follow-up work outside this feature.
+- 2026-10-05: T2 done (route: delegated writer). Fixed the 5 T1 advisory findings (counter row seeded in the migration; `armarDatosRecibo` throws on a sum mismatch; `validarEmisionRecibo` rounds `monto`; `formatearNumeroRecibo` throws on invalid numbers; `emisorReciboCompleto(emisor = EMISOR_RECIBO)`). Zod: `servicios`, `emitirRecibo` + refinements, `emitirReciboSchema`. Actions: `createMovimiento` (multi-line, optional receipt in one transaction), `emitirReciboDeMovimiento`, `getReciboParaPdf`; `recibo` added to `movimientoSelect`/`MovimientoListItem`. "Annulled" = `anuladoPor !== null` (inverse relation of `anulaMovimientoId`), same rule as the table. Checks: prisma validate OK; vitest 30 files / 876 tests (baseline 841); tsc 35 errors (baseline 35), none in touched files.
+
 ## Next step
-T2.
+T3 (PDF: dependency, document component, route handler, smoke test).
