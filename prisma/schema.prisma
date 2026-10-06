@@ -82,6 +82,7 @@ model User {
   createdContrapartes            Contraparte[]            @relation("ContraparteCreatedBy")
   createdMovimientos             Movimiento[]             @relation("MovimientoCreatedBy")
   createdRecibosPago             ReciboPago[]             @relation("ReciboPagoCreatedBy")
+  updatedConfiguracionesEmpresa  ConfiguracionEmpresa[]   @relation("ConfiguracionEmpresaUpdatedBy")
   createdPrestamos               Prestamo[]               @relation("PrestamoCreatedBy")
   createdServiciosReferenciados  ServicioReferenciado[]   @relation("ServicioCreatedBy")
   createdCierres                 CierreMensual[]          @relation("CierreCreatedBy")
@@ -1648,4 +1649,23 @@ model Consecutivo {
   ultimo Int    @default(0)
 
   @@map("consecutivos")
+}
+
+// Datos de la empresa (emisor) que se imprimen en el recibo de pago. Singleton:
+// una sola fila con id fijo 'default', editada desde Configuración por un
+// SUPER_ADMIN.
+model ConfiguracionEmpresa {
+  id          String   @id
+  razonSocial String
+  nit         String
+  direccion   String
+  ciudad      String
+  telefono    String
+  email       String
+  updatedAt   DateTime @updatedAt
+
+  updatedById String?
+  updatedBy   User?   @relation("ConfiguracionEmpresaUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("configuracion_empresa")
 }

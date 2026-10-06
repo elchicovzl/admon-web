@@ -17,17 +17,11 @@ import {
   View,
   renderToBuffer,
 } from '@react-pdf/renderer'
+import type { EmisorRecibo } from '@/lib/config/recibo-emisor'
 import type { DatosRecibo } from '@/lib/utils/control-recibo'
 import { formatearFecha, formatearMonto } from '@/lib/utils/control-format'
 
-export interface EmisorRecibo {
-  razonSocial: string
-  nit: string
-  direccion: string
-  ciudad: string
-  telefono: string
-  email: string
-}
+export type { EmisorRecibo }
 
 export interface ReciboPagoDocumentProps {
   datos: DatosRecibo
