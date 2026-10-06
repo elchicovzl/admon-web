@@ -101,5 +101,8 @@ The Control module can issue a payment receipt ("Recibo de pago") for an income 
 
 - T6 done: Prisma `ConfiguracionEmpresa` (singleton id `default`) + hand-written migration `20261006000000_add_configuracion_empresa` (matches `migrate diff`); `lib/actions/configuracion-empresa.actions.ts` (read: any authenticated user; update: SUPER_ADMIN via `session.user.role === UserRole.SUPER_ADMIN`); `obtenerEmisorRecibo()` in `lib/control/emisor-recibo.ts` with field-by-field `PENDIENTE` fallback; PDF route uses it; Settings card for SUPER_ADMIN. Hard-coded `EMISOR_RECIBO` removed (`RECIBO_LOGO_PATH` replaces `logoPath`). Verification: `pnpm test:run` 35 files / 930 tests passed; tsc 37 errors (baseline, none in touched files); `pnpm build` ok. Migration not applied to any database.
 
+- 2026-10-06: orchestrator spot check of T6: `pnpm test:run` re-run, 35 files / 930 tests. RDD on ea72757..b6b39ec (committed-only): medium, `slice_budget_reached`, consent granted by the user, one reliability lens, approved and acknowledged (lineage review-f09b802048432510). Advisory findings: (a) the settings page masked a failed `getConfiguracionEmpresa` read as "never configured" — fixed inline in ba5d0f3 (error `Alert` instead of the form; assess: medium, 19 lines, `under_budget`); (b) the PDF route has no test for a rejected `obtenerEmisorRecibo` (accepted follow-up); (c) the client form and the SUPER_ADMIN gating have no component tests (`.tsx` tests are not collected in this repo; accepted).
+- Slice PR5 `feat/recibo-de-pago-5-settings` = b6b39ec + ba5d0f3 (+ this doc) → PR4. Authored lines 619 + 19.
+
 ## Next step
-Review and merge the chained PRs in order; local verification above.
+Review and merge the chained PRs in order (#43 → #44 → #45 → #46 → PR5); local verification above; a SUPER_ADMIN fills in "Datos de la empresa" in Configuración.
