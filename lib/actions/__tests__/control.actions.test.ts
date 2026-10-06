@@ -3336,6 +3336,7 @@ describe('recibo de pago', () => {
         alegraEstimateId: null,
         alegraPaymentId: null,
         recibo: null,
+        anuladoPor: null,
         contraparte: CLIENTE,
         detalleServicios: [{ monto: dec(100000) }, { monto: dec(200000) }],
         ...overrides,
@@ -3390,6 +3391,7 @@ describe('recibo de pago', () => {
     it.each([
       ['un documento de Alegra', { alegraInvoiceId: 'A-1' }, 'Alegra'],
       ['un recibo existente', { recibo: { id: 'crecibo000001' } }, 'ya tiene'],
+      ['un ingreso anulado', { anuladoPor: { id: 'cmovanula0001' } }, 'anulado'],
       ['sin desglose', { detalleServicios: [] }, 'al menos un servicio'],
       ['sin cliente', { contraparte: null }, 'cliente'],
       [
@@ -3418,12 +3420,36 @@ describe('recibo de pago', () => {
 
     it('traduce la carrera de dos emisiones (unique) a un mensaje claro', async () => {
       prismaMock.movimiento.findUnique.mockResolvedValue(movimientoExistente())
-      prismaMock.reciboPago.create.mockRejectedValue({ code: 'P2002' })
+      prismaMock.reciboPago.create.mockRejectedValue({
+        code: 'P2002',
+        meta: { target: ['movimientoId'] },
+      })
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
 
       expect(res.success).toBe(false)
       expect(res.error).toContain('ya tiene un recibo')
+      expect(consoleError).not.toHaveBeenCalled()
+      consoleError.mockRestore()
+    })
+
+    it.each([
+      ['numero', { code: 'P2002', meta: { target: ['numero'] } }],
+      ['el desglose', { code: 'P2002', meta: { target: ['servicioId'] } }],
+      ['sin meta', { code: 'P2002' }],
+      ['otro error', new Error('boom')],
+    ])('no confunde un error de %s con "ya tiene recibo": lo registra y devuelve el genérico', async (_n, fallo) => {
+      prismaMock.movimiento.findUnique.mockResolvedValue(movimientoExistente())
+      prismaMock.reciboPago.create.mockRejectedValue(fallo)
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+
+      expect(res.success).toBe(false)
+      expect(res.error).toBe('No se pudo emitir el recibo de pago')
+      expect(consoleError).toHaveBeenCalledWith('[control] error al emitir recibo', fallo)
+      consoleError.mockRestore()
     })
 
     it('niega a quien no tiene acceso a Control', async () => {

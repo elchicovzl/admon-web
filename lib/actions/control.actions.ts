@@ -304,11 +304,21 @@ function esErrorPrisma(error: unknown, code: string): boolean {
   )
 }
 
+function colisionEnMovimientoId(error: unknown): boolean {
+  const target = (error as { meta?: { target?: unknown } }).meta?.target
+  if (Array.isArray(target)) return target.includes('movimientoId')
+  return typeof target === 'string' && target.includes('movimientoId')
+}
+
 /** Translates an error raised while issuing a receipt into a user message. */
 function mensajeErrorRecibo(error: unknown): string {
   if (error instanceof ReciboError) return error.message
-  // `movimientoId` is unique: a concurrent request already issued the receipt.
-  if (esErrorPrisma(error, 'P2002')) return 'Este ingreso ya tiene un recibo de pago.'
+  // Only a collision on `movimientoId` means a concurrent request already
+  // issued the receipt. Any other unique violation (`numero`, the breakdown
+  // unique) is unexpected and must be logged, not reported as a duplicate.
+  if (esErrorPrisma(error, 'P2002') && colisionEnMovimientoId(error)) {
+    return 'Este ingreso ya tiene un recibo de pago.'
+  }
   console.error('[control] error al emitir recibo', error)
   return 'No se pudo emitir el recibo de pago'
 }
@@ -1235,11 +1245,15 @@ export async function emitirReciboDeMovimiento(
       alegraEstimateId: true,
       alegraPaymentId: true,
       recibo: { select: { id: true } },
+      anuladoPor: { select: { id: true } },
       contraparte: { select: { id: true, nombre: true, documento: true } },
       detalleServicios: { select: { monto: true } },
     },
   })
   if (!movimiento) return { success: false, error: 'Movimiento no encontrado' }
+  if (movimiento.anuladoPor !== null) {
+    return { success: false, error: 'No se puede emitir un recibo para un ingreso anulado.' }
+  }
 
   const cliente =
     movimiento.contraparte ??
