@@ -12,7 +12,10 @@ import {
   montoEnLetras,
   validarEmisionRecibo,
   armarDatosRecibo,
+  sumaDeLineas,
+  puedeEmitirReciboDeFila,
   type EntradaValidarEmisionRecibo,
+  type FilaEmitibleRecibo,
 } from '../control-recibo'
 import { EMISOR_RECIBO, PLACEHOLDER_EMISOR, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
 
@@ -262,5 +265,45 @@ describe('emisorReciboCompleto', () => {
 
   it('defaults to the real issuer config', () => {
     expect(emisorReciboCompleto()).toBe(emisorReciboCompleto(EMISOR_RECIBO))
+  })
+})
+
+describe('sumaDeLineas', () => {
+  it('suma las líneas sin error de coma flotante', () => {
+    expect(sumaDeLineas([{ monto: 0.1 }, { monto: 0.2 }])).toBe(0.3)
+  })
+
+  it('cuenta como cero las líneas sin monto todavía', () => {
+    expect(sumaDeLineas([{ monto: 1000 }, {}, { monto: null }])).toBe(1000)
+  })
+
+  it('devuelve cero sin líneas', () => {
+    expect(sumaDeLineas([])).toBe(0)
+  })
+})
+
+describe('puedeEmitirReciboDeFila', () => {
+  const base: FilaEmitibleRecibo = {
+    tipo: 'INGRESO',
+    estaAnulado: false,
+    anulaMovimientoId: null,
+    tieneDocumentoAlegra: false,
+    cantidadServicios: 2,
+    recibo: null,
+  }
+
+  it('ofrece emitir en un ingreso manual con desglose y sin recibo', () => {
+    expect(puedeEmitirReciboDeFila(base)).toBe(true)
+  })
+
+  it.each([
+    ['no es ingreso', { tipo: 'EGRESO' }],
+    ['está anulado', { estaAnulado: true }],
+    ['es una anulación', { anulaMovimientoId: 'mov1' }],
+    ['viene de Alegra', { tieneDocumentoAlegra: true }],
+    ['no tiene desglose', { cantidadServicios: 0 }],
+    ['ya tiene recibo', { recibo: { id: 'r1', numero: 1 } }],
+  ])('no ofrece emitir si %s', (_motivo, cambio) => {
+    expect(puedeEmitirReciboDeFila({ ...base, ...cambio })).toBe(false)
   })
 })

@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useFieldArray, useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { TipoMovimiento, GrupoCategoria } from '@prisma/client'
 import { toast } from 'sonner'
-import { Loader2, Plus } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 
 import { createMovimiento, createCategoria } from '@/lib/actions/control.actions'
 import {
@@ -18,7 +18,8 @@ import type {
   ContraparteListItem,
   ServicioAlegraListItem,
 } from '@/lib/types/control.types'
-import { hoyComoFechaCalendario } from '@/lib/utils/control-format'
+import { formatearMonto, hoyComoFechaCalendario } from '@/lib/utils/control-format'
+import { rutaPdfRecibo, sumaDeLineas } from '@/lib/utils/control-recibo'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -39,7 +40,9 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -50,6 +53,28 @@ import {
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { MontoInput } from './monto-input'
 import { ETIQUETA_GRUPO, ETIQUETA_TIPO_MOVIMIENTO } from './etiquetas'
+
+type LineaServicio = NonNullable<CreateMovimientoInput['servicios']>[number]
+
+/**
+ * A line the user has just added: no service chosen and no amount typed yet.
+ * `monto` stays undefined (not 0) so the amount field renders empty; the cast
+ * is needed because the schema type only describes a complete line.
+ */
+const LINEA_VACIA = { servicioAlegraId: '', monto: undefined } as unknown as LineaServicio
+
+/**
+ * The lines list is optional for an income without a receipt, but the schema
+ * rejects an empty array (`min(1)`). An empty list means "no breakdown", so it
+ * is dropped before validation and never reaches the server.
+ */
+const resolver: Resolver<CreateMovimientoInput> = (values, context, options) => {
+  const normalizados =
+    values.servicios && values.servicios.length === 0
+      ? { ...values, servicios: undefined }
+      : values
+  return zodResolver(createMovimientoSchema)(normalizados, context, options)
+}
 
 interface Props {
   bolsillos: BolsilloListItem[]
@@ -85,7 +110,7 @@ export function MovimientoFormDialog({
   const [guardandoCategoria, setGuardandoCategoria] = useState(false)
 
   const form = useForm<CreateMovimientoInput>({
-    resolver: zodResolver(createMovimientoSchema),
+    resolver,
     defaultValues: {
       fecha: hoyComoFechaCalendario(),
       tipo: TipoMovimiento.EGRESO,
@@ -95,14 +120,24 @@ export function MovimientoFormDialog({
       categoriaId: '',
       contraparteId: null,
       servicioAlegraId: null,
+      servicios: [],
+      emitirRecibo: false,
       notas: null,
     },
   })
+
+  const lineas = useFieldArray({ control: form.control, name: 'servicios' })
 
   const tipo = form.watch('tipo')
   const esTraslado = tipo === TipoMovimiento.TRASLADO
   const esIngreso = tipo === TipoMovimiento.INGRESO
   const bolsilloOrigen = form.watch('bolsilloId')
+  const emitirRecibo = form.watch('emitirRecibo') === true
+  const monto = form.watch('monto')
+  const lineasEscritas = form.watch('servicios') ?? []
+  const sumaLineas = sumaDeLineas(lineasEscritas)
+  // The live helper compares rounded values, like the server does.
+  const diferencia = monto === undefined ? 0 : sumaLineas - sumaDeLineas([{ monto }])
 
   /**
    * El destino solo existe en un traslado. Si el operador elige TRASLADO,
@@ -117,15 +152,24 @@ export function MovimientoFormDialog({
   }, [esTraslado, form])
 
   /**
-   * Mismo problema que el destino del traslado: si se elige un servicio en un
-   * INGRESO y después se cambia a EGRESO, el valor quedaría colgado y el
-   * schema lo rechazaría apuntando a un campo que ya no está en pantalla.
+   * Mismo problema que el destino del traslado: si se cargan servicios o se
+   * activa el recibo en un INGRESO y después se cambia a EGRESO, los valores
+   * quedarían colgados y el schema los rechazaría apuntando a campos que ya no
+   * están en pantalla.
    */
+  const { replace: reemplazarLineas } = lineas
   useEffect(() => {
     if (!esIngreso) {
-      form.setValue('servicioAlegraId', null)
+      reemplazarLineas([])
+      form.setValue('emitirRecibo', false)
     }
-  }, [esIngreso, form])
+  }, [esIngreso, form, reemplazarLineas])
+
+  /** Un recibo necesita al menos un servicio: se deja una línea lista para llenar. */
+  function cambiarEmitirRecibo(activo: boolean) {
+    form.setValue('emitirRecibo', activo, { shouldValidate: form.formState.isSubmitted })
+    if (activo && lineas.fields.length === 0) lineas.append(LINEA_VACIA)
+  }
 
   /**
    * El grupo va dentro de la etiqueta, no como encabezado.
@@ -140,8 +184,10 @@ export function MovimientoFormDialog({
     label: `${categoria.nombre} · ${ETIQUETA_GRUPO[categoria.grupo] ?? categoria.grupo}`,
   }))
 
+  // With a receipt the counterparty is the client, so "no counterparty" is
+  // not a valid choice.
   const opcionesContraparte = [
-    { value: '__ninguna__', label: 'Sin contraparte' },
+    ...(emitirRecibo ? [] : [{ value: '__ninguna__', label: 'Sin contraparte' }]),
     ...contrapartes.map((c) => ({ value: c.id, label: c.nombre })),
   ]
 
@@ -150,7 +196,6 @@ export function MovimientoFormDialog({
    * "el 05" antes que "Independiente 03".
    */
   const opcionesServicio = [
-    { value: '__ninguno__', label: 'Sin servicio' },
     ...serviciosAlegra
       .filter((s) => s.isActive)
       .map((s) => ({
@@ -186,12 +231,34 @@ export function MovimientoFormDialog({
   }
 
   async function onSubmit(data: CreateMovimientoInput) {
+    // The server validates this too; checking here avoids a round trip.
+    if (
+      data.servicios &&
+      sumaDeLineas(data.servicios) !== sumaDeLineas([{ monto: data.monto }])
+    ) {
+      form.setError('servicios', {
+        message: 'La suma de los servicios debe ser igual al monto del ingreso.',
+      })
+      return
+    }
+
     setGuardando(true)
     try {
       const resultado = await createMovimiento(data)
 
       if (resultado.success) {
-        toast.success(resultado.message ?? 'Movimiento registrado')
+        const recibo = resultado.data?.recibo
+        if (recibo) {
+          toast.success(resultado.message ?? 'Movimiento y recibo de pago registrados', {
+            duration: 15000,
+            action: {
+              label: 'Descargar recibo',
+              onClick: () => window.open(rutaPdfRecibo(recibo.id), '_blank', 'noopener'),
+            },
+          })
+        } else {
+          toast.success(resultado.message ?? 'Movimiento registrado')
+        }
         form.reset({
           fecha: data.fecha,
           tipo: data.tipo,
@@ -201,6 +268,8 @@ export function MovimientoFormDialog({
           categoriaId: '',
           contraparteId: null,
           servicioAlegraId: null,
+          servicios: [],
+          emitirRecibo: false,
           notas: null,
         })
         setAbierto(false)
@@ -474,35 +543,120 @@ export function MovimientoFormDialog({
 
             {/* Solo en ingresos. El catálogo de Alegra es de ventas: colgarle
                 un servicio a un pago de nómina ensuciaría el reporte, porque
-                al sumar por servicio aparecerían egresos mezclados. */}
+                al sumar por servicio aparecerían egresos mezclados. Cada línea
+                lleva su propio monto; juntas deben sumar el monto del ingreso. */}
             {esIngreso && (
-              <FormField
-                control={form.control}
-                name="servicioAlegraId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Servicio cobrado (opcional)</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        options={opcionesServicio}
-                        value={field.value ?? '__ninguno__'}
-                        onValueChange={(v) =>
-                          field.onChange(!v || v === '__ninguno__' ? null : v)
-                        }
-                        placeholder="Sin servicio"
-                        searchPlaceholder="Buscar servicio…"
-                        disabled={guardando}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {serviciosAlegra.length === 0
-                        ? 'El catálogo está vacío. Sincronizalo en Catálogos → Servicios Alegra.'
-                        : 'Por qué se cobró. Es lo que después permite preguntar cuánto entró por cada servicio.'}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>
+                    Servicios cobrados{emitirRecibo ? '' : ' (opcional)'}
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    disabled={guardando}
+                    onClick={() => lineas.append(LINEA_VACIA)}
+                  >
+                    + Agregar servicio
+                  </Button>
+                </div>
+
+                {lineas.fields.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {serviciosAlegra.length === 0
+                      ? 'El catálogo está vacío. Sincronizalo en Catálogos → Servicios Alegra.'
+                      : 'Por qué se cobró. Es lo que después permite preguntar cuánto entró por cada servicio.'}
+                  </p>
                 )}
-              />
+
+                {lineas.fields.map((linea, indice) => (
+                  <div
+                    key={linea.id}
+                    className="grid grid-cols-[1fr_auto] items-start gap-2 sm:grid-cols-[1fr_160px_auto]"
+                  >
+                    <FormField
+                      control={form.control}
+                      name={`servicios.${indice}.servicioAlegraId`}
+                      render={({ field }) => (
+                        <FormItem className="col-span-2 sm:col-span-1">
+                          <FormControl>
+                            <SearchableSelect
+                              options={opcionesServicio}
+                              value={field.value || null}
+                              onValueChange={(v) => field.onChange(v ?? '')}
+                              placeholder="Seleccioná un servicio…"
+                              searchPlaceholder="Buscar servicio…"
+                              disabled={guardando}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name={`servicios.${indice}.monto`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <MontoInput
+                              value={field.value}
+                              onChange={field.onChange}
+                              onBlur={field.onBlur}
+                              disabled={guardando}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      disabled={guardando}
+                      onClick={() => lineas.remove(indice)}
+                    >
+                      <span className="sr-only">Quitar servicio</span>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                {lineas.fields.length > 0 && (
+                  <p
+                    className={
+                      diferencia === 0
+                        ? 'text-xs text-muted-foreground'
+                        : 'text-xs font-medium text-destructive'
+                    }
+                  >
+                    Suma de los servicios: {formatearMonto(sumaLineas)}
+                    {monto !== undefined &&
+                      (diferencia === 0
+                        ? ' · coincide con el monto'
+                        : ` · ${diferencia > 0 ? 'sobran' : 'faltan'} ${formatearMonto(
+                            Math.abs(diferencia)
+                          )} para llegar al monto`)}
+                  </p>
+                )}
+
+                {form.formState.errors.servicios?.message && (
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.servicios.message}
+                  </p>
+                )}
+                {form.formState.errors.servicios?.root?.message && (
+                  <p className="text-sm font-medium text-destructive">
+                    {form.formState.errors.servicios.root.message}
+                  </p>
+                )}
+              </div>
             )}
 
             <FormField
@@ -510,7 +664,9 @@ export function MovimientoFormDialog({
               name="contraparteId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contraparte (opcional)</FormLabel>
+                  <FormLabel>
+                    {emitirRecibo ? 'Cliente' : 'Contraparte (opcional)'}
+                  </FormLabel>
                   <FormControl>
                     {/* Buscable igual que las categorías: hoy son cuatro, pero
                         esta lista crece con cada persona a la que se le paga. */}
@@ -520,19 +676,45 @@ export function MovimientoFormDialog({
                       onValueChange={(v) =>
                         field.onChange(!v || v === '__ninguna__' ? null : v)
                       }
-                      placeholder="Sin contraparte"
+                      placeholder={emitirRecibo ? 'Seleccioná un cliente…' : 'Sin contraparte'}
                       searchPlaceholder="Buscar persona o empresa…"
                       disabled={guardando}
                     />
                   </FormControl>
                   <FormDescription>
-                    Quién recibe o entrega. Es lo que después permite preguntar
-                    cuánto se le pagó a alguien en el año.
+                    {emitirRecibo
+                      ? 'El recibo necesita un cliente.'
+                      : 'Quién recibe o entrega. Es lo que después permite preguntar cuánto se le pagó a alguien en el año.'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {esIngreso && (
+              <FormField
+                control={form.control}
+                name="emitirRecibo"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Emitir recibo de pago</FormLabel>
+                      <FormDescription>
+                        Genera un recibo con consecutivo, descargable en PDF, para
+                        entregarle al cliente. No es una factura.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value === true}
+                        onCheckedChange={cambiarEmitirRecibo}
+                        disabled={guardando}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

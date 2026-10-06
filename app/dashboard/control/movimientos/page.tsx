@@ -82,6 +82,10 @@ async function Listado({
     )
   }
 
+  // Cached per request by the action, so this does not repeat the query the
+  // form and the filters already make. Used to pick the client of a receipt.
+  const contrapartes = (await getContrapartes()).data ?? []
+
   const d = resultado.data
 
   return (
@@ -95,7 +99,7 @@ async function Listado({
         </span>
       </p>
 
-      <MovimientosTable movimientos={d.items} />
+      <MovimientosTable movimientos={d.items} contrapartes={contrapartes} />
 
       <Paginador
         page={d.page}

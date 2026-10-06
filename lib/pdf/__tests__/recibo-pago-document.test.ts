@@ -44,9 +44,13 @@ describe('ReciboPagoDocument', () => {
     expect(pdf.length).toBeGreaterThan(1000)
   })
 
-  it('renderiza un recibo anulado', async () => {
-    const pdf = await render({ anulado: true, logo: true })
-    expect(pdf.subarray(0, 4).toString('latin1')).toBe('%PDF')
-    expect(pdf.length).toBeGreaterThan(1000)
+  // react-pdf compresses the content streams, so the text "ANULADO" cannot be
+  // grepped in the buffer. The ANULADO mark is the only difference between the
+  // two renders, so a larger buffer is the proxy that it was drawn.
+  it('el recibo anulado pesa más que el normal (la marca ANULADO se dibuja)', async () => {
+    const normal = await render({ anulado: false, logo: true })
+    const anulado = await render({ anulado: true, logo: true })
+    expect(anulado.subarray(0, 4).toString('latin1')).toBe('%PDF')
+    expect(anulado.length).toBeGreaterThan(normal.length)
   })
 })

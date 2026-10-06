@@ -113,6 +113,11 @@ import {
   type DatosRecibo,
 } from '@/lib/utils/control-recibo'
 import {
+  ERROR_NO_AUTENTICADO,
+  ERROR_RECIBO_NO_ENCONTRADO,
+  ERROR_SIN_ACCESO_CONTROL,
+} from '@/lib/utils/control-errores'
+import {
   createBolsilloSchema,
   createCategoriaSchema,
   createTipoServicioSchema,
@@ -168,11 +173,11 @@ async function requireControlAuth() {
   const session = await auth()
 
   if (!session?.user?.id) {
-    return { authorized: false as const, error: 'No autenticado' }
+    return { authorized: false as const, error: ERROR_NO_AUTENTICADO }
   }
 
   if (!(await hasControlAccess())) {
-    return { authorized: false as const, error: 'No tenés acceso al módulo Control' }
+    return { authorized: false as const, error: ERROR_SIN_ACCESO_CONTROL }
   }
 
   return { authorized: true as const, userId: session.user.id }
@@ -254,6 +259,12 @@ const movimientoSelect = {
   createdBy: { select: { name: true, email: true } },
   anuladoPor: { select: { id: true } },
   recibo: { select: { id: true, numero: true } },
+  // Only to tell whether a receipt can still be issued; the ids themselves
+  // never reach the client.
+  alegraInvoiceId: true,
+  alegraEstimateId: true,
+  alegraPaymentId: true,
+  _count: { select: { detalleServicios: true } },
 } satisfies Prisma.MovimientoSelect
 
 type MovimientoRow = Prisma.MovimientoGetPayload<{ select: typeof movimientoSelect }>
@@ -285,6 +296,11 @@ function aMovimientoListItem(row: MovimientoRow): MovimientoListItem {
     anulaMovimientoId: row.anulaMovimientoId,
     estaAnulado: row.anuladoPor !== null,
     recibo: row.recibo ? { id: row.recibo.id, numero: row.recibo.numero } : null,
+    tieneDocumentoAlegra:
+      row.alegraInvoiceId !== null ||
+      row.alegraEstimateId !== null ||
+      row.alegraPaymentId !== null,
+    cantidadServicios: row._count.detalleServicios,
   }
 }
 
@@ -1330,7 +1346,7 @@ export async function getReciboParaPdf(
       },
     },
   })
-  if (!recibo) return { success: false, error: 'Recibo no encontrado' }
+  if (!recibo) return { success: false, error: ERROR_RECIBO_NO_ENCONTRADO }
 
   const { movimiento } = recibo
 
