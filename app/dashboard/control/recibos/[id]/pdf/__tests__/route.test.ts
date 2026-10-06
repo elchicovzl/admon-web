@@ -6,21 +6,26 @@ import {
 } from '@/lib/utils/control-errores'
 import { armarDatosRecibo } from '@/lib/utils/control-recibo'
 
-const { getReciboParaPdf, renderizarReciboPdf, leerLogoRecibo, emisorReciboCompleto } =
+const {
+  getReciboParaPdf,
+  renderizarReciboPdf,
+  leerLogoRecibo,
+  emisorReciboCompleto,
+  obtenerEmisorRecibo,
+} =
   vi.hoisted(() => ({
     getReciboParaPdf: vi.fn(),
     renderizarReciboPdf: vi.fn(),
     leerLogoRecibo: vi.fn(),
     emisorReciboCompleto: vi.fn(),
+    obtenerEmisorRecibo: vi.fn(),
   }))
 
 vi.mock('@/lib/actions/control.actions', () => ({ getReciboParaPdf }))
 vi.mock('@/lib/pdf/recibo-pago-document', () => ({ renderizarReciboPdf }))
 vi.mock('@/lib/pdf/recibo-pago-logo', () => ({ leerLogoRecibo }))
-vi.mock('@/lib/config/recibo-emisor', () => ({
-  EMISOR_RECIBO: { razonSocial: 'Emisor de prueba' },
-  emisorReciboCompleto,
-}))
+vi.mock('@/lib/config/recibo-emisor', () => ({ emisorReciboCompleto }))
+vi.mock('@/lib/control/emisor-recibo', () => ({ obtenerEmisorRecibo }))
 
 import { GET } from '../route'
 
@@ -36,6 +41,8 @@ const datos = armarDatosRecibo({
   anulado: false,
 })
 
+const emisorPrueba = { razonSocial: 'Emisor de prueba' }
+
 function llamar() {
   return GET(new Request('http://localhost/dashboard/control/recibos/abc/pdf'), {
     params: Promise.resolve({ id: 'abc' }),
@@ -48,6 +55,7 @@ beforeEach(() => {
   leerLogoRecibo.mockResolvedValue(Buffer.from('logo'))
   renderizarReciboPdf.mockResolvedValue(Buffer.from('%PDF-1.4 prueba'))
   emisorReciboCompleto.mockReturnValue(true)
+  obtenerEmisorRecibo.mockResolvedValue(emisorPrueba)
 })
 
 describe('GET /dashboard/control/recibos/[id]/pdf', () => {
@@ -96,6 +104,10 @@ describe('GET /dashboard/control/recibos/[id]/pdf', () => {
     expect(respuesta.headers.get('Cache-Control')).toBe('no-store')
     expect(Buffer.from(await respuesta.arrayBuffer()).toString()).toBe('%PDF-1.4 prueba')
     expect(respuesta.headers.has('X-Recibo-Emisor-Pendiente')).toBe(false)
+    expect(renderizarReciboPdf).toHaveBeenCalledWith(
+      expect.objectContaining({ emisor: emisorPrueba })
+    )
+    expect(emisorReciboCompleto).toHaveBeenCalledWith(emisorPrueba)
   })
 
   it('marca la respuesta cuando los datos del emisor están incompletos', async () => {

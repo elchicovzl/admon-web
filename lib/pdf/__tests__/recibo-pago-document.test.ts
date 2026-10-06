@@ -2,7 +2,7 @@ import { readFile } from 'fs/promises'
 import path from 'path'
 import { describe, it, expect } from 'vitest'
 import { renderizarReciboPdf } from '../recibo-pago-document'
-import { EMISOR_RECIBO } from '@/lib/config/recibo-emisor'
+import { RECIBO_LOGO_PATH, type EmisorRecibo } from '@/lib/config/recibo-emisor'
 import { armarDatosRecibo } from '@/lib/utils/control-recibo'
 
 const datos = armarDatosRecibo({
@@ -20,13 +20,22 @@ const datos = armarDatosRecibo({
   anulado: false,
 })
 
+const EMISOR_PRUEBA: EmisorRecibo = {
+  razonSocial: 'Empresa de Prueba S.A.S.',
+  nit: '900123456-7',
+  direccion: 'Calle 1 # 2-3',
+  ciudad: 'Bogotá',
+  telefono: '3000000000',
+  email: 'contacto@example.com',
+}
+
 async function render(props: { anulado?: boolean; logo?: boolean }) {
   const logoBuffer = props.logo
-    ? await readFile(path.join(process.cwd(), EMISOR_RECIBO.logoPath))
+    ? await readFile(path.join(process.cwd(), RECIBO_LOGO_PATH))
     : undefined
   return renderizarReciboPdf({
     datos: { ...datos, anulado: props.anulado ?? false },
-    emisor: EMISOR_RECIBO,
+    emisor: EMISOR_PRUEBA,
     logoBuffer,
   })
 }

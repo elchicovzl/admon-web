@@ -19,7 +19,7 @@ import {
   type EntradaValidarEmisionRecibo,
   type FilaEmitibleRecibo,
 } from '../control-recibo'
-import { EMISOR_RECIBO, PLACEHOLDER_EMISOR, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
+import { PLACEHOLDER_EMISOR, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
 
 describe('formatearNumeroRecibo', () => {
   it('pads to 4 digits', () => {
@@ -254,7 +254,6 @@ describe('emisorReciboCompleto', () => {
     ciudad: 'Bogotá',
     telefono: '3000000000',
     email: 'contacto@example.com',
-    logoPath: 'public/images/logo-wordmark.png',
   }
 
   it('is true when no field is a placeholder', () => {
@@ -263,10 +262,6 @@ describe('emisorReciboCompleto', () => {
 
   it('is false when any field is still the placeholder', () => {
     expect(emisorReciboCompleto({ ...completo, nit: PLACEHOLDER_EMISOR })).toBe(false)
-  })
-
-  it('defaults to the real issuer config', () => {
-    expect(emisorReciboCompleto()).toBe(emisorReciboCompleto(EMISOR_RECIBO))
   })
 })
 

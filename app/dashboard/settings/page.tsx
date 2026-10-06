@@ -1,7 +1,10 @@
 import { Metadata } from 'next'
 import { auth } from '@/lib/auth/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { UserRole } from '@prisma/client'
 import { ProfileSettingsForm } from '@/components/dashboard/profile-settings-form'
+import { ConfiguracionEmpresaForm } from '@/components/dashboard/configuracion-empresa-form'
+import { getConfiguracionEmpresa } from '@/lib/actions/configuracion-empresa.actions'
 
 export const metadata: Metadata = {
   title: 'Configuración | Dashboard',
@@ -14,6 +17,9 @@ export default async function SettingsPage() {
   if (!session?.user) {
     return null
   }
+
+  const esSuperAdmin = session.user.role === UserRole.SUPER_ADMIN
+  const configuracionEmpresa = esSuperAdmin ? (await getConfiguracionEmpresa()).data : null
 
   return (
     <div className="space-y-6">
@@ -32,6 +38,19 @@ export default async function SettingsPage() {
           role: session.user.role,
         }}
       />
+
+      {esSuperAdmin && (
+        <ConfiguracionEmpresaForm
+          initialValues={{
+            razonSocial: configuracionEmpresa?.razonSocial ?? '',
+            nit: configuracionEmpresa?.nit ?? '',
+            direccion: configuracionEmpresa?.direccion ?? '',
+            ciudad: configuracionEmpresa?.ciudad ?? '',
+            telefono: configuracionEmpresa?.telefono ?? '',
+            email: configuracionEmpresa?.email ?? '',
+          }}
+        />
+      )}
 
       <Card className="max-w-2xl">
         <CardHeader>

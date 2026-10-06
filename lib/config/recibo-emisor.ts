@@ -1,32 +1,30 @@
 /**
- * Issuer data printed on the payment receipt (Recibo de pago).
+ * Issuer contract for the payment receipt (Recibo de pago).
  *
- * The legal values are not known yet, so they are explicit placeholders. The
- * feature must not be released while `emisorReciboCompleto()` returns false.
- * Do not invent a NIT, address or phone: replace 'PENDIENTE' with the literal
- * values provided by the company.
+ * The values themselves live in the database (`configuracion_empresa`, edited
+ * from Settings) and are resolved by `obtenerEmisorRecibo()`. Any field that is
+ * missing falls back to the explicit 'PENDIENTE' placeholder; the feature must
+ * not be released while `emisorReciboCompleto()` returns false.
  */
 
 export const PLACEHOLDER_EMISOR = 'PENDIENTE'
 
-export const EMISOR_RECIBO = {
-  razonSocial: PLACEHOLDER_EMISOR,
-  nit: PLACEHOLDER_EMISOR,
-  direccion: PLACEHOLDER_EMISOR,
-  ciudad: PLACEHOLDER_EMISOR,
-  telefono: PLACEHOLDER_EMISOR,
-  email: 'contacto@administracionsegura.co',
-  // Relative to the project root. PNG on purpose: react-pdf cannot render webp.
-  logoPath: 'public/images/logo-wordmark.png',
-} as const
+/** Fixed primary key of the singleton `configuracion_empresa` row. */
+export const CONFIGURACION_EMPRESA_ID = 'default'
 
-/**
- * True only when no issuer field is still the 'PENDIENTE' placeholder.
- * The issuer is injectable so the check is testable independent of the
- * release state of `EMISOR_RECIBO`.
- */
-export function emisorReciboCompleto(
-  emisor: Readonly<Record<string, string>> = EMISOR_RECIBO
-): boolean {
+export interface EmisorRecibo {
+  razonSocial: string
+  nit: string
+  direccion: string
+  ciudad: string
+  telefono: string
+  email: string
+}
+
+// Relative to the project root. PNG on purpose: react-pdf cannot render webp.
+export const RECIBO_LOGO_PATH = 'public/images/logo-wordmark.png'
+
+/** True only when no issuer field is still the 'PENDIENTE' placeholder. */
+export function emisorReciboCompleto(emisor: Readonly<EmisorRecibo>): boolean {
   return Object.values(emisor).every((valor) => valor !== PLACEHOLDER_EMISOR)
 }

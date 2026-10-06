@@ -96,5 +96,10 @@ The Control module can issue a payment receipt ("Recibo de pago") for an income 
 - Apply the migration on the local database (`pnpm db:up && pnpm db:migrate`) and run the UI flows in a browser: create an income with two lines and the receipt switch, download the PDF, issue a receipt from the table, annul and re-download. Not done by the orchestrator: reading `.env.local` was denied, so no database command was run.
 - Engram mirror of this document is pending (every `mem_save` failed with "multiple active runtime sessions").
 
+## Extension (user, 2026-10-06): issuer data editable in Settings
+- [x] T6 — Issuer data stored in the database and edited from `/dashboard/settings` (admin only): singleton table `configuracion_empresa`, server action to read/update it, "Datos de la empresa" card, PDF route reads it (fallback to `PENDIENTE` + the warning header when empty); `lib/config/recibo-emisor.ts` keeps only the contract. Delivered as PR 5 on top of #46. Route: delegated (writer trigger).
+
+- T6 done: Prisma `ConfiguracionEmpresa` (singleton id `default`) + hand-written migration `20261006000000_add_configuracion_empresa` (matches `migrate diff`); `lib/actions/configuracion-empresa.actions.ts` (read: any authenticated user; update: SUPER_ADMIN via `session.user.role === UserRole.SUPER_ADMIN`); `obtenerEmisorRecibo()` in `lib/control/emisor-recibo.ts` with field-by-field `PENDIENTE` fallback; PDF route uses it; Settings card for SUPER_ADMIN. Hard-coded `EMISOR_RECIBO` removed (`RECIBO_LOGO_PATH` replaces `logoPath`). Verification: `pnpm test:run` 35 files / 930 tests passed; tsc 37 errors (baseline, none in touched files); `pnpm build` ok. Migration not applied to any database.
+
 ## Next step
-Review and merge the chained PRs in order; fill in the issuer data; local verification above.
+Review and merge the chained PRs in order; local verification above.

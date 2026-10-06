@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getReciboParaPdf } from '@/lib/actions/control.actions'
-import { EMISOR_RECIBO, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
+import { emisorReciboCompleto } from '@/lib/config/recibo-emisor'
+import { obtenerEmisorRecibo } from '@/lib/control/emisor-recibo'
 import { renderizarReciboPdf } from '@/lib/pdf/recibo-pago-document'
 import { leerLogoRecibo } from '@/lib/pdf/recibo-pago-logo'
 import {
@@ -36,8 +37,9 @@ export async function GET(
   const datos = resultado.data
 
   try {
+    const emisor = await obtenerEmisorRecibo()
     const logoBuffer = await leerLogoRecibo()
-    const pdf = await renderizarReciboPdf({ datos, emisor: EMISOR_RECIBO, logoBuffer })
+    const pdf = await renderizarReciboPdf({ datos, emisor, logoBuffer })
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/pdf',
@@ -45,7 +47,7 @@ export async function GET(
       'Content-Length': String(pdf.length),
       'Cache-Control': 'no-store',
     }
-    if (!emisorReciboCompleto()) headers['X-Recibo-Emisor-Pendiente'] = '1'
+    if (!emisorReciboCompleto(emisor)) headers['X-Recibo-Emisor-Pendiente'] = '1'
 
     return new NextResponse(new Uint8Array(pdf), { status: 200, headers })
   } catch (error) {
