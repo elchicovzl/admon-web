@@ -37,3 +37,7 @@ ALTER TABLE "recibos_pago" ADD CONSTRAINT "recibos_pago_contraparteId_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "recibos_pago" ADD CONSTRAINT "recibos_pago_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Seed the receipt counter so the first receipt increments an existing row
+-- (no concurrent upsert race on the very first number).
+INSERT INTO "consecutivos" ("clave", "ultimo") VALUES ('RECIBO_PAGO', 0);

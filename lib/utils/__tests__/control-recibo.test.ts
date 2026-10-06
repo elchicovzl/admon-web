@@ -12,9 +12,14 @@ import {
   montoEnLetras,
   validarEmisionRecibo,
   armarDatosRecibo,
+  sumaDeLineas,
+  esLineaVacia,
+  normalizarEntradaMovimiento,
+  puedeEmitirReciboDeFila,
   type EntradaValidarEmisionRecibo,
+  type FilaEmitibleRecibo,
 } from '../control-recibo'
-import { EMISOR_RECIBO, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
+import { PLACEHOLDER_EMISOR, emisorReciboCompleto } from '@/lib/config/recibo-emisor'
 
 describe('formatearNumeroRecibo', () => {
   it('pads to 4 digits', () => {
@@ -26,6 +31,13 @@ describe('formatearNumeroRecibo', () => {
   it('keeps all digits of larger numbers', () => {
     expect(formatearNumeroRecibo(12345)).toBe('RP-12345')
   })
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'throws on invalid number %s',
+    (n) => {
+      expect(() => formatearNumeroRecibo(n)).toThrow('Número de recibo inválido')
+    }
+  )
 
   it('exposes the counter key', () => {
     expect(CLAVE_CONSECUTIVO_RECIBO).toBe('RECIBO_PAGO')
@@ -153,6 +165,12 @@ describe('validarEmisionRecibo', () => {
     })
   })
 
+  it('rounds an unrounded float amount before comparing', () => {
+    expect(
+      rechazo({ monto: 0.30000000000000004, lineas: [{ monto: 0.1 }, { monto: 0.2 }] })
+    ).toEqual({ ok: true })
+  })
+
   it('reports the first broken rule in order', () => {
     const r = rechazo({ tipo: 'EGRESO', tieneRecibo: true, cliente: null, lineas: [] })
     expect(r).toEqual({ ok: false, error: 'Solo se puede emitir recibo para un ingreso.' })
@@ -194,6 +212,22 @@ describe('armarDatosRecibo', () => {
     })
   })
 
+  it('throws when the lines do not sum the amount', () => {
+    expect(() =>
+      armarDatosRecibo({
+        numero: 1,
+        fecha,
+        clienteNombre: 'Ana',
+        clienteDocumento: null,
+        lineas: [{ servicio: 'X', referencia: null, monto: 100 }],
+        monto: 101,
+        bolsilloNombre: 'Caja',
+        concepto: 'c',
+        anulado: false,
+      })
+    ).toThrow('no coincide')
+  })
+
   it('carries the annulled flag and a null document', () => {
     const datos = armarDatosRecibo({
       numero: 1,
@@ -213,8 +247,92 @@ describe('armarDatosRecibo', () => {
 })
 
 describe('emisorReciboCompleto', () => {
-  it('is false while legal data is pending', () => {
-    expect(EMISOR_RECIBO.nit).toBe('PENDIENTE')
-    expect(emisorReciboCompleto()).toBe(false)
+  const completo = {
+    razonSocial: 'Empresa S.A.S.',
+    nit: '900123456-7',
+    direccion: 'Calle 1 # 2-3',
+    ciudad: 'Bogotá',
+    telefono: '3000000000',
+    email: 'contacto@example.com',
+  }
+
+  it('is true when no field is a placeholder', () => {
+    expect(emisorReciboCompleto(completo)).toBe(true)
+  })
+
+  it('is false when any field is still the placeholder', () => {
+    expect(emisorReciboCompleto({ ...completo, nit: PLACEHOLDER_EMISOR })).toBe(false)
+  })
+})
+
+describe('sumaDeLineas', () => {
+  it('suma las líneas sin error de coma flotante', () => {
+    expect(sumaDeLineas([{ monto: 0.1 }, { monto: 0.2 }])).toBe(0.3)
+  })
+
+  it('cuenta como cero las líneas sin monto todavía', () => {
+    expect(sumaDeLineas([{ monto: 1000 }, {}, { monto: null }])).toBe(1000)
+  })
+
+  it('devuelve cero sin líneas', () => {
+    expect(sumaDeLineas([])).toBe(0)
+  })
+})
+
+describe('puedeEmitirReciboDeFila', () => {
+  const base: FilaEmitibleRecibo = {
+    tipo: 'INGRESO',
+    estaAnulado: false,
+    anulaMovimientoId: null,
+    tieneDocumentoAlegra: false,
+    cantidadServicios: 2,
+    recibo: null,
+  }
+
+  it('ofrece emitir en un ingreso manual con desglose y sin recibo', () => {
+    expect(puedeEmitirReciboDeFila(base)).toBe(true)
+  })
+
+  it.each([
+    ['no es ingreso', { tipo: 'EGRESO' }],
+    ['está anulado', { estaAnulado: true }],
+    ['es una anulación', { anulaMovimientoId: 'mov1' }],
+    ['viene de Alegra', { tieneDocumentoAlegra: true }],
+    ['no tiene desglose', { cantidadServicios: 0 }],
+    ['ya tiene recibo', { recibo: { id: 'r1', numero: 1 } }],
+  ])('no ofrece emitir si %s', (_motivo, cambio) => {
+    expect(puedeEmitirReciboDeFila({ ...base, ...cambio })).toBe(false)
+  })
+})
+
+describe('normalizarEntradaMovimiento', () => {
+  it('drops an empty servicios array', () => {
+    const resultado = normalizarEntradaMovimiento({ concepto: 'x', servicios: [] })
+    expect(resultado.servicios).toBeUndefined()
+    expect(resultado.concepto).toBe('x')
+  })
+
+  it('keeps a non-empty servicios array', () => {
+    const servicios = [{ servicioAlegraId: 's1', monto: 100 }]
+    const entrada = { concepto: 'x', servicios }
+    expect(normalizarEntradaMovimiento(entrada).servicios).toBe(servicios)
+  })
+
+  it('leaves input without servicios untouched', () => {
+    const entrada = { concepto: 'x' } as { concepto: string; servicios?: unknown[] }
+    expect(normalizarEntradaMovimiento(entrada)).toBe(entrada)
+  })
+})
+
+describe('esLineaVacia', () => {
+  it('is true with no service and no amount', () => {
+    expect(esLineaVacia({ servicioAlegraId: '', monto: undefined })).toBe(true)
+    expect(esLineaVacia({ servicioAlegraId: null, monto: null })).toBe(true)
+  })
+
+  it('is false when a service or an amount was filled', () => {
+    expect(esLineaVacia({ servicioAlegraId: 's1', monto: undefined })).toBe(false)
+    expect(esLineaVacia({ servicioAlegraId: '', monto: 500 })).toBe(false)
+    expect(esLineaVacia({ servicioAlegraId: 's1', monto: 500 })).toBe(false)
   })
 })

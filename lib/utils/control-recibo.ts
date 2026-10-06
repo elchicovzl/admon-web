@@ -9,7 +9,7 @@
  * Alegra invoice. It never goes to Alegra or DIAN.
  */
 
-import { sumarMontos } from '@/lib/utils/control-ledger'
+import { redondearMonto, sumarMontos } from '@/lib/utils/control-ledger'
 
 /** Key of the `Consecutivo` row that numbers receipts. */
 export const CLAVE_CONSECUTIVO_RECIBO = 'RECIBO_PAGO'
@@ -18,8 +18,15 @@ export const CLAVE_CONSECUTIVO_RECIBO = 'RECIBO_PAGO'
 // Número
 // ---------------------------------------------------------------------------
 
-/** 1 → "RP-0001". Numbers above 9999 keep all their digits ("RP-12345"). */
+/**
+ * 1 → "RP-0001". Numbers above 9999 keep all their digits ("RP-12345").
+ * Throws on anything that is not a positive integer: a receipt number comes
+ * from the counter and must never be printed as "RP-0000" or "RP-1.5".
+ */
 export function formatearNumeroRecibo(numero: number): string {
+  if (!Number.isInteger(numero) || numero < 1) {
+    throw new Error(`Número de recibo inválido: ${numero}`)
+  }
   return `RP-${String(numero).padStart(4, '0')}`
 }
 
@@ -171,7 +178,11 @@ export function validarEmisionRecibo(
   if (input.lineas.some((linea) => !(linea.monto > 0))) {
     return { ok: false, error: 'Cada servicio del recibo debe tener un monto mayor a cero.' }
   }
-  if (sumarMontos(input.lineas.map((linea) => linea.monto)) !== input.monto) {
+  // Round first: `monto` may be an unrounded float (0.1 + 0.2), while the sum
+  // of the lines is already in whole cents.
+  if (
+    sumarMontos(input.lineas.map((linea) => linea.monto)) !== redondearMonto(input.monto)
+  ) {
     return {
       ok: false,
       error: 'La suma de los servicios debe ser igual al monto del ingreso.',
@@ -211,6 +222,10 @@ export interface DatosRecibo {
 
 /** Builds the plain view model the PDF renders. No Prisma types, no I/O. */
 export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
+  // A receipt whose lines do not add up to its total must never be printed.
+  if (sumarMontos(input.lineas.map((l) => l.monto)) !== redondearMonto(input.monto)) {
+    throw new Error('La suma de los servicios no coincide con el monto del recibo')
+  }
   return {
     numeroFormateado: formatearNumeroRecibo(input.numero),
     fecha: input.fecha,
@@ -226,4 +241,72 @@ export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
     concepto: input.concepto,
     anulado: input.anulado,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Ayudas de interfaz
+// ---------------------------------------------------------------------------
+
+/**
+ * Sum of the amounts typed in the income form. Lines without an amount yet
+ * count as zero, so the live helper works while the user is still typing. The
+ * server re-validates with the same `sumarMontos`.
+ */
+export function sumaDeLineas(lineas: ReadonlyArray<{ monto?: number | null }>): number {
+  return sumarMontos(lineas.map((linea) => linea.monto ?? 0))
+}
+
+/**
+ * The income form keeps `servicios: []` while the user has no breakdown, but
+ * the schema rejects an empty array (`min(1)`). An empty list means "no
+ * breakdown", so it becomes `undefined` before validation. Any other value is
+ * returned untouched.
+ */
+export function normalizarEntradaMovimiento<T extends { servicios?: unknown[] | null }>(
+  valores: T
+): T {
+  if (Array.isArray(valores.servicios) && valores.servicios.length === 0) {
+    return { ...valores, servicios: undefined }
+  }
+  return valores
+}
+
+/** A line is still empty when it has neither a service nor an amount. */
+export function esLineaVacia(linea: {
+  servicioAlegraId?: string | null
+  monto?: number | null
+}): boolean {
+  return !linea.servicioAlegraId && (linea.monto === undefined || linea.monto === null)
+}
+
+/** Download URL of a receipt PDF (route handler `recibos/[id]/pdf`). */
+export function rutaPdfRecibo(reciboId: string): string {
+  return `/dashboard/control/recibos/${encodeURIComponent(reciboId)}/pdf`
+}
+
+export interface FilaEmitibleRecibo {
+  tipo: string
+  estaAnulado: boolean
+  anulaMovimientoId: string | null
+  tieneDocumentoAlegra: boolean
+  cantidadServicios: number
+  recibo: { id: string; numero: number } | null
+}
+
+/**
+ * Whether the movements table should offer "Emitir recibo" for a row. It is a
+ * UI filter over the same rules `validarEmisionRecibo` enforces on the server
+ * (the client and the sum of the lines are checked there): an income that is
+ * not annulled, not itself a reversal, without an Alegra document, without a
+ * receipt, and with a service breakdown already saved.
+ */
+export function puedeEmitirReciboDeFila(fila: FilaEmitibleRecibo): boolean {
+  return (
+    fila.tipo === 'INGRESO' &&
+    !fila.estaAnulado &&
+    fila.anulaMovimientoId === null &&
+    !fila.tieneDocumentoAlegra &&
+    fila.cantidadServicios > 0 &&
+    fila.recibo === null
+  )
 }

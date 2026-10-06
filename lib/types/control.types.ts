@@ -187,6 +187,12 @@ export interface MovimientoListItem {
    * ahí con su contra-movimiento al lado.
    */
   estaAnulado: boolean
+  /** Recibo de pago emitido para este ingreso, si lo hay. */
+  recibo: { id: string; numero: number } | null
+  /** True si el ingreso viene de una factura, cotización o pago de Alegra. */
+  tieneDocumentoAlegra: boolean
+  /** Cantidad de líneas del desglose por servicio. */
+  cantidadServicios: number
 }
 
 // ---------------------------------------------------------------------------
