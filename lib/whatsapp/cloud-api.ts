@@ -244,6 +244,9 @@ export async function getMediaInfo(mediaId: string): Promise<MediaInfo> {
   }
 }
 
+/** Message of the permanent error `downloadMedia` throws for oversize files (callers map it to TOO_LARGE). */
+export const MEDIA_TOO_LARGE_MESSAGE = "Media exceeds the configured size limit"
+
 export interface DownloadedMedia {
   bytes: Uint8Array
   contentType: string | null
@@ -265,11 +268,11 @@ export async function downloadMedia(url: string, options?: { maxBytes?: number }
   const maxBytes = options?.maxBytes
   const declared = Number(response.headers.get("content-length"))
   if (maxBytes && Number.isFinite(declared) && declared > maxBytes) {
-    throw new CloudApiError("Media exceeds the configured size limit", response.status, null, false)
+    throw new CloudApiError(MEDIA_TOO_LARGE_MESSAGE, response.status, null, false)
   }
   const bytes = new Uint8Array(await response.arrayBuffer())
   if (maxBytes && bytes.byteLength > maxBytes) {
-    throw new CloudApiError("Media exceeds the configured size limit", response.status, null, false)
+    throw new CloudApiError(MEDIA_TOO_LARGE_MESSAGE, response.status, null, false)
   }
   return { bytes, contentType: response.headers.get("content-type") }
 }

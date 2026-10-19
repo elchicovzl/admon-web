@@ -540,6 +540,18 @@ puede ser una Server Action. Reglas:
   `removeLead` (marca `leadSuppressed`) para que ni el barrido ni un mensaje nuevo lo
   recreen; un lead `DISCARDED` conserva su fila y tampoco se recrea.
 
+- Medios (`wa.media.download` → `lib/whatsapp/media.ts`): cada intento pide a Meta una URL
+  nueva por id (la URL firmada caduca), descarga con el token (nunca se guarda ni se loguea),
+  verifica sha256 y sube a R2 en `whatsapp/{conversationId}/{messageId}/{mediaId}.{ext}`
+  (límite `WHATSAPP_MEDIA_MAX_BYTES`, 25 MB por defecto). Estados: `STORED`, `TOO_LARGE`,
+  `UNSUPPORTED` (solo tipos activos como HTML/SVG, que no se guardan; video y similares sí se
+  guardan) y `FAILED` tras agotar reintentos; el mensaje siempre sigue visible. Solo se
+  procesa una fila `PENDING`, así que un reintento nunca duplica el objeto. La acción
+  `getMediaUrl` (`lib/actions/whatsapp.actions.ts`, solo MANAGER/SUPER_ADMIN) devuelve una URL
+  prefirmada de 10 min; la clave de R2 nunca sale del servidor. `lib/whatsapp/log.ts`
+  (`safeLog`, `maskPhone`) es el único camino para loguear: enmascara teléfonos a los últimos
+  4 dígitos y redacta cuerpos, transcripciones, tokens y URLs.
+
 Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
 en `.env.local`):
 

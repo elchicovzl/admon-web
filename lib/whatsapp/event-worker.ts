@@ -5,6 +5,7 @@ import { getRegisteredWorkers, registerWorker } from "@/lib/queue/workers"
 import { recoverMissingLeads } from "./contacts"
 import { handleEchoReconcileJobs } from "./echoes"
 import { isWhatsAppEnabled } from "./ingest"
+import { handleMediaJobs } from "./media"
 import { processWebhookEvent } from "./process-event"
 import { handleSendJobs } from "./send"
 import { sweepUnprocessedEvents } from "./sweeper"
@@ -106,5 +107,8 @@ export function registerWhatsAppWorkers(): void {
   }
   if (!registered.has(QUEUES.MESSAGE_SEND)) {
     registerWorker({ queue: QUEUES.MESSAGE_SEND, handler: handleSendJobs })
+  }
+  if (!registered.has(QUEUES.MEDIA_DOWNLOAD)) {
+    registerWorker({ queue: QUEUES.MEDIA_DOWNLOAD, handler: handleMediaJobs })
   }
 }
