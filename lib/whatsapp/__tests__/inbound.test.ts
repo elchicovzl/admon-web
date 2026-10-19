@@ -5,7 +5,7 @@ import { splitWebhookPayload } from "../split-payload"
 
 const m = vi.hoisted(() => {
   const tx = {
-    conversation: { update: vi.fn(), updateMany: vi.fn() },
+    conversation: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     conversationEvent: { create: vi.fn() },
     whatsAppMessage: { create: vi.fn() },
   }
@@ -35,6 +35,7 @@ vi.mock("../contacts", () => ({
   ensureLead: m.ensureLead,
 }))
 
+import { setNotifyPort } from "@/lib/notifications/port"
 import { messagePreview, parseInboundMessage, processInboundMessage } from "../inbound"
 
 const RECEIVED = new Date("2026-10-19T12:00:00Z")
@@ -64,13 +65,18 @@ beforeEach(() => {
     id: "msg1",
     media: data.media ? { status: "PENDING" } : null,
   }))
+  // The state machine re-reads the conversation inside the transaction (version 5).
+  m.tx.conversation.findUnique.mockResolvedValue({ status: "HUMAN", stateVersion: 5, aiPaused: false })
   m.tx.conversation.updateMany.mockResolvedValue({ count: 1 })
   m.tx.conversation.update.mockResolvedValue({})
   m.tx.conversationEvent.create.mockResolvedValue({})
   m.send.mockResolvedValue("job")
   m.getBoss.mockResolvedValue({ send: m.send })
 })
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => {
+  vi.unstubAllEnvs()
+  setNotifyPort()
+})
 
 describe("parseInboundMessage", () => {
   it("parses a text message", () => {
@@ -180,26 +186,32 @@ describe("processInboundMessage", () => {
     expect(m.tx.whatsAppMessage.create.mock.calls[0][0].data.conversationId).toBe("winner")
   })
 
+  function givenConversationStatus(status: "AI" | "HUMAN" | "ESCALATED" | "CLOSED") {
+    m.convFindUnique.mockResolvedValue({ ...conversation, status })
+    m.tx.conversation.findUnique.mockResolvedValue({ status, stateVersion: 5, aiPaused: false })
+  }
+
   it("auto-reopens a CLOSED conversation to HUMAN and stores the message (CH-11, S-CH-7)", async () => {
-    m.convFindUnique.mockResolvedValue({ ...conversation, status: "CLOSED" })
+    givenConversationStatus("CLOSED")
 
     await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
 
     expect(m.tx.conversation.updateMany.mock.calls[0][0]).toMatchObject({
-      where: { id: "conv1", status: "CLOSED" },
-      data: { status: "HUMAN", closedAt: null, closedById: null },
+      where: { id: "conv1", stateVersion: 5 },
+      data: { status: "HUMAN", stateVersion: { increment: 1 }, closedAt: null, closedById: null },
     })
     expect(m.tx.conversationEvent.create.mock.calls[0][0].data).toMatchObject({
       fromStatus: "CLOSED",
       toStatus: "HUMAN",
       event: "INBOUND_REOPEN",
+      actor: "CLIENT",
     })
     expect(m.tx.whatsAppMessage.create).toHaveBeenCalledTimes(1)
   })
 
   it("reopens to AI when AI is effective", async () => {
     vi.stubEnv("WHATSAPP_AI_ENABLED", "true")
-    m.convFindUnique.mockResolvedValue({ ...conversation, status: "CLOSED" })
+    givenConversationStatus("CLOSED")
 
     await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
 
@@ -207,12 +219,78 @@ describe("processInboundMessage", () => {
   })
 
   it("does not write a reopen audit event when another worker already reopened it", async () => {
-    m.convFindUnique.mockResolvedValue({ ...conversation, status: "CLOSED" })
+    givenConversationStatus("CLOSED")
+    // The first read sees CLOSED; the version guard loses; the retry sees the winner's HUMAN.
+    m.tx.conversation.findUnique
+      .mockResolvedValueOnce({ status: "CLOSED", stateVersion: 5, aiPaused: false })
+      .mockResolvedValue({ status: "HUMAN", stateVersion: 6, aiPaused: false })
     m.tx.conversation.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValue({ count: 1 })
 
     await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
 
     expect(m.tx.conversationEvent.create).not.toHaveBeenCalled()
+    expect(m.tx.whatsAppMessage.create).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not move or audit an existing conversation on inbound", async () => {
+    givenConversationStatus("HUMAN")
+
+    await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
+
+    expect(m.tx.conversationEvent.create).not.toHaveBeenCalled()
+  })
+
+  it("fails the event, leaving it retryable, when the transition cannot be applied", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue(null)
+
+    await expect(processInboundMessage(payloadOf(fixtures.text), RECEIVED)).rejects.toThrow("inbound transition failed")
+    expect(m.tx.whatsAppMessage.create).not.toHaveBeenCalled()
+  })
+
+  describe("ESCALATED conversation (CH-7, S-CH-6)", () => {
+    it("stores the message, keeps the state and sends one activity notice after the commit", async () => {
+      const notify = vi.fn().mockResolvedValue(undefined)
+      setNotifyPort({ notify })
+      givenConversationStatus("ESCALATED")
+
+      await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
+
+      expect(m.tx.whatsAppMessage.create).toHaveBeenCalledTimes(1)
+      expect(m.tx.conversationEvent.create).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalledTimes(1)
+      expect(notify).toHaveBeenCalledWith({ type: "NEW_ACTIVITY_ON_ESCALATED", conversationId: "conv1" })
+    })
+
+    it("does not notify for a redelivered message", async () => {
+      const notify = vi.fn().mockResolvedValue(undefined)
+      setNotifyPort({ notify })
+      givenConversationStatus("ESCALATED")
+      m.msgFindUnique.mockResolvedValue({ id: "msg1", media: null })
+
+      await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
+
+      expect(notify).not.toHaveBeenCalled()
+    })
+
+    it("does not notify for AI or HUMAN conversations", async () => {
+      const notify = vi.fn().mockResolvedValue(undefined)
+      setNotifyPort({ notify })
+
+      for (const status of ["AI", "HUMAN"] as const) {
+        givenConversationStatus(status)
+        await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
+      }
+
+      expect(notify).not.toHaveBeenCalled()
+    })
+
+    it("a failing notifier never loses the stored message", async () => {
+      setNotifyPort({ notify: vi.fn().mockRejectedValue(new Error("down")) })
+      givenConversationStatus("ESCALATED")
+
+      await expect(processInboundMessage(payloadOf(fixtures.text), RECEIVED)).resolves.toBeUndefined()
+      expect(m.tx.whatsAppMessage.create).toHaveBeenCalledTimes(1)
+    })
   })
 
   it("updates unread, lastInboundAt, lastMessageAt and preview (forward-only)", async () => {

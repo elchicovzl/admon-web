@@ -580,6 +580,45 @@ curl -i -X POST http://localhost:3000/api/whatsapp/webhook \
   -H "x-hub-signature-256: sha256=00" -d "$BODY"
 ```
 
+### Estados de la conversación
+
+Una conversación por contacto (`contactId` único); se reabre, nunca se duplica.
+Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
+`lib/whatsapp/state-machine.ts` y se aplica con `applyTransition`
+(`lib/whatsapp/transitions.ts`).
+
+| Desde | Evento | Hacia | Notas |
+|-------|--------|-------|-------|
+| (ninguno) | `INBOUND` | `AI` si la IA está efectiva, si no `HUMAN` | primer contacto |
+| (ninguno) | `HUMAN_ECHO` | `HUMAN` | una persona escribió primero desde el teléfono |
+| `CLOSED` | `INBOUND` | `AI` o `HUMAN` | reapertura automática; el mensaje se guarda |
+| `AI` | `INBOUND` | `AI` | agenda turno de IA solo si está efectiva |
+| `HUMAN` | `INBOUND` | `HUMAN` | |
+| `ESCALATED` | `INBOUND` | `ESCALATED` | la IA no responde; un aviso `NEW_ACTIVITY_ON_ESCALATED` |
+| `AI`, `ESCALATED` | `HUMAN_ECHO` | `HUMAN` | eco del teléfono (regla CH-9) |
+| `AI`, `ESCALATED` | `DASHBOARD_REPLY` | `HUMAN` | atómico con el envío |
+| `AI`, `ESCALATED` | `TAKE` ("Atender") | `HUMAN` | toma manual |
+| `AI` | `AI_ESCALATE` | `ESCALATED` | único evento que puede originar la IA |
+| `HUMAN` | `RETURN_TO_AI` | `AI` | solo manual, registra quién; mueve `aiCursorAt` |
+| `AI`, `HUMAN`, `ESCALATED` | `CLOSE` | `CLOSED` | manual |
+| `CLOSED` | `REOPEN` (destino `AI` o `HUMAN`) | destino | manual |
+
+- Todo lo demás se rechaza. `ESCALATED` nunca pasa directo a `AI` (primero `HUMAN`); la IA
+  nunca saca una conversación de `HUMAN` o `CLOSED`. `HUMAN` no tiene timeout por inactividad.
+- Cada cambio usa `updateMany where { id, stateVersion }` con incremento de versión y un
+  reintento; escribe un `ConversationEvent` (de, a, evento, actor, usuario, motivo). Dos
+  transiciones simultáneas terminan en un solo estado con auditoría consistente.
+- `aiPaused` (`setConversationAiPaused`) es ortogonal al estado: no cambia `status` ni
+  `stateVersion`, se audita como `AI_PAUSED` / `AI_RESUMED`. Una conversación `AI` pausada
+  no agenda turnos y se comporta como `HUMAN` para las respuestas.
+- IA efectiva = `WHATSAPP_AI_ENABLED` y `WhatsAppSettings.aiEnabled` y no `aiPaused`.
+- El puerto de transición del eco (`transition-port.ts`) se reemplaza por la máquina real
+  al registrar los workers (`setApplyTransitionPort`).
+- Las acciones de servidor para tomar, devolver a IA, cerrar y reabrir se publican en
+  el PR de acciones de cabecera (2.4) y deberán llamar a `requireWhatsAppAuth()`.
+- Notificaciones: hoy `NotifyPort` es un no-op. Cuando aterrice PR4.1 los destinatarios
+  deben ser los usuarios con `canAccessWhatsApp` más los SUPER_ADMIN (no todos los MANAGER).
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)

@@ -9,6 +9,8 @@ import { handleMediaJobs } from "./media"
 import { processWebhookEvent } from "./process-event"
 import { handleSendJobs } from "./send"
 import { sweepUnprocessedEvents } from "./sweeper"
+import { setApplyTransitionPort } from "./transition-port"
+import { applyTransitionForPort } from "./transitions"
 
 /** A stored webhook item handed to the processor. */
 export interface StoredWebhookEvent {
@@ -95,6 +97,8 @@ export async function handleSweepJobs(): Promise<void> {
 /** Idempotent: registers the ingress and outbox handlers and the real event processor once per process. */
 export function registerWhatsAppWorkers(): void {
   processor ??= processWebhookEvent
+  // Echo takeover runs through the real state machine instead of the PR1.4 stand-in writer.
+  setApplyTransitionPort(applyTransitionForPort)
   const registered = new Set(getRegisteredWorkers().map((worker) => worker.queue))
   if (!registered.has(QUEUES.EVENT_PROCESS)) {
     registerWorker({ queue: QUEUES.EVENT_PROCESS, handler: handleEventJobs })
