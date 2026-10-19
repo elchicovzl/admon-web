@@ -12,12 +12,18 @@ declare module 'next-auth' {
        * hasControlAccess() in lib/auth/rbac.ts, which reads the database.
        */
       canAccessControl: boolean
+      /**
+       * Same caveat as canAccessControl: cheap gate for middleware and UI only.
+       * The real check is hasWhatsAppAccess() in lib/auth/rbac.ts.
+       */
+      canAccessWhatsApp: boolean
     } & DefaultSession['user']
   }
 
   interface User {
     role: UserRole
     canAccessControl: boolean
+    canAccessWhatsApp: boolean
   }
 }
 
@@ -26,5 +32,6 @@ declare module 'next-auth/jwt' {
     id: string
     role: UserRole
     canAccessControl: boolean
+    canAccessWhatsApp: boolean
   }
 }

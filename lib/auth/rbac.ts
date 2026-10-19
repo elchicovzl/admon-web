@@ -106,3 +106,49 @@ export async function requireControlAccess(): Promise<void> {
     throw new Error('Unauthorized: Control module access required')
   }
 }
+
+/**
+ * Check if the current user can access the WhatsApp module (shared inbox,
+ * leads, AI settings).
+ *
+ * Same contract as hasControlAccess(): the flag is read FROM THE DATABASE, not
+ * from the 30-day JWT, so a revoked permission bites on the next request. The
+ * token copy (`session.user.canAccessWhatsApp`) is only the cheap gate used by
+ * middleware.ts and the sidebar.
+ *
+ * SUPER_ADMIN always passes. A MANAGER passes only with canAccessWhatsApp. An
+ * inactive user never passes.
+ */
+export async function hasWhatsAppAccess(): Promise<boolean> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    return false
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true, isActive: true, canAccessWhatsApp: true },
+  })
+
+  if (!user || !user.isActive) {
+    return false
+  }
+
+  return user.role === UserRole.SUPER_ADMIN || user.canAccessWhatsApp
+}
+
+/**
+ * Require access to the WhatsApp module (throws if not authorized).
+ *
+ * Use in Server Components and anywhere an exception is the right signal.
+ * Server Actions return `{ success: false }` instead: see
+ * requireWhatsAppAuth() in lib/whatsapp/access.ts.
+ */
+export async function requireWhatsAppAccess(): Promise<void> {
+  const allowed = await hasWhatsAppAccess()
+
+  if (!allowed) {
+    throw new Error('Unauthorized: WhatsApp module access required')
+  }
+}

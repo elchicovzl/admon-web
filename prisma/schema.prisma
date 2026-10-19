@@ -37,6 +37,11 @@ model User {
   // SUPER_ADMIN entra siempre, tenga el flag en false o no — ver lib/auth/rbac.ts.
   canAccessControl Boolean @default(false)
 
+  // Acceso al módulo WhatsApp (bandeja compartida, leads, ajustes de IA).
+  // Mismo patrón que canAccessControl: permiso ortogonal al rol que SUPER_ADMIN
+  // otorga a cada MANAGER. SUPER_ADMIN entra siempre — ver lib/auth/rbac.ts.
+  canAccessWhatsApp Boolean @default(false)
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
