@@ -9,7 +9,12 @@ const datos = armarDatosRecibo({
   numero: 1,
   fecha: new Date('2026-10-04T00:00:00.000Z'),
   clienteNombre: 'Ana Núñez Peña',
-  clienteDocumento: 'CC 1.020.304.050',
+  clienteDocumento: '1.020.304.050',
+  clienteTipoDocumento: 'CC',
+  clienteDireccion: 'Cra 74 # 89-95',
+  clienteCiudad: 'Medellín',
+  clienteTelefono: '301 510 6144',
+  elaboradoPor: 'Luisa Gómez',
   lineas: [
     { servicio: 'Administración', referencia: '01', monto: 150000 },
     { servicio: 'Afiliación', referencia: null, monto: 250000 },
@@ -53,6 +58,18 @@ describe('ReciboPagoDocument', () => {
     expect(pdf.length).toBeGreaterThan(1000)
   })
 
+  it('renderiza un recibo antiguo sin datos de contacto y sin firmante', async () => {
+    const pdf = await renderizarReciboPdf({
+      datos: {
+        ...datos,
+        cliente: { ...datos.cliente, tipoDocumento: '', direccion: '', ciudad: '', telefono: '' },
+        elaboradoPor: '',
+      },
+      emisor: EMISOR_PRUEBA,
+    })
+    expect(pdf.subarray(0, 4).toString('latin1')).toBe('%PDF')
+  })
+
   // react-pdf compresses the content streams, so the text "ANULADO" cannot be
   // grepped in the buffer. The ANULADO mark is the only difference between the
   // two renders, so a larger buffer is the proxy that it was drawn.
@@ -61,5 +78,30 @@ describe('ReciboPagoDocument', () => {
     const anulado = await render({ anulado: true, logo: true })
     expect(anulado.subarray(0, 4).toString('latin1')).toBe('%PDF')
     expect(anulado.length).toBeGreaterThan(normal.length)
+  })
+
+  // Long names/addresses and many lines must wrap and flow onto further pages
+  // instead of throwing or clipping. Pages cannot be counted (compressed
+  // streams), so the extra page shows up as a larger buffer than the short one.
+  it('renderiza un recibo con textos largos y 40 líneas, más grande que el corto', async () => {
+    const largo = await renderizarReciboPdf({
+      datos: {
+        ...datos,
+        cliente: {
+          ...datos.cliente,
+          nombre: 'Corporación Internacional de Servicios Profesionales y Asesorías Jurídicas '.repeat(2),
+          direccion: 'Carrera 74 número 89-95 apartamento 1201 torre 3 conjunto residencial '.repeat(3),
+        },
+        lineas: Array.from({ length: 40 }, (_, i) => ({
+          servicio: `Servicio de administración número ${i + 1}`,
+          referencia: null,
+          monto: 10000,
+        })),
+      },
+      emisor: EMISOR_PRUEBA,
+    })
+    const corto = await render({ logo: false })
+    expect(largo.subarray(0, 4).toString('latin1')).toBe('%PDF')
+    expect(largo.length).toBeGreaterThan(corto.length)
   })
 })

@@ -16,9 +16,10 @@ import {
 } from 'lucide-react'
 
 import { anularMovimiento, emitirReciboDeMovimiento } from '@/lib/actions/control.actions'
-import type { ContraparteListItem, MovimientoListItem } from '@/lib/types/control.types'
+import type { ClienteReciboItem, MovimientoListItem } from '@/lib/types/control.types'
 import { formatearMonto, formatearFecha, hoyComoFechaCalendario } from '@/lib/utils/control-format'
 import {
+  etiquetaClienteRecibo,
   formatearNumeroRecibo,
   puedeEmitirReciboDeFila,
   rutaPdfRecibo,
@@ -67,11 +68,11 @@ const COLOR_TIPO = {
 
 interface Props {
   movimientos: MovimientoListItem[]
-  /** Para elegir el cliente al emitir un recibo de un ingreso sin contraparte. */
-  contrapartes: ContraparteListItem[]
+  /** Clientes del CRM entre los que se elige el destinatario del recibo. */
+  clientes: ClienteReciboItem[]
 }
 
-export function MovimientosTable({ movimientos, contrapartes }: Props) {
+export function MovimientosTable({ movimientos, clientes }: Props) {
   const [anulando, setAnulando] = useState<MovimientoListItem | null>(null)
   const [motivo, setMotivo] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -80,14 +81,20 @@ export function MovimientosTable({ movimientos, contrapartes }: Props) {
   const [clienteId, setClienteId] = useState<string | null>(null)
   const [enviandoRecibo, setEnviandoRecibo] = useState(false)
 
-  // Clients first; if none is registered as such, any active counterparty can
-  // be the receipt's client (the server only requires a counterparty).
-  const activas = contrapartes.filter((c) => c.isActive)
-  const clientes = activas.filter((c) => c.tipo === 'CLIENTE')
-  const opcionesCliente = (clientes.length > 0 ? clientes : activas).map((c) => ({
+  const opcionesCliente = clientes.map((c) => ({
     value: c.id,
-    label: c.nombre,
+    label: etiquetaClienteRecibo(c),
   }))
+
+  // Preselects the client behind the movement's counterparty, if there is one.
+  function abrirEmision(movimiento: MovimientoListItem) {
+    const contraparteId = movimiento.contraparte?.id
+    const sugerido = contraparteId
+      ? clientes.find((c) => c.contraparteId === contraparteId)
+      : undefined
+    setClienteId(sugerido?.id ?? null)
+    setEmitiendo(movimiento)
+  }
 
   function cerrarEmision() {
     setEmitiendo(null)
@@ -95,14 +102,13 @@ export function MovimientosTable({ movimientos, contrapartes }: Props) {
   }
 
   async function confirmarEmision() {
-    if (!emitiendo) return
+    if (!emitiendo || !clienteId) return
 
     setEnviandoRecibo(true)
     try {
       const resultado = await emitirReciboDeMovimiento({
         movimientoId: emitiendo.id,
-        // The server ignores it when the movement already has a counterparty.
-        contraparteId: emitiendo.contraparte ? undefined : (clienteId ?? undefined),
+        clientId: clienteId,
       })
 
       if (resultado.success && resultado.data) {
@@ -287,7 +293,7 @@ export function MovimientosTable({ movimientos, contrapartes }: Props) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {puedeEmitir && (
-                            <DropdownMenuItem onClick={() => setEmitiendo(movimiento)}>
+                            <DropdownMenuItem onClick={() => abrirEmision(movimiento)}>
                               <FileText className="mr-2 h-4 w-4" />
                               Emitir recibo
                             </DropdownMenuItem>
@@ -419,28 +425,21 @@ export function MovimientosTable({ movimientos, contrapartes }: Props) {
             </div>
           )}
 
-          {emitiendo?.contraparte ? (
-            <p className="text-sm">
-              El recibo se emite a nombre de{' '}
-              <span className="font-medium">{emitiendo.contraparte.nombre}</span>.
+          <div className="space-y-2">
+            <Label>Cliente</Label>
+            <SearchableSelect
+              options={opcionesCliente}
+              value={clienteId}
+              onValueChange={setClienteId}
+              placeholder="Seleccioná un cliente…"
+              searchPlaceholder="Buscar por nombre o documento…"
+              disabled={enviandoRecibo}
+            />
+            <p className="text-xs text-muted-foreground">
+              El recibo se emite a nombre del cliente elegido y queda guardado en
+              el recibo, no en el movimiento.
             </p>
-          ) : (
-            <div className="space-y-2">
-              <Label>Cliente</Label>
-              <SearchableSelect
-                options={opcionesCliente}
-                value={clienteId}
-                onValueChange={setClienteId}
-                placeholder="Seleccioná un cliente…"
-                searchPlaceholder="Buscar persona o empresa…"
-                disabled={enviandoRecibo}
-              />
-              <p className="text-xs text-muted-foreground">
-                Este ingreso no tiene contraparte. El recibo necesita un cliente y
-                queda guardado en el recibo, no en el movimiento.
-              </p>
-            </div>
-          )}
+          </div>
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={cerrarEmision} disabled={enviandoRecibo}>
@@ -448,7 +447,7 @@ export function MovimientosTable({ movimientos, contrapartes }: Props) {
             </Button>
             <Button
               onClick={confirmarEmision}
-              disabled={enviandoRecibo || (!emitiendo?.contraparte && !clienteId)}
+              disabled={enviandoRecibo || !clienteId}
             >
               {enviandoRecibo ? (
                 <>

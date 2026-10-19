@@ -6,6 +6,7 @@ import {
   getBolsillos,
   getCategorias,
   getContrapartes,
+  getClientesParaRecibo,
   getServiciosAlegra,
 } from '@/lib/actions/control.actions'
 import {
@@ -82,9 +83,8 @@ async function Listado({
     )
   }
 
-  // Cached per request by the action, so this does not repeat the query the
-  // form and the filters already make. Used to pick the client of a receipt.
-  const contrapartes = (await getContrapartes()).data ?? []
+  // Cached per request by the action. Used to pick the client of a receipt.
+  const clientes = (await getClientesParaRecibo()).data ?? []
 
   const d = resultado.data
 
@@ -99,7 +99,7 @@ async function Listado({
         </span>
       </p>
 
-      <MovimientosTable movimientos={d.items} contrapartes={contrapartes} />
+      <MovimientosTable movimientos={d.items} clientes={clientes} />
 
       <Paginador
         page={d.page}
@@ -121,17 +121,19 @@ async function Listado({
  * abrir el formulario sin esperar a que se resuelvan los movimientos.
  */
 async function catalogos() {
-  const [bolsillos, categorias, contrapartes, serviciosAlegra] = await Promise.all([
+  const [bolsillos, categorias, contrapartes, serviciosAlegra, clientes] = await Promise.all([
     getBolsillos(),
     getCategorias(),
     getContrapartes(),
     getServiciosAlegra(),
+    getClientesParaRecibo(),
   ])
   return {
     bolsillos: bolsillos.data ?? [],
     categorias: categorias.data ?? [],
     contrapartes: contrapartes.data ?? [],
     serviciosAlegra: serviciosAlegra.data ?? [],
+    clientes: clientes.data ?? [],
   }
 }
 

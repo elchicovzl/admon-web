@@ -208,6 +208,12 @@ const movimientoBaseSchema = z.object({
   bolsilloDestinoId: cuid('Bolsillo destino inválido').optional().nullable(),
   categoriaId: cuid('Seleccioná una categoría'),
   contraparteId: cuid('Contraparte inválida').optional().nullable(),
+  /**
+   * Cliente del CRM al que se le emite el recibo. Solo se usa con
+   * `emitirRecibo`: la action lo resuelve a su contraparte, que pasa a ser la
+   * del movimiento.
+   */
+  clientId: cuid('Cliente inválido').optional().nullable(),
   prestamoId: cuid('Préstamo inválido').optional().nullable(),
 
   /**
@@ -288,9 +294,9 @@ export const createMovimientoSchema = movimientoBaseSchema
     message: 'El recibo de pago solo aplica a un ingreso',
     path: ['emitirRecibo'],
   })
-  .refine((data) => !data.emitirRecibo || Boolean(data.contraparteId), {
+  .refine((data) => !data.emitirRecibo || Boolean(data.clientId), {
     message: 'El recibo requiere un cliente',
-    path: ['contraparteId'],
+    path: ['clientId'],
   })
   .refine(
     (data) => !data.emitirRecibo || Boolean(data.servicios || data.servicioAlegraId),
@@ -303,12 +309,12 @@ export const createMovimientoSchema = movimientoBaseSchema
 export type CreateMovimientoInput = z.infer<typeof createMovimientoSchema>
 
 /**
- * Emitir recibo de pago sobre un ingreso ya registrado. `contraparteId` solo
- * se usa si el movimiento no tiene cliente: si lo tiene, manda el del movimiento.
+ * Emitir recibo de pago sobre un ingreso ya registrado. El recibo siempre
+ * nombra a un cliente del CRM; el movimiento no se modifica.
  */
 export const emitirReciboSchema = z.object({
   movimientoId: cuid('Movimiento inválido'),
-  contraparteId: cuid('Cliente inválido').optional(),
+  clientId: cuid('Seleccioná un cliente'),
 })
 
 export type EmitirReciboInput = z.infer<typeof emitirReciboSchema>

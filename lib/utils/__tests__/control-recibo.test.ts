@@ -12,6 +12,7 @@ import {
   montoEnLetras,
   validarEmisionRecibo,
   armarDatosRecibo,
+  etiquetaTipoDocumento,
   sumaDeLineas,
   esLineaVacia,
   normalizarEntradaMovimiento,
@@ -186,6 +187,11 @@ describe('armarDatosRecibo', () => {
       fecha,
       clienteNombre: 'Ana Pérez',
       clienteDocumento: '1020304050',
+      clienteTipoDocumento: 'CC',
+      clienteDireccion: 'Cra 1 # 2-3',
+      clienteCiudad: 'Medellín',
+      clienteTelefono: '3001234567',
+      elaboradoPor: 'Luisa Gómez',
       lineas: [
         { servicio: 'Administración', referencia: 'Octubre', monto: 150000 },
         { servicio: 'Afiliación', referencia: null, monto: 1100000 },
@@ -199,7 +205,14 @@ describe('armarDatosRecibo', () => {
     expect(datos).toEqual({
       numeroFormateado: 'RP-0007',
       fecha,
-      cliente: { nombre: 'Ana Pérez', documento: '1020304050' },
+      cliente: {
+        nombre: 'Ana Pérez',
+        documento: '1020304050',
+        tipoDocumento: 'CC',
+        direccion: 'Cra 1 # 2-3',
+        ciudad: 'Medellín',
+        telefono: '3001234567',
+      },
       lineas: [
         { servicio: 'Administración', referencia: 'Octubre', monto: 150000 },
         { servicio: 'Afiliación', referencia: null, monto: 1100000 },
@@ -209,7 +222,35 @@ describe('armarDatosRecibo', () => {
       medioDePago: 'Bancolombia',
       concepto: 'Pago de servicios',
       anulado: false,
+      elaboradoPor: 'Luisa Gómez',
     })
+  })
+
+  it('prints blanks for a receipt issued before the contact snapshot existed', () => {
+    const datos = armarDatosRecibo({
+      numero: 1,
+      fecha,
+      clienteNombre: 'Ana',
+      clienteDocumento: null,
+      clienteTipoDocumento: null,
+      clienteDireccion: null,
+      clienteCiudad: null,
+      clienteTelefono: null,
+      lineas: [{ servicio: 'X', referencia: null, monto: 1 }],
+      monto: 1,
+      bolsilloNombre: 'Caja',
+      concepto: 'c',
+      anulado: false,
+    })
+    expect(datos.cliente).toEqual({
+      nombre: 'Ana',
+      documento: null,
+      tipoDocumento: '',
+      direccion: '',
+      ciudad: '',
+      telefono: '',
+    })
+    expect(datos.elaboradoPor).toBe('')
   })
 
   it('throws when the lines do not sum the amount', () => {
@@ -243,6 +284,29 @@ describe('armarDatosRecibo', () => {
     expect(datos.anulado).toBe(true)
     expect(datos.cliente.documento).toBeNull()
     expect(datos.totalEnLetras).toBe('UN PESO M/CTE')
+  })
+})
+
+describe('etiquetaTipoDocumento', () => {
+  it.each([
+    ['CEDULA', 'CC'],
+    ['TARJETA_IDENTIDAD', 'TI'],
+    ['REGISTRO_CIVIL', 'RC'],
+    ['CEDULA_EXTRANJERIA', 'CE'],
+    ['PASAPORTE', 'PA'],
+    ['PPT', 'PPT'],
+    ['PEP', 'PEP'],
+    ['NUIP', 'NUIP'],
+    ['SALVOCONDUCTO', 'SC'],
+    ['NIT', 'NIT'],
+  ])('%s se imprime como %s', (tipo, etiqueta) => {
+    expect(etiquetaTipoDocumento(tipo)).toBe(etiqueta)
+  })
+
+  it('devuelve vacío para un tipo desconocido o ausente', () => {
+    expect(etiquetaTipoDocumento('OTRO')).toBe('')
+    expect(etiquetaTipoDocumento(null)).toBe('')
+    expect(etiquetaTipoDocumento(undefined)).toBe('')
   })
 })
 
