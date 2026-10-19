@@ -64,8 +64,11 @@ Incluye:
 
 ### Para Dashboard:
 ```bash
-# 1. Levantar la base local (Postgres 16 en Docker/Podman)
+# 1. Levantar la base local (Postgres 18 + pgvector en Docker/Podman)
 pnpm db:up
+
+#    Si venías de la imagen vieja (Postgres 16), corré `pnpm db:nuke` UNA vez
+#    antes: el volumen anterior no es compatible con Postgres 18.
 
 # 2. Crear .env.local con la conexión local (ver abajo)
 
@@ -107,6 +110,20 @@ leyendo de `.env`. En `.env.local` va **solo lo que cambia en local**.
 pnpm dev
 http://localhost:3000/
 ```
+
+---
+
+## Módulo WhatsApp AI (en construcción)
+
+Asistente de WhatsApp (Cloud API + Coexistence) con bandeja compartida, base de
+conocimiento (pgvector) y respuestas con IA. Se entrega en PRs encadenados y
+todo queda detrás de flags que **arrancan apagados**:
+
+- `WHATSAPP_ENABLED=false`: el webhook verifica, guarda y responde 200, pero no procesa ni envía.
+- `WHATSAPP_AI_ENABLED=false`: la IA no responde (los jobs encolados no hacen nada).
+- Worker (pg-boss, mismo Postgres, schema `pgboss`): arranca desde `instrumentation.ts`; `WORKER_ENABLED=false` lo desactiva.
+- Webhook: `app/api/whatsapp/webhook/route.ts`. Es la **excepción documentada** a "sin API routes" (llamador externo, firma HMAC sobre el body crudo).
+- La imagen de Postgres requiere la extensión `vector` (ver Quick Start). En producción la migración `enable_pgvector` NO se corre hasta que Dokploy use la imagen pgvector.
 
 ---
 
