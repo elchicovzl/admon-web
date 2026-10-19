@@ -4,7 +4,13 @@ import { getBoss } from "@/lib/queue/boss"
 import { QUEUES, QUEUE_SEND_DEFAULTS } from "@/lib/queue/queues"
 import { normalizeWaId } from "@/lib/utils/phone"
 import { upsertAndMatchContact } from "./contacts"
-import { enqueueMediaDownload, getOrCreateConversation, messagePreview, parseInboundMessage } from "./inbound"
+import {
+  enqueueMediaDownload,
+  getOrCreateConversation,
+  messagePreview,
+  parseInboundMessage,
+  type ParsedInboundMessage,
+} from "./inbound"
 import { isWhatsAppEnabled } from "./ingest"
 import { applyStoredStatuses } from "./statuses"
 import { applyTransitionPort } from "./transition-port"
@@ -90,9 +96,13 @@ export async function processEcho(payload: unknown, options: ProcessEchoOptions)
     return "skipped"
   }
 
-  // 1. Our own send (or a redelivered echo): the wamid is already stored. No transition.
-  const known = await prisma.whatsAppMessage.findUnique({ where: { wamid: echo.wamid }, select: { id: true } })
-  if (known) return "own"
+  // 1. A stored wamid is either our own send (no transition, CH-10) or a phone echo that an
+  //    earlier run already inserted but may not have finished (crash between insert and
+  //    takeover). Only the second is finished again; both are idempotent.
+  const known = await findStoredEcho(echo.wamid)
+  if (known) {
+    return known.source === "PHONE_APP" ? finishStoredEcho(known, echo) : "own"
+  }
 
   // 2. Resolve the chat. A person may write first from the phone, so the contact and its
   //    conversation can be created here (HUMAN: a human already started it).
@@ -121,20 +131,10 @@ export async function processEcho(payload: unknown, options: ProcessEchoOptions)
     return "reconcile-scheduled"
   }
 
-  // 4. A person sent it from the phone. The transition runs BEFORE the insert: if the insert
-  //    then fails and the event is retried, the guarded transition is a no-op the second time,
-  //    whereas the reverse order would lose the takeover behind the "known wamid" shortcut.
-  const takeOver = shouldEchoTakeOver(echo.timestamp, conversation.lastAiSentAt)
-  let movedToHuman = false
-  if (takeOver) {
-    movedToHuman = await applyTransitionPort({
-      conversationId: conversation.id,
-      event: "HUMAN_ECHO",
-      actor: "PHONE_APP",
-      reason: `echo:${echo.wamid}`,
-    })
-  }
-
+  // 4. Insert first. The unique wamid is the arbiter between "phone echo" and "our own send":
+  //    if our send stored its wamid after the checks above (the race between the known-wamid
+  //    lookup and the in-flight lookup), the insert hits P2002 and we are done without a
+  //    takeover. Only a successful insert proves this is a phone-app message.
   let messageId: string
   try {
     const created = await prisma.whatsAppMessage.create({
@@ -169,16 +169,16 @@ export async function processEcho(payload: unknown, options: ProcessEchoOptions)
     messageId = created.id
   } catch (error) {
     if (!isUniqueViolation(error)) throw error
-    return "own" // a concurrent delivery stored it first
+    // Someone stored this wamid first: our own send, or a concurrent delivery of this very echo.
+    const winner = await findStoredEcho(echo.wamid)
+    return winner?.source === "PHONE_APP" ? finishStoredEcho(winner, echo) : "own"
   }
 
-  // Counters only move forward, like inbound; an echo never touches unreadCount or the 24 h window.
-  await prisma.conversation.updateMany({
-    where: { id: conversation.id, lastMessageAt: { lte: echo.timestamp } },
-    data: { lastMessageAt: echo.timestamp, lastMessagePreview: messagePreview(echo) },
-  })
+  // 5. The takeover. If the process dies between the insert and here, the redelivery lands in
+  //    step 1, sees our PHONE_APP row and finishes the takeover (the transition is guarded).
+  const movedToHuman = await completeEcho(conversation, messageId, echo)
 
-  if (!takeOver && (conversation.status === "AI" || conversation.status === "ESCALATED")) {
+  if (!shouldEchoTakeOver(echo.timestamp, conversation.lastAiSentAt) && (conversation.status === "AI" || conversation.status === "ESCALATED")) {
     // Older than the last AI send (S-CH-1 / CH-9): kept and audited, but the state stays.
     await prisma.conversationEvent.create({
       data: {
@@ -192,11 +192,61 @@ export async function processEcho(payload: unknown, options: ProcessEchoOptions)
     })
   }
 
+  return movedToHuman ? "stored-takeover" : "stored"
+}
+
+type ParsedEcho = ParsedInboundMessage
+
+interface StoredEcho {
+  id: string
+  source: string
+  conversation: { id: string; status: string; lastAiSentAt: Date | null }
+}
+
+async function findStoredEcho(wamid: string): Promise<StoredEcho | null> {
+  const stored = await prisma.whatsAppMessage.findUnique({
+    where: { wamid },
+    select: { id: true, source: true, conversation: { select: { id: true, status: true, lastAiSentAt: true } } },
+  })
+  return stored as StoredEcho | null
+}
+
+/** Re-runs the idempotent tail for a phone echo that was inserted by an earlier or concurrent run. */
+async function finishStoredEcho(stored: StoredEcho, echo: ParsedEcho): Promise<EchoOutcome> {
+  const moved = await completeEcho(stored.conversation, stored.id, echo)
+  return moved ? "stored-takeover" : "stored"
+}
+
+/**
+ * Everything that follows the insert of a phone echo, all idempotent: the guarded HUMAN
+ * transition, forward-only counters, stored statuses and the media job (singleton per message).
+ * Returns true when this call moved the conversation to HUMAN.
+ */
+async function completeEcho(
+  conversation: { id: string; lastAiSentAt: Date | null },
+  messageId: string,
+  echo: ParsedEcho
+): Promise<boolean> {
+  let movedToHuman = false
+  if (shouldEchoTakeOver(echo.timestamp, conversation.lastAiSentAt)) {
+    movedToHuman = await applyTransitionPort({
+      conversationId: conversation.id,
+      event: "HUMAN_ECHO",
+      actor: "PHONE_APP",
+      reason: `echo:${echo.wamid}`,
+    })
+  }
+
+  // Counters only move forward, like inbound; an echo never touches unreadCount or the 24 h window.
+  await prisma.conversation.updateMany({
+    where: { id: conversation.id, lastMessageAt: { lte: echo.timestamp } },
+    data: { lastMessageAt: echo.timestamp, lastMessagePreview: messagePreview(echo) },
+  })
+
   // A status (delivered/read) may have arrived before the echo created its message row.
   await applyStoredStatuses(echo.wamid)
   if (echo.media) await enqueueMediaDownload(messageId)
-
-  return movedToHuman ? "stored-takeover" : "stored"
+  return movedToHuman
 }
 
 /** `wa.echo.reconcile` handler: re-runs the classification for a stored echo event. */
