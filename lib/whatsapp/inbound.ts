@@ -2,7 +2,10 @@ import { type Conversation, type ConversationActor, type MessageType, type Whats
 import prisma from "@/lib/db/prisma"
 import { getBoss } from "@/lib/queue/boss"
 import { QUEUES } from "@/lib/queue/queues"
+import { getNotifyPort } from "@/lib/notifications/port"
 import { ensureLead, upsertAndMatchContact } from "./contacts"
+import { transition } from "./state-machine"
+import { applyTransition, isAiGloballyEnabled } from "./transitions"
 import { asRecord, isUniqueViolation, parseTimestamp } from "./utils"
 
 export interface ParsedInboundMessage {
@@ -109,22 +112,8 @@ function profileNameFor(contacts: unknown, from: string): string | null {
   return null
 }
 
-/**
- * AI-eligibility for a brand-new or reopened conversation: the env kill switch and the
- * DB switch must both be on. Per-conversation pause and the full state machine arrive in
- * PR2.1; this is the minimal rule the first-contact and reopen transitions need (CH-1, CH-2).
- */
-async function initialStatus(): Promise<"AI" | "HUMAN"> {
-  if (process.env.WHATSAPP_AI_ENABLED?.trim() !== "true") return "HUMAN"
-  const settings = await prisma.whatsAppSettings.findUnique({
-    where: { id: "singleton" },
-    select: { aiEnabled: true },
-  })
-  return settings?.aiEnabled ? "AI" : "HUMAN"
-}
-
 export interface ConversationOrigin {
-  /** Initial state; defaults to the AI-eligibility rule used for inbound first contact. */
+  /** Initial state; defaults to the state machine's first-contact rule (CH-1). */
   status?: "AI" | "HUMAN"
   event?: string
   actor?: ConversationActor
@@ -142,7 +131,15 @@ export async function getOrCreateConversation(
   const existing = await prisma.conversation.findUnique({ where: { contactId: contact.id } })
   if (existing) return existing
 
-  const status = origin.status ?? (await initialStatus())
+  // First contact is the (none) -> AI|HUMAN row of the state machine (CH-1).
+  let status = origin.status
+  let auditEvent = origin.event
+  if (!status || !auditEvent) {
+    const first = transition(null, "INBOUND", { aiEffective: await isAiGloballyEnabled() })
+    if (!first.ok) throw new Error(first.message)
+    status ??= first.to as "AI" | "HUMAN"
+    auditEvent ??= first.auditEvent
+  }
   try {
     return await prisma.conversation.create({
       data: {
@@ -153,7 +150,7 @@ export async function getOrCreateConversation(
           create: {
             fromStatus: null,
             toStatus: status,
-            event: origin.event ?? "INBOUND_FIRST_CONTACT",
+            event: auditEvent,
             actor: origin.actor ?? "CLIENT",
           },
         },
@@ -197,13 +194,26 @@ export async function processInboundMessage(payload: unknown, receivedAt: Date =
   const conversation = await getOrCreateConversation(contact, message.timestamp)
 
   let stored = await findStoredMessage(message.wamid)
+  let notifyActivity = false
   if (!stored) {
     try {
-      stored = await persistMessage(conversation, message)
+      const persisted = await persistMessage(conversation, message)
+      stored = persisted
+      notifyActivity = persisted.notifyActivity
     } catch (error) {
       if (!isUniqueViolation(error)) throw error
       stored = await findStoredMessage(message.wamid) // concurrent duplicate delivery (WC-4)
       if (!stored) throw error
+    }
+  }
+
+  // A client wrote to an ESCALATED conversation: staff get one activity notice (S-CH-6). It is
+  // best effort and runs after the commit; the real port dedups per user and conversation (PR4.1).
+  if (notifyActivity) {
+    try {
+      await getNotifyPort().notify({ type: "NEW_ACTIVITY_ON_ESCALATED", conversationId: conversation.id })
+    } catch {
+      console.error("[whatsapp] activity notification failed; message was stored")
     }
   }
 
@@ -228,25 +238,10 @@ function findStoredMessage(wamid: string) {
 async function persistMessage(conversation: Conversation, message: ParsedInboundMessage) {
   const ts = message.timestamp
   return prisma.$transaction(async (tx) => {
-    if (conversation.status === "CLOSED") {
-      // Auto-reopen on inbound (CH-2, CH-11). The guard makes a concurrent reopen a no-op.
-      const to = await initialStatus()
-      const reopened = await tx.conversation.updateMany({
-        where: { id: conversation.id, status: "CLOSED" },
-        data: { status: to, stateVersion: { increment: 1 }, closedAt: null, closedById: null },
-      })
-      if (reopened.count > 0) {
-        await tx.conversationEvent.create({
-          data: {
-            conversationId: conversation.id,
-            fromStatus: "CLOSED",
-            toStatus: to,
-            event: "INBOUND_REOPEN",
-            actor: "CLIENT",
-          },
-        })
-      }
-    }
+    // INBOUND is a real transition: a CLOSED conversation reopens (CH-2, CH-11) inside this
+    // transaction, so the reopen and the message it carries commit together or not at all.
+    const moved = await applyTransition({ conversationId: conversation.id, event: "INBOUND", actor: "CLIENT" }, { db: tx })
+    if (!moved.ok) throw new Error(`inbound transition failed: ${moved.code}`)
 
     const created = await tx.whatsAppMessage.create({
       data: {
@@ -289,6 +284,7 @@ async function persistMessage(conversation: Conversation, message: ParsedInbound
       data: { lastMessageAt: ts, lastMessagePreview: messagePreview(message) },
     })
 
-    return created
+    // A turn for an AI conversation is scheduled by PR3.6b from `moved.scheduleAiTurn`.
+    return { ...created, notifyActivity: moved.notifyActivity }
   })
 }

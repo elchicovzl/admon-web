@@ -1,10 +1,11 @@
 import prisma from "@/lib/db/prisma"
 
 /**
- * Conversation transitions needed by the channel layer, behind a port. PR1.4 only needs
- * HUMAN_ECHO (a person answered from the phone app). The default adapter is a minimal
- * guarded status write plus its audit row; PR2.1 replaces it with the real state machine
- * (`setApplyTransitionPort`) so echo reconciliation does not change.
+ * Conversation transitions needed by the channel layer, behind a port. Echo reconciliation
+ * only needs HUMAN_ECHO (a person answered from the phone app). The default adapter below is
+ * a minimal guarded status write plus its audit row, kept as the stand-in for scripts and
+ * tests; `registerWhatsAppWorkers` swaps in the real state machine (`transitions.ts`,
+ * via `setApplyTransitionPort`) so echo reconciliation does not change.
  */
 export interface TransitionRequest {
   conversationId: string

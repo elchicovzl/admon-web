@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { findUnique, update, processWebhookEvent, sweepUnprocessedEvents, recoverMissingLeads } = vi.hoisted(() => ({
+const { findUnique, update, processWebhookEvent, sweepUnprocessedEvents, recoverMissingLeads, applyTransitionForPort } = vi.hoisted(() => ({
+  applyTransitionForPort: vi.fn(),
   findUnique: vi.fn(),
   update: vi.fn(),
   processWebhookEvent: vi.fn(),
@@ -14,8 +15,10 @@ vi.mock("../contacts", () => ({ recoverMissingLeads }))
 vi.mock("../send", () => ({ handleSendJobs: vi.fn() }))
 vi.mock("../echoes", () => ({ handleEchoReconcileJobs: vi.fn() }))
 vi.mock("../media", () => ({ handleMediaJobs: vi.fn() }))
+vi.mock("../transitions", () => ({ applyTransitionForPort }))
 
 import { clearWorkerRegistry, getRegisteredWorkers } from "@/lib/queue/workers"
+import { applyTransitionPort, setApplyTransitionPort } from "../transition-port"
 import { handleEventJobs, handleSweepJobs, registerWhatsAppWorkers, setEventProcessor } from "../event-worker"
 
 const job = { id: "j1", name: "wa.event.process", data: { eventId: "e1" } } as never
@@ -136,6 +139,18 @@ describe("registerWhatsAppWorkers", () => {
 
     expect(processWebhookEvent).toHaveBeenCalledWith(expect.objectContaining({ id: "e1" }))
     expect(update.mock.calls.at(-1)?.[0].data).toMatchObject({ processedAt: expect.any(Date) })
+  })
+
+  it("swaps the PR1.4 stand-in for the real state machine behind the transition port (PR2.1)", async () => {
+    setApplyTransitionPort() // the stand-in
+    applyTransitionForPort.mockResolvedValue(true)
+
+    registerWhatsAppWorkers()
+
+    const request = { conversationId: "c1", event: "HUMAN_ECHO", actor: "PHONE_APP", reason: "echo:w1" } as const
+    await expect(applyTransitionPort(request)).resolves.toBe(true)
+    expect(applyTransitionForPort).toHaveBeenCalledWith(request)
+    setApplyTransitionPort()
   })
 
   it("keeps a processor that was set explicitly", () => {
