@@ -2,15 +2,12 @@ import { Prisma, type Lead, type WhatsAppContact } from "@prisma/client"
 import prisma from "@/lib/db/prisma"
 import { getNotifyPort } from "@/lib/notifications/port"
 import { normalizeWaId, waIdMatchCandidates, waIdToE164 } from "@/lib/utils/phone"
+import { isUniqueViolation } from "./utils"
 
 export type ContactMatch =
   | { status: "MATCHED"; clientId: string }
   | { status: "AMBIGUOUS" }
   | { status: "UNMATCHED" }
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
-}
 
 /**
  * Finds active, non-deleted Clients whose free-form phone reduces to one of the
@@ -140,4 +137,35 @@ export async function confirmContactAsUnknown(
     data: { matchStatus: "UNMATCHED", matchLocked: true, clientId: null },
   })
   return ensureLead(contact, conversationId)
+}
+
+const LEAD_RECOVERY_BATCH = 50
+
+/**
+ * Recovery for a swallowed `ensureLead` failure (LD-2 lets lead creation fail without
+ * blocking the message). The failure leaves a recognizable shape: an UNMATCHED contact
+ * that has a conversation but no lead. `confirmContactAsUnknown` and every inbound
+ * create the lead immediately, and AMBIGUOUS contacts are excluded on purpose (LD-8), so
+ * anything matching this query is a lead that should exist. Idempotent: `ensureLead`
+ * never duplicates. Runs from the `wa.event.sweep` cron; one failure does not stop the
+ * rest. Returns how many leads were created.
+ */
+export async function recoverMissingLeads(limit: number = LEAD_RECOVERY_BATCH): Promise<number> {
+  const orphans = await prisma.whatsAppContact.findMany({
+    where: { matchStatus: "UNMATCHED", lead: null, conversation: { isNot: null } },
+    select: { id: true, waId: true, profileName: true, conversation: { select: { id: true } } },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  })
+
+  let created = 0
+  for (const contact of orphans) {
+    try {
+      const result = await ensureLead(contact, contact.conversation?.id)
+      if (result.created) created++
+    } catch {
+      console.error("[whatsapp] lead recovery failed; will retry on the next sweep")
+    }
+  }
+  return created
 }

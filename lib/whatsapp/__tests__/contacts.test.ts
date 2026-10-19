@@ -7,18 +7,19 @@ const m = vi.hoisted(() => ({
   contactUpdate: vi.fn(),
   leadFindUnique: vi.fn(),
   leadCreate: vi.fn(),
+  contactFindMany: vi.fn(),
   notify: vi.fn(),
 }))
 vi.mock("@/lib/db/prisma", () => ({
   default: {
     $queryRaw: m.queryRaw,
-    whatsAppContact: { upsert: m.contactUpsert, update: m.contactUpdate },
+    whatsAppContact: { upsert: m.contactUpsert, update: m.contactUpdate, findMany: m.contactFindMany },
     lead: { findUnique: m.leadFindUnique, create: m.leadCreate },
   },
 }))
 vi.mock("@/lib/notifications/port", () => ({ getNotifyPort: () => ({ notify: m.notify }) }))
 
-import { confirmContactAsUnknown, ensureLead, upsertAndMatchContact } from "../contacts"
+import { confirmContactAsUnknown, ensureLead, recoverMissingLeads, upsertAndMatchContact } from "../contacts"
 
 const SEEN = new Date("2026-10-19T12:00:00Z")
 const baseContact = {
@@ -177,5 +178,42 @@ describe("confirmContactAsUnknown", () => {
       data: { matchStatus: "UNMATCHED", matchLocked: true, clientId: null },
     })
     expect(created).toBe(true)
+  })
+})
+
+describe("recoverMissingLeads", () => {
+  const orphan = { id: "c1", waId: "573001234567", profileName: "Test User", conversation: { id: "conv-1" } }
+
+  it("creates the lead for an UNMATCHED contact whose lead step failed earlier", async () => {
+    m.contactFindMany.mockResolvedValue([orphan])
+
+    const created = await recoverMissingLeads()
+
+    expect(m.contactFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { matchStatus: "UNMATCHED", lead: null, conversation: { isNot: null } },
+      })
+    )
+    expect(m.leadCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ contactId: "c1", status: "NEW", conversationId: "conv-1" }),
+    })
+    expect(created).toBe(1)
+  })
+
+  it("keeps going when one contact fails and retries it on the next sweep", async () => {
+    m.contactFindMany.mockResolvedValue([orphan, { ...orphan, id: "c2", conversation: { id: "conv-2" } }])
+    m.leadCreate.mockRejectedValueOnce(new Error("db down"))
+
+    const created = await recoverMissingLeads()
+
+    expect(m.leadCreate).toHaveBeenCalledTimes(2)
+    expect(created).toBe(1)
+  })
+
+  it("does nothing when no contact is missing its lead", async () => {
+    m.contactFindMany.mockResolvedValue([])
+
+    await expect(recoverMissingLeads()).resolves.toBe(0)
+    expect(m.leadCreate).not.toHaveBeenCalled()
   })
 })

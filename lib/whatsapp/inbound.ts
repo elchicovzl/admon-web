@@ -1,10 +1,9 @@
-import { Prisma, type Conversation, type MessageType, type WhatsAppContact } from "@prisma/client"
+import { type Conversation, type MessageType, type WhatsAppContact } from "@prisma/client"
 import prisma from "@/lib/db/prisma"
 import { getBoss } from "@/lib/queue/boss"
 import { QUEUES } from "@/lib/queue/queues"
 import { ensureLead, upsertAndMatchContact } from "./contacts"
-
-type Json = Record<string, unknown>
+import { asRecord, isUniqueViolation, parseTimestamp } from "./utils"
 
 export interface ParsedInboundMessage {
   wamid: string
@@ -48,17 +47,8 @@ const KNOWN_TYPES: Record<string, MessageType> = {
   reaction: "REACTION",
 }
 
-function asRecord(value: unknown): Json | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : null
-}
-
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null
-}
-
-function parseTimestamp(value: unknown, fallback: Date): Date {
-  const seconds = Number(value)
-  return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : fallback
 }
 
 /**
@@ -117,10 +107,6 @@ function profileNameFor(contacts: unknown, from: string): string | null {
     if (contact && asString(contact.wa_id) === from) return asString(asRecord(contact.profile)?.name)
   }
   return null
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
 
 /**

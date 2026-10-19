@@ -1,10 +1,17 @@
-import { Prisma, type MessageStatus } from "@prisma/client"
+import type { MessageStatus } from "@prisma/client"
 import prisma from "@/lib/db/prisma"
+import { isUniqueViolation } from "./utils"
 
 /**
  * Delivery status ordering. A status only ever moves a message to a higher rank, so a
  * late "delivered" never overwrites "read" (WC-7, S-WC-7). FAILED outranks everything
  * and is therefore terminal: nothing can overwrite it.
+ *
+ * RECEIVED and QUEUED both sit at rank 0 on purpose. They are the two possible initial
+ * states and never compete: RECEIVED is only used for inbound messages (which Meta never
+ * sends statuses for) and QUEUED only for outbound rows waiting for a wamid. A shared
+ * floor means any real status (SENT and above) outranks either one, and a message
+ * created in one of them is never "downgraded" by the other.
  */
 const STATUS_RANK: Record<MessageStatus, number> = {
   RECEIVED: 0,
@@ -79,7 +86,7 @@ export async function recordAndApplyStatus(input: StatusInput): Promise<void> {
     })
   } catch (error) {
     // A racing delivery of the same (wamid, status) is not a failure.
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error
+    if (!isUniqueViolation(error)) throw error
   }
   await applyStatusToMessage(input)
 }

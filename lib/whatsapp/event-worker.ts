@@ -2,6 +2,7 @@ import type { Job } from "pg-boss"
 import prisma from "@/lib/db/prisma"
 import { QUEUES } from "@/lib/queue/queues"
 import { getRegisteredWorkers, registerWorker } from "@/lib/queue/workers"
+import { recoverMissingLeads } from "./contacts"
 import { isWhatsAppEnabled } from "./ingest"
 import { processWebhookEvent } from "./process-event"
 import { sweepUnprocessedEvents } from "./sweeper"
@@ -14,7 +15,14 @@ export interface StoredWebhookEvent {
   payload: unknown
 }
 
-export type EventProcessor = (event: StoredWebhookEvent) => Promise<void>
+/**
+ * What a processor may report. `"deferred"` means "this kind has no handler yet": the
+ * event stays unprocessed (and does not burn an attempt) so it is picked up once the
+ * handler ships, instead of being marked processed and lost.
+ */
+export type ProcessOutcome = void | "deferred"
+
+export type EventProcessor = (event: StoredWebhookEvent) => Promise<ProcessOutcome>
 
 let processor: EventProcessor | undefined
 
@@ -49,7 +57,14 @@ export async function handleEventJobs(jobs: Job<{ eventId: string }>[]): Promise
     if (!processor) continue
 
     try {
-      await processor(event)
+      const outcome = await processor(event)
+      if (outcome === "deferred") {
+        await prisma.whatsAppWebhookEvent.update({
+          where: { id: event.id },
+          data: { attempts: { decrement: 1 } },
+        })
+        continue
+      }
       await prisma.whatsAppWebhookEvent.update({
         where: { id: event.id },
         data: { processedAt: new Date(), lastError: null },
@@ -64,9 +79,14 @@ export async function handleEventJobs(jobs: Job<{ eventId: string }>[]): Promise
   }
 }
 
-/** `wa.event.sweep` handler (cron, every minute). */
+/**
+ * `wa.event.sweep` handler (cron, every minute): re-queues stale events, then recovers
+ * contacts whose lead creation failed after their message was stored (LD-2).
+ */
 export async function handleSweepJobs(): Promise<void> {
+  if (!isWhatsAppEnabled()) return
   await sweepUnprocessedEvents()
+  await recoverMissingLeads()
 }
 
 /** Idempotent: registers the ingress handlers and the real event processor once per process. */

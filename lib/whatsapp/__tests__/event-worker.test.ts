@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { findUnique, update, processWebhookEvent } = vi.hoisted(() => ({
+const { findUnique, update, processWebhookEvent, sweepUnprocessedEvents, recoverMissingLeads } = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
   processWebhookEvent: vi.fn(),
+  sweepUnprocessedEvents: vi.fn(),
+  recoverMissingLeads: vi.fn(),
 }))
 vi.mock("../process-event", () => ({ processWebhookEvent }))
 vi.mock("@/lib/db/prisma", () => ({ default: { whatsAppWebhookEvent: { findUnique, update } } }))
-vi.mock("../sweeper", () => ({ sweepUnprocessedEvents: vi.fn() }))
+vi.mock("../sweeper", () => ({ sweepUnprocessedEvents }))
+vi.mock("../contacts", () => ({ recoverMissingLeads }))
 
 import { clearWorkerRegistry, getRegisteredWorkers } from "@/lib/queue/workers"
-import { handleEventJobs, registerWhatsAppWorkers, setEventProcessor } from "../event-worker"
+import { handleEventJobs, handleSweepJobs, registerWhatsAppWorkers, setEventProcessor } from "../event-worker"
 
 const job = { id: "j1", name: "wa.event.process", data: { eventId: "e1" } } as never
 const event = { id: "e1", kind: "MESSAGE", wamid: "wamid.1", payload: {}, processedAt: null }
@@ -37,6 +40,16 @@ describe("handleEventJobs", () => {
     expect(processor).toHaveBeenCalledWith(expect.objectContaining({ id: "e1" }))
     expect(update.mock.calls[0][0].data).toEqual({ attempts: { increment: 1 } })
     expect(update.mock.calls[1][0].data).toMatchObject({ processedAt: expect.any(Date), lastError: null })
+  })
+
+  it("leaves a deferred event unprocessed and does not burn an attempt", async () => {
+    setEventProcessor(async () => "deferred")
+
+    await handleEventJobs([job])
+
+    const datas = update.mock.calls.map((call) => call[0].data)
+    expect(datas).toEqual([{ attempts: { increment: 1 } }, { attempts: { decrement: 1 } }])
+    expect(datas.some((data) => "processedAt" in data)).toBe(false)
   })
 
   it("keeps the raw event unprocessed, records the error and rethrows so pg-boss retries (S-WC-9)", async () => {
@@ -78,6 +91,24 @@ describe("handleEventJobs", () => {
 
     expect(findUnique).not.toHaveBeenCalled()
     expect(processor).not.toHaveBeenCalled()
+  })
+})
+
+describe("handleSweepJobs", () => {
+  it("re-queues stale events, then recovers leads whose creation failed (LD-2)", async () => {
+    await handleSweepJobs()
+
+    expect(sweepUnprocessedEvents).toHaveBeenCalledTimes(1)
+    expect(recoverMissingLeads).toHaveBeenCalledTimes(1)
+  })
+
+  it("does nothing while WHATSAPP_ENABLED is off", async () => {
+    vi.stubEnv("WHATSAPP_ENABLED", "false")
+
+    await handleSweepJobs()
+
+    expect(sweepUnprocessedEvents).not.toHaveBeenCalled()
+    expect(recoverMissingLeads).not.toHaveBeenCalled()
   })
 })
 
