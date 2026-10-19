@@ -26,12 +26,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, Check, Users } from 'lucide-react'
+import { Loader2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { getCompanyEmployees } from '@/lib/actions/client.actions'
 import { getManagers } from '@/lib/actions'
 import { addSubProcesses } from '@/lib/actions/affiliation.actions'
+import { EmployeeChecklist } from './employee-checklist'
+import { toggleVisibleSelection } from '@/lib/utils/employee-search'
 import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import type { SafeAffiliationSubProcess } from '@/lib/types/affiliation.types'
@@ -153,15 +155,12 @@ export function AddSubProcessDialog({
     return companyEmployees.filter((e) => !existingIds.includes(e.id))
   }
 
-  function toggleAllEmployeesForType(type: AffiliationSubProcessType) {
-    const available = getAvailableEmployeesForType(type)
-    setSelectedEmployeesByType((prev) => {
-      const allSelected = prev[type].length === available.length
-      return {
-        ...prev,
-        [type]: allSelected ? [] : available.map((e) => e.id),
-      }
-    })
+  // Toggles only the given (visible) employees; hidden selections are kept.
+  function toggleVisibleEmployeesForType(type: AffiliationSubProcessType, visibleIds: string[]) {
+    setSelectedEmployeesByType((prev) => ({
+      ...prev,
+      [type]: toggleVisibleSelection(prev[type], visibleIds),
+    }))
   }
 
   function resetState() {
@@ -302,50 +301,12 @@ export function AddSubProcessDialog({
                   <CardContent className="space-y-3">
                     {/* Employee selection for EMPRESA */}
                     {isEmpresa && availableEmployees.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-medium">Seleccionar empleados</label>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto py-1 px-2 text-xs"
-                            onClick={() => toggleAllEmployeesForType(spType.value)}
-                          >
-                            {selectedEmployeesByType[spType.value].length === availableEmployees.length
-                              ? 'Deseleccionar todos'
-                              : 'Seleccionar todos'}
-                          </Button>
-                        </div>
-                        <div className="max-h-40 overflow-y-auto rounded-md border p-2 space-y-1">
-                          {availableEmployees.map((employee) => {
-                            const isChecked = selectedEmployeesByType[spType.value].includes(employee.id)
-                            return (
-                              <div
-                                key={employee.id}
-                                className={cn(
-                                  'flex items-center space-x-2 rounded-sm px-2 py-1.5 cursor-pointer hover:bg-muted/50',
-                                  isChecked && 'bg-muted/30'
-                                )}
-                                onClick={() => toggleEmployeeForType(spType.value, employee.id)}
-                              >
-                                <div className={cn(
-                                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border',
-                                  isChecked ? 'bg-primary border-primary' : 'border-input'
-                                )}>
-                                  {isChecked && <Check className="h-3 w-3 text-primary-foreground" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">{employee.fullName}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {employee.identificationType} {employee.identificationNumber}
-                                  </p>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
+                      <EmployeeChecklist
+                        employees={availableEmployees}
+                        selectedIds={selectedEmployeesByType[spType.value]}
+                        onToggle={(id) => toggleEmployeeForType(spType.value, id)}
+                        onToggleAll={(ids) => toggleVisibleEmployeesForType(spType.value, ids)}
+                      />
                     )}
 
                     {/* Manager assignment */}

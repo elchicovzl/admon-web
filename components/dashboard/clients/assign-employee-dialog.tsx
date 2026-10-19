@@ -200,7 +200,7 @@ export function AssignEmployeeDialog({
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Buscar y seleccionar empleado
                 </label>
-                <Popover open={open} onOpenChange={setOpen}>
+                <Popover modal open={open} onOpenChange={setOpen}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
