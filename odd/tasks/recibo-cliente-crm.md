@@ -48,8 +48,8 @@ The payment receipt ("Recibo de pago") is issued to a **client of the CRM** (`Cl
 - 2026-10-18: design decided from the user's correction; branch created; tsc baseline 37.
 
 - 2026-10-18: T1 done (route: delegated writer). New `lib/utils/control-recibo-cliente.ts` (`resolverContraparteDeCliente`, `normalizarDocumento`; outside the `use server` actions file on purpose), `getClientesParaRecibo`, schemas take `clientId`, both pickers list CRM clients with label `Nombre · documento`. Writer checks: vitest 37 files / 951 tests; tsc 37 (baseline), none in touched files; `pnpm build` OK. Orchestrator spot check: new resolver + schema tests re-run, 15 passed.
-- Open decision: a client whose `identificationNumber` is not 5–15 digits gets a counterparty with `documento = null` (receipt prints no document). Alternative: reject. Pending the user.
+- Decision (user, 2026-10-18): the receipt is always issued and prints the client as the CRM has it. The snapshot (`clienteNombre`, `clienteDocumento`) now comes from `Client.fullName` / `Client.identificationNumber` (raw, trimmed); the counterparty keeps the normalized document or null. Resolver tests updated; vitest 951 passed; tsc 37.
 
 ## Next step
-User decision above; manual browser check of both flows; PR.
+Manual browser check of both flows; push and PR are the user's call.
 - 2026-10-18: commit b7b25ab. RDD on origin/master..b7b25ab (committed-only): medium, `slice_budget_reached`, consent granted by the user, one reliability lens, approved with no findings, acknowledged (lineage review-510c876783f99966).

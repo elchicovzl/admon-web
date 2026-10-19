@@ -40,7 +40,10 @@ describe('resolverContraparteDeCliente', () => {
 
     const res = await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
 
-    expect(res).toEqual({ ok: true, contraparte: vinculada })
+    expect(res).toEqual({
+      ok: true,
+      contraparte: { id: 'ccontra00001', nombre: 'Ana Pérez', documento: '1.020.304.050' },
+    })
     expect(tx.contraparte.create).not.toHaveBeenCalled()
     expect(tx.contraparte.update).not.toHaveBeenCalled()
   })
@@ -59,7 +62,7 @@ describe('resolverContraparteDeCliente', () => {
 
     expect(res).toEqual({
       ok: true,
-      contraparte: { id: 'ccontra00002', nombre: 'Ana P.', documento: '1020304050' },
+      contraparte: { id: 'ccontra00002', nombre: 'Ana Pérez', documento: '1.020.304.050' },
     })
     expect(tx.contraparte.update).toHaveBeenCalledWith({
       where: { id: 'ccontra00002' },
@@ -77,7 +80,10 @@ describe('resolverContraparteDeCliente', () => {
 
     const res = await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
 
-    expect(res.ok).toBe(true)
+    expect(res).toEqual({
+      ok: true,
+      contraparte: { id: 'ccontra00003', nombre: 'Ana Pérez', documento: '1.020.304.050' },
+    })
     expect(tx.contraparte.create).toHaveBeenCalledWith({
       data: {
         nombre: 'Ana Pérez',
@@ -86,7 +92,7 @@ describe('resolverContraparteDeCliente', () => {
         clientId: CLIENT_ID,
         createdById: USER_ID,
       },
-      select: { id: true, nombre: true, documento: true },
+      select: { id: true },
     })
   })
 
@@ -120,12 +126,16 @@ describe('resolverContraparteDeCliente', () => {
     expect(tx.contraparte.create).not.toHaveBeenCalled()
   })
 
-  it('crea la contraparte sin documento si la identificación no es válida', async () => {
+  it('crea la contraparte sin documento pero el recibo lleva el del cliente', async () => {
     tx.client.findFirst.mockResolvedValue({ ...CLIENTE, identificationNumber: 'PA-12' })
-    tx.contraparte.create.mockResolvedValue({ id: 'c5', nombre: 'Ana Pérez', documento: null })
+    tx.contraparte.create.mockResolvedValue({ id: 'c5' })
 
-    await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
+    const res = await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
 
+    expect(res).toEqual({
+      ok: true,
+      contraparte: { id: 'c5', nombre: 'Ana Pérez', documento: 'PA-12' },
+    })
     expect(tx.contraparte.findUnique).toHaveBeenCalledTimes(1)
     expect(tx.contraparte.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ documento: null }) })

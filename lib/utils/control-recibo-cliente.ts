@@ -42,11 +42,22 @@ export async function resolverContraparteDeCliente(
   })
   if (!cliente) return { ok: false, error: 'Cliente no encontrado' }
 
+  // The receipt prints the client as the CRM has it, even when the document
+  // does not fit the counterparty catalog (which then stores it as null).
+  const delCliente = (id: string): ResolucionCliente => ({
+    ok: true,
+    contraparte: {
+      id,
+      nombre: cliente.fullName,
+      documento: cliente.identificationNumber.trim() || null,
+    },
+  })
+
   const vinculada = await tx.contraparte.findUnique({
     where: { clientId: cliente.id },
     select: SELECT_CONTRAPARTE,
   })
-  if (vinculada) return { ok: true, contraparte: vinculada }
+  if (vinculada) return delCliente(vinculada.id)
 
   const documento = normalizarDocumento(cliente.identificationNumber)
 
@@ -64,9 +75,11 @@ export async function resolverContraparteDeCliente(
     }
 
     if (mismoDocumento) {
-      const { id, nombre, documento: doc } = mismoDocumento
-      await tx.contraparte.update({ where: { id }, data: { clientId: cliente.id } })
-      return { ok: true, contraparte: { id, nombre, documento: doc } }
+      await tx.contraparte.update({
+        where: { id: mismoDocumento.id },
+        data: { clientId: cliente.id },
+      })
+      return delCliente(mismoDocumento.id)
     }
   }
 
@@ -78,7 +91,7 @@ export async function resolverContraparteDeCliente(
       clientId: cliente.id,
       createdById: userId,
     },
-    select: SELECT_CONTRAPARTE,
+    select: { id: true },
   })
-  return { ok: true, contraparte: creada }
+  return delCliente(creada.id)
 }
