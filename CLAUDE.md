@@ -144,7 +144,7 @@ Se validan **al arrancar el servidor** (`instrumentation.ts` → `lib/config/run
 | `WORKER_ENABLED` | `true` | — |
 | `QUEUE_DATABASE_URL` | cae a `DIRECT_URL` | — |
 
-Cola (`lib/queue/`): pg-boss crea el schema `pgboss` en la base al arrancar el servidor (necesita permisos DDL con `DIRECT_URL`). Topología y reintentos en `lib/queue/queues.ts`; los jobs agotados van a la cola `wa.dead`. Los handlers se registran con `registerWorker` en `lib/queue/workers.ts`. Si `WHATSAPP_ENABLED=false`, un fallo al iniciar la cola solo se registra en el log; con `true`, aborta el arranque.
+Cola (`lib/queue/`): con `WHATSAPP_ENABLED` distinto de `true` el arranque es un no-op total (no valida config, no conecta, no crea el schema `pgboss` ni colas). Con `true`, pg-boss crea el schema `pgboss` en la base al arrancar el servidor (necesita permisos DDL con `DIRECT_URL`) y cualquier fallo de config o de la cola aborta el arranque. Topología y reintentos en `lib/queue/queues.ts`; los jobs agotados van a la cola `wa.dead`. Los handlers se registran con `registerWorker` en `lib/queue/workers.ts`.
 
 ---
 

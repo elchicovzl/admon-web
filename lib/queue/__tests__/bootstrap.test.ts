@@ -55,29 +55,34 @@ describe("bootstrapRuntime", () => {
     )
   })
 
-  it("starts the queue even when WhatsApp is disabled (schema is created in dev)", async () => {
+  it("is a strict no-op with the flag unset: nothing started, no validation", async () => {
     await run()
 
-    expect(startBoss).toHaveBeenCalledOnce()
+    expect(startBoss).not.toHaveBeenCalled()
+    expect(ensureQueues).not.toHaveBeenCalled()
+    expect(ensureSchedules).not.toHaveBeenCalled()
+    expect(startWorkers).not.toHaveBeenCalled()
+    expect(console.info).toHaveBeenCalledOnce()
+  })
+
+  it("is a strict no-op with WHATSAPP_ENABLED=false, even with invalid other vars", async () => {
+    await expect(
+      run({ WHATSAPP_ENABLED: "false", AI_DEBOUNCE_SECONDS: "not-a-number" })
+    ).resolves.toBeUndefined()
+
+    expect(startBoss).not.toHaveBeenCalled()
   })
 
   it("skips queue startup when WORKER_ENABLED=false", async () => {
-    await run({ WORKER_ENABLED: "false" })
+    await run({ WHATSAPP_ENABLED: "true", ...META_ENV, WORKER_ENABLED: "false" })
 
     expect(startBoss).not.toHaveBeenCalled()
   })
 
   it("prefers QUEUE_DATABASE_URL over DIRECT_URL", async () => {
-    await run({ QUEUE_DATABASE_URL: "postgresql://localhost/queue" })
+    await run({ WHATSAPP_ENABLED: "true", ...META_ENV, QUEUE_DATABASE_URL: "postgresql://localhost/queue" })
 
     expect(startBoss).toHaveBeenCalledWith("postgresql://localhost/queue")
-  })
-
-  it("logs and continues on queue failure while WhatsApp is disabled", async () => {
-    startBoss.mockRejectedValueOnce(new Error("db down"))
-
-    await expect(run()).resolves.toBeUndefined()
-    expect(console.error).toHaveBeenCalled()
   })
 
   it("aborts startup on queue failure when WhatsApp is enabled", async () => {
@@ -89,7 +94,11 @@ describe("bootstrapRuntime", () => {
   it("never logs the database URL", async () => {
     startBoss.mockRejectedValueOnce(new Error("db down"))
 
-    await run({ DIRECT_URL: "postgresql://user:hunter2@localhost/db" })
+    await run({
+      WHATSAPP_ENABLED: "true",
+      ...META_ENV,
+      DIRECT_URL: "postgresql://user:hunter2@localhost/db",
+    }).catch(() => {})
 
     const logged = JSON.stringify(vi.mocked(console.error).mock.calls)
     expect(logged).not.toContain("hunter2")
