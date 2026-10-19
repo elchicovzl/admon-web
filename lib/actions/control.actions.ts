@@ -1368,7 +1368,6 @@ export async function getReciboParaPdf(
       clienteDireccion: true,
       clienteCiudad: true,
       clienteTelefono: true,
-      createdBy: { select: { name: true, email: true } },
       movimiento: {
         select: {
           fecha: true,
@@ -1403,7 +1402,6 @@ export async function getReciboParaPdf(
         clienteDireccion: recibo.clienteDireccion,
         clienteCiudad: recibo.clienteCiudad,
         clienteTelefono: recibo.clienteTelefono,
-        elaboradoPor: recibo.createdBy.name?.trim() || recibo.createdBy.email,
         lineas: movimiento.detalleServicios.map((d) => ({
           servicio: d.servicio.nombre,
           referencia: d.servicio.referencia,

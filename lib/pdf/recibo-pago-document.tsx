@@ -330,8 +330,9 @@ export function ReciboPagoDocument({ datos, emisor, logoBuffer }: ReciboPagoDocu
             </View>
           </View>
 
+          {/* Left blank on purpose: whoever delivers the receipt signs it by hand. */}
           <View style={styles.firma}>
-            <Text style={styles.firmaNombre}>{datos.elaboradoPor}</Text>
+            <Text style={styles.firmaNombre}> </Text>
             <View style={styles.firmaLinea}>
               <Text style={styles.firmaEtiqueta}>ELABORADO POR</Text>
             </View>

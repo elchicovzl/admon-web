@@ -229,8 +229,6 @@ export interface EntradaArmarDatosRecibo {
   clienteDireccion?: string | null
   clienteCiudad?: string | null
   clienteTelefono?: string | null
-  /** Name of the user who issued the receipt ("ELABORADO POR"). */
-  elaboradoPor?: string | null
   lineas: Array<{ servicio: string; referencia: string | null; monto: number }>
   /** Movement amount; must equal the sum of the lines. */
   monto: number
@@ -257,7 +255,6 @@ export interface DatosRecibo {
   medioDePago: string
   concepto: string
   anulado: boolean
-  elaboradoPor: string
 }
 
 /** Builds the plain view model the PDF renders. No Prisma types, no I/O. */
@@ -287,7 +284,6 @@ export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
     medioDePago: input.bolsilloNombre,
     concepto: input.concepto,
     anulado: input.anulado,
-    elaboradoPor: input.elaboradoPor ?? '',
   }
 }
 

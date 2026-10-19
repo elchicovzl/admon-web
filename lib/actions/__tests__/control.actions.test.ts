@@ -3611,7 +3611,6 @@ describe('recibo de pago', () => {
         clienteDireccion: null,
         clienteCiudad: null,
         clienteTelefono: null,
-        createdBy: { name: 'Luisa Gómez', email: 'luisa@example.com' },
         movimiento: {
           fecha: new Date('2026-10-04T00:00:00.000Z'),
           concepto: 'Pago de servicios',
@@ -3643,7 +3642,6 @@ describe('recibo de pago', () => {
           ciudad: '',
           telefono: '',
         },
-        elaboradoPor: 'Luisa Gómez',
         total: 300000,
         medioDePago: 'Bancolombia',
         anulado: false,
@@ -3654,14 +3652,13 @@ describe('recibo de pago', () => {
       })
     })
 
-    it('imprime la copia fija del contacto del cliente y el email si el usuario no tiene nombre', async () => {
+    it('imprime la copia fija del contacto del cliente', async () => {
       prismaMock.reciboPago.findUnique.mockResolvedValue({
         ...reciboConMovimiento(null),
         clienteTipoDocumento: 'NIT',
         clienteDireccion: 'Cra 43A # 34-95',
         clienteCiudad: 'Medellín',
         clienteTelefono: '3197941064',
-        createdBy: { name: null, email: 'luisa@example.com' },
       })
 
       const res = await getReciboParaPdf('crecibo000012')
@@ -3673,7 +3670,6 @@ describe('recibo de pago', () => {
           ciudad: 'Medellín',
           telefono: '3197941064',
         },
-        elaboradoPor: 'luisa@example.com',
       })
     })
 

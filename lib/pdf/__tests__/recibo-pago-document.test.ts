@@ -14,7 +14,6 @@ const datos = armarDatosRecibo({
   clienteDireccion: 'Cra 74 # 89-95',
   clienteCiudad: 'Medellín',
   clienteTelefono: '301 510 6144',
-  elaboradoPor: 'Luisa Gómez',
   lineas: [
     { servicio: 'Administración', referencia: '01', monto: 150000 },
     { servicio: 'Afiliación', referencia: null, monto: 250000 },
@@ -58,12 +57,11 @@ describe('ReciboPagoDocument', () => {
     expect(pdf.length).toBeGreaterThan(1000)
   })
 
-  it('renderiza un recibo antiguo sin datos de contacto y sin firmante', async () => {
+  it('renderiza un recibo antiguo sin datos de contacto', async () => {
     const pdf = await renderizarReciboPdf({
       datos: {
         ...datos,
         cliente: { ...datos.cliente, tipoDocumento: '', direccion: '', ciudad: '', telefono: '' },
-        elaboradoPor: '',
       },
       emisor: EMISOR_PRUEBA,
     })
