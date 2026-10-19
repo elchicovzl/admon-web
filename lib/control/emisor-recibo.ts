@@ -16,8 +16,8 @@ const CAMPOS: ReadonlyArray<keyof EmisorRecibo> = [
 
 /**
  * Resolves the issuer printed on the receipt from `configuracion_empresa`.
- * Falls back to PLACEHOLDER_EMISOR field by field when the row is missing or a
- * field is blank, so the PDF can still be produced (flagged as incomplete).
+ * Leaves a field blank (PLACEHOLDER_EMISOR) when the row is missing or the field
+ * is empty, so the PDF can still be produced (flagged as incomplete).
  */
 export async function obtenerEmisorRecibo(): Promise<EmisorRecibo> {
   const fila = await prisma.configuracionEmpresa.findUnique({

@@ -191,7 +191,6 @@ describe('armarDatosRecibo', () => {
       clienteDireccion: 'Cra 1 # 2-3',
       clienteCiudad: 'Medellín',
       clienteTelefono: '3001234567',
-      elaboradoPor: 'Luisa Gómez',
       lineas: [
         { servicio: 'Administración', referencia: 'Octubre', monto: 150000 },
         { servicio: 'Afiliación', referencia: null, monto: 1100000 },
@@ -222,7 +221,6 @@ describe('armarDatosRecibo', () => {
       medioDePago: 'Bancolombia',
       concepto: 'Pago de servicios',
       anulado: false,
-      elaboradoPor: 'Luisa Gómez',
     })
   })
 
@@ -250,7 +248,6 @@ describe('armarDatosRecibo', () => {
       ciudad: '',
       telefono: '',
     })
-    expect(datos.elaboradoPor).toBe('')
   })
 
   it('throws when the lines do not sum the amount', () => {

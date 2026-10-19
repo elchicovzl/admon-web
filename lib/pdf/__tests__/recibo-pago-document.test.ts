@@ -14,7 +14,6 @@ const datos = armarDatosRecibo({
   clienteDireccion: 'Cra 74 # 89-95',
   clienteCiudad: 'Medellín',
   clienteTelefono: '301 510 6144',
-  elaboradoPor: 'Luisa Gómez',
   lineas: [
     { servicio: 'Administración', referencia: '01', monto: 150000 },
     { servicio: 'Afiliación', referencia: null, monto: 250000 },
@@ -58,16 +57,30 @@ describe('ReciboPagoDocument', () => {
     expect(pdf.length).toBeGreaterThan(1000)
   })
 
-  it('renderiza un recibo antiguo sin datos de contacto y sin firmante', async () => {
+  it('renderiza un recibo antiguo sin datos de contacto', async () => {
     const pdf = await renderizarReciboPdf({
       datos: {
         ...datos,
         cliente: { ...datos.cliente, tipoDocumento: '', direccion: '', ciudad: '', telefono: '' },
-        elaboradoPor: '',
       },
       emisor: EMISOR_PRUEBA,
     })
     expect(pdf.subarray(0, 4).toString('latin1')).toBe('%PDF')
+  })
+
+  it('renderiza sin datos de la empresa y pesa menos que con ellos', async () => {
+    const vacio: EmisorRecibo = {
+      razonSocial: '',
+      nit: '',
+      direccion: '',
+      ciudad: '',
+      telefono: '',
+      email: '',
+    }
+    const sinEmisor = await renderizarReciboPdf({ datos, emisor: vacio })
+    const conEmisor = await renderizarReciboPdf({ datos, emisor: EMISOR_PRUEBA })
+    expect(sinEmisor.subarray(0, 4).toString('latin1')).toBe('%PDF')
+    expect(sinEmisor.length).toBeLessThan(conEmisor.length)
   })
 
   // react-pdf compresses the content streams, so the text "ANULADO" cannot be
