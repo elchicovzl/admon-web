@@ -4,6 +4,7 @@ import {
   QUEUES,
   QUEUE_DEFINITIONS,
   QUEUE_SEND_DEFAULTS,
+  buildQueueSendDefaults,
   ensureQueues,
 } from "../queues"
 import { SCHEDULE_DEFINITIONS, ensureSchedules } from "../schedules"
@@ -62,6 +63,10 @@ describe("queue topology (D2)", () => {
     const aiTurn = QUEUE_DEFINITIONS.find((q) => q.name === "ai.turn")
     expect(aiTurn?.policy).toBe("stately")
     expect(QUEUE_SEND_DEFAULTS["ai.turn"]).toEqual({ startAfter: 8 })
+  })
+
+  it("ai.turn delay follows the configured debounce instead of a duplicated constant", () => {
+    expect(buildQueueSendDefaults({ debounceSeconds: 15 })["ai.turn"]).toEqual({ startAfter: 15 })
   })
 
   it("wa.echo.reconcile is deferred 5 seconds", () => {

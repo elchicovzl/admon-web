@@ -7,11 +7,12 @@ import { z } from "zod"
  */
 const looseRecord = z.object({}).passthrough()
 
-const messageSchema = z.object({ id: z.string().min(1) }).passthrough()
-const statusSchema = z
+/** Messages and echoes share one shape: only the wamid is required. */
+export const messageSchema = z.object({ id: z.string().min(1) }).passthrough()
+export const echoSchema = messageSchema
+export const statusSchema = z
   .object({ id: z.string().min(1), status: z.string().min(1) })
   .passthrough()
-const echoSchema = z.object({ id: z.string().min(1) }).passthrough()
 
 export const changeValueSchema = z
   .object({
@@ -49,4 +50,3 @@ export const webhookEnvelopeSchema = z
 export type WebhookMessage = z.infer<typeof messageSchema>
 export type WebhookStatus = z.infer<typeof statusSchema>
 export type WebhookEcho = z.infer<typeof echoSchema>
-export { messageSchema, statusSchema, echoSchema }

@@ -1,7 +1,11 @@
 import type { Queue, SendOptions } from "pg-boss"
+import { DEFAULT_AI_DEBOUNCE_SECONDS } from "@/lib/config/runtime-config"
 
 /** Dead-letter queue: exhausted jobs land here for operator inspection (WC-5, DR-8). */
 export const DEAD_LETTER_QUEUE = "wa.dead"
+
+/** Delay before a deferred echo is re-checked against in-flight sends (design D7). */
+export const ECHO_RECONCILE_DELAY_SECONDS = 5
 
 export const QUEUES = {
   EVENT_PROCESS: "wa.event.process",
@@ -35,7 +39,7 @@ export const QUEUE_DEFINITIONS: readonly QueueDefinition[] = [
   { name: QUEUES.EVENT_PROCESS, retryLimit: 5, retryDelay: 10, retryBackoff: true, deadLetter: DEAD_LETTER_QUEUE },
   { name: QUEUES.EVENT_SWEEP, retryLimit: 1, retryDelay: 30, retryBackoff: false, deadLetter: DEAD_LETTER_QUEUE },
   { name: QUEUES.MESSAGE_SEND, retryLimit: 4, retryDelay: 5, retryBackoff: true, deadLetter: DEAD_LETTER_QUEUE },
-  { name: QUEUES.ECHO_RECONCILE, retryLimit: 3, retryDelay: 5, retryBackoff: false, deadLetter: DEAD_LETTER_QUEUE },
+  { name: QUEUES.ECHO_RECONCILE, retryLimit: 3, retryDelay: ECHO_RECONCILE_DELAY_SECONDS, retryBackoff: false, deadLetter: DEAD_LETTER_QUEUE },
   { name: QUEUES.MEDIA_DOWNLOAD, retryLimit: 3, retryDelay: 10, retryBackoff: true, deadLetter: DEAD_LETTER_QUEUE },
   { name: QUEUES.AI_TRANSCRIBE, retryLimit: 2, retryDelay: 10, retryBackoff: true, deadLetter: DEAD_LETTER_QUEUE },
   // `stately`: at most one queued and one active job per singletonKey (= conversationId), AI-7.
@@ -51,11 +55,22 @@ export const QUEUE_DEFINITIONS: readonly QueueDefinition[] = [
  * Per-send defaults the topology implies but pg-boss only accepts on `send()`.
  * Producers spread these into their `boss.send` options, adding the singletonKey
  * where the policy needs one (event id for `wa.event.process`, conversation id for `ai.turn`).
+ * The `ai.turn` delay IS the configured debounce: producers with runtime config pass
+ * `getAiConfig().debounceSeconds` so an overridden AI_DEBOUNCE_SECONDS takes effect.
  */
-export const QUEUE_SEND_DEFAULTS: Partial<Record<QueueName, SendOptions>> = {
-  [QUEUES.ECHO_RECONCILE]: { startAfter: 5 },
-  [QUEUES.AI_TURN]: { startAfter: 8 },
+export function buildQueueSendDefaults(ai: {
+  debounceSeconds: number
+}): Partial<Record<QueueName, SendOptions>> {
+  return {
+    [QUEUES.ECHO_RECONCILE]: { startAfter: ECHO_RECONCILE_DELAY_SECONDS },
+    [QUEUES.AI_TURN]: { startAfter: ai.debounceSeconds },
+  }
 }
+
+/** Defaults at the stock configuration; use `buildQueueSendDefaults` when config is available. */
+export const QUEUE_SEND_DEFAULTS = buildQueueSendDefaults({
+  debounceSeconds: DEFAULT_AI_DEBOUNCE_SECONDS,
+})
 
 /** Create (or reconcile) the dead-letter queue first, then every queue that points at it. */
 export async function ensureQueues(boss: {
