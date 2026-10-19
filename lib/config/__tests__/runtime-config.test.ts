@@ -95,9 +95,16 @@ describe("runtime config", () => {
     })
 
     it("requires AI keys and model only when WHATSAPP_AI_ENABLED=true", () => {
-      expect(() =>
+      let message = ""
+      try {
         validateRuntimeConfig(env({ WHATSAPP_AI_ENABLED: "true" }))
-      ).toThrow(/ANTHROPIC_API_KEY[\s\S]*AI_CHAT_MODEL[\s\S]*OPENAI_API_KEY|OPENAI_API_KEY/)
+      } catch (error) {
+        message = (error as Error).message
+      }
+      expect(message).not.toBe("")
+      for (const name of ["ANTHROPIC_API_KEY", "AI_CHAT_MODEL", "OPENAI_API_KEY"]) {
+        expect(message).toContain(name)
+      }
 
       const config = validateRuntimeConfig(
         env({ WHATSAPP_AI_ENABLED: "true", ...AI_ENV })

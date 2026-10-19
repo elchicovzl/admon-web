@@ -73,6 +73,11 @@ model User {
 
   // Novedades relations (vacaciones, permisos, calamidades)
   novedades                      Novedad[]                @relation("UserNovedades")
+
+  // WhatsApp channel relations
+  takenOverConversations         Conversation[]           @relation("ConversationTakenOverBy")
+  sentWhatsAppMessages           WhatsAppMessage[]        @relation("WhatsAppMessageSentBy")
+  conversationEvents             ConversationEvent[]      @relation("ConversationEventActor")
   createdNovedades               Novedad[]                @relation("NovedadCreatedBy")
 
   // Módulo Control (caja interna)
@@ -255,6 +260,10 @@ model Client {
   // Módulo Control — un cliente puede ser contraparte del libro de caja
   // (ej. A&A Moda Circular y Mompossina, clientes de mensajería).
   contraparte Contraparte? @relation("ContraparteClient")
+
+  // WhatsApp channel: contacts linked to this client and leads converted into it
+  whatsappContacts WhatsAppContact[]
+  convertedLeads   Lead[]            @relation("LeadConvertedClient")
 
   @@map("clients")
   @@index([companyId])
@@ -1675,4 +1684,341 @@ model ConfiguracionEmpresa {
   updatedBy   User?   @relation("ConfiguracionEmpresaUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@map("configuracion_empresa")
+}
+
+// ============================================================================
+// WhatsApp channel (flags off, store-only until WHATSAPP_ENABLED=true)
+// ============================================================================
+
+enum ConversationStatus {
+  AI
+  HUMAN
+  ESCALATED
+  CLOSED
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+enum MessageSource {
+  CLIENT
+  AI
+  DASHBOARD
+  PHONE_APP
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  DOCUMENT
+  VIDEO
+  STICKER
+  LOCATION
+  CONTACTS
+  INTERACTIVE
+  REACTION
+  TEMPLATE
+  UNSUPPORTED
+}
+
+enum MessageStatus {
+  RECEIVED
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum WebhookItemKind {
+  MESSAGE
+  STATUS
+  ECHO
+  OTHER
+}
+
+enum MediaStatus {
+  PENDING
+  STORED
+  FAILED
+  TOO_LARGE
+  UNSUPPORTED
+}
+
+enum TranscriptStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+enum ContactMatchStatus {
+  MATCHED
+  UNMATCHED
+  AMBIGUOUS
+  MANUAL
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  DISCARDED
+}
+
+enum LeadSource {
+  WHATSAPP
+}
+
+enum ConversationActor {
+  USER
+  AI
+  SYSTEM
+  PHONE_APP
+  CLIENT
+}
+
+enum AiUsageKind {
+  CHAT_TURN
+  TRANSCRIPTION
+}
+
+enum AiTurnOutcome {
+  REPLIED
+  ESCALATED
+  DISCARDED
+  FAILED
+  SKIPPED
+}
+
+model WhatsAppContact {
+  id           String             @id @default(cuid())
+  waId         String             @unique
+  profileName  String?
+  clientId     String?
+  client       Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  matchStatus  ContactMatchStatus @default(UNMATCHED)
+  // Manual link/unlink disables the automatic client matching.
+  matchLocked  Boolean            @default(false)
+  lastSeenAt   DateTime?
+  conversation Conversation?
+  lead         Lead?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([clientId])
+  @@map("whatsapp_contacts")
+}
+
+model Lead {
+  id                   String              @id @default(cuid())
+  contactId            String              @unique
+  contact              WhatsAppContact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  source               LeadSource          @default(WHATSAPP)
+  phoneE164            String
+  displayName          String?
+  conversationId       String?
+  status               LeadStatus          @default(NEW)
+  fullName             String?
+  identificationType   IdentificationType?
+  identificationNumber String?
+  email                String?
+  notes                String?             @db.Text
+  convertedClientId    String?
+  convertedClient      Client?             @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([status])
+  @@index([convertedClientId])
+  @@map("leads")
+}
+
+model Conversation {
+  id                     String              @id @default(cuid())
+  // One conversation per contact: reopened, never duplicated.
+  contactId              String              @unique
+  contact                WhatsAppContact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status                 ConversationStatus
+  stateVersion           Int                 @default(0)
+  // Per-conversation AI switch.
+  aiPaused               Boolean             @default(false)
+  aiPausedById           String?
+  aiPausedAt             DateTime?
+  lastInboundAt          DateTime?
+  lastAiSentAt           DateTime?
+  lastMessageAt          DateTime            @default(now())
+  lastMessagePreview     String?
+  unreadCount            Int                 @default(0)
+  aiCursorAt             DateTime?
+  consecutiveAiFailures  Int                 @default(0)
+  takenOverById          String?
+  takenOverBy            User?               @relation("ConversationTakenOverBy", fields: [takenOverById], references: [id], onDelete: SetNull)
+  takenOverAt            DateTime?
+  escalatedAt            DateTime?
+  escalationReason       String?
+  escalatedOutOfHours    Boolean             @default(false)
+  attentionDueAt         DateTime?
+  consentNoticeMessageId String?
+  consentNoticeSentAt    DateTime?
+  closedAt               DateTime?
+  closedById             String?
+  purgePendingAt         DateTime?
+  messages               WhatsAppMessage[]
+  events                 ConversationEvent[]
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([status, attentionDueAt])
+  @@index([lastMessageAt(sort: Desc)])
+  @@index([updatedAt])
+  @@map("conversations")
+}
+
+model WhatsAppMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // NULL while an outbound message is queued; unique once Meta assigns it.
+  wamid          String?          @unique
+  direction      MessageDirection
+  source         MessageSource
+  type           MessageType
+  text           String?          @db.Text
+  templateName   String?
+  templateParams Json?
+  status         MessageStatus
+  statusRank     Int              @default(0)
+  errorCode      String?
+  errorMessage   String?
+  resendCount    Int              @default(0)
+  contextWamid   String?
+  sentById       String?
+  sentBy         User?            @relation("WhatsAppMessageSentBy", fields: [sentById], references: [id], onDelete: SetNull)
+  sourceChunkIds String[]
+  usageRecordId  String?
+  timestamp      DateTime
+  sentAt         DateTime?
+  media          WhatsAppMedia?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([conversationId, timestamp])
+  @@index([conversationId, updatedAt])
+  @@index([sentById])
+  @@map("whatsapp_messages")
+}
+
+model WhatsAppStatusEvent {
+  id         String        @id @default(cuid())
+  wamid      String
+  status     MessageStatus
+  errorCode  String?
+  errorTitle String?
+  timestamp  DateTime
+  createdAt  DateTime      @default(now())
+
+  @@unique([wamid, status])
+  @@map("whatsapp_status_events")
+}
+
+model WhatsAppMedia {
+  id               String            @id @default(cuid())
+  messageId        String            @unique
+  message          WhatsAppMessage   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  metaMediaId      String
+  mimeType         String
+  sizeBytes        Int?
+  sha256           String?
+  fileName         String?
+  s3Key            String?
+  status           MediaStatus       @default(PENDING)
+  failureReason    String?
+  transcript       String?           @db.Text
+  transcriptStatus TranscriptStatus?
+  durationSec      Float?
+  r2DeletedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@map("whatsapp_media")
+}
+
+model WhatsAppWebhookEvent {
+  id          String          @id @default(cuid())
+  // msg:wamid | status:wamid:status | echo:wamid | other:hash
+  dedupKey    String          @unique
+  kind        WebhookItemKind
+  wamid       String?
+  // sha256 of the whole POST body: correlation/dedup aid only.
+  payloadHash String
+  // The single item plus its metadata/contacts context.
+  payload     Json
+  receivedAt  DateTime        @default(now())
+  processedAt DateTime?
+  attempts    Int             @default(0)
+  lastError   String?
+
+  @@index([processedAt, receivedAt])
+  @@index([payloadHash])
+  @@index([receivedAt])
+  @@map("whatsapp_webhook_events")
+}
+
+model ConversationEvent {
+  id             String              @id @default(cuid())
+  conversationId String
+  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  fromStatus     ConversationStatus?
+  toStatus       ConversationStatus
+  event          String
+  actor          ConversationActor
+  actorUserId    String?
+  actorUser      User?               @relation("ConversationEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  reason         String?
+  createdAt      DateTime            @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([actorUserId])
+  @@map("conversation_events")
+}
+
+model AiUsageRecord {
+  id                String         @id @default(cuid())
+  kind              AiUsageKind
+  // Set to NULL on purge; deliberately no FK so usage outlives conversations.
+  conversationId    String?
+  // Outbound AI message or inbound audio message (no FK).
+  messageId         String?
+  outcome           AiTurnOutcome?
+  model             String
+  promptVersion     String?
+  steps             Int            @default(0)
+  inputTokens       Int            @default(0)
+  outputTokens      Int            @default(0)
+  audioSeconds      Float?
+  toolCalls         Json?
+  retrievalScores   Json?
+  retrievedChunkIds String[]
+  topSimilarity     Float?
+  latencyMs         Int?
+  estimatedCostUsd  Decimal?       @db.Decimal(10, 6)
+  error             String?
+  createdAt         DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([conversationId])
+  @@map("ai_usage_records")
+}
+
+model WhatsAppSettings {
+  id          String   @id @default("singleton")
+  aiEnabled   Boolean  @default(false)
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("whatsapp_settings")
 }
