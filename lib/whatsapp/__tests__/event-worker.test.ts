@@ -13,6 +13,7 @@ vi.mock("../sweeper", () => ({ sweepUnprocessedEvents }))
 vi.mock("../contacts", () => ({ recoverMissingLeads }))
 vi.mock("../send", () => ({ handleSendJobs: vi.fn() }))
 vi.mock("../echoes", () => ({ handleEchoReconcileJobs: vi.fn() }))
+vi.mock("../media", () => ({ handleMediaJobs: vi.fn() }))
 
 import { clearWorkerRegistry, getRegisteredWorkers } from "@/lib/queue/workers"
 import { handleEventJobs, handleSweepJobs, registerWhatsAppWorkers, setEventProcessor } from "../event-worker"
@@ -123,6 +124,7 @@ describe("registerWhatsAppWorkers", () => {
       "wa.echo.reconcile",
       "wa.event.process",
       "wa.event.sweep",
+      "wa.media.download",
       "wa.message.send",
     ])
   })
