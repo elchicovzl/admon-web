@@ -59,6 +59,9 @@ The payment receipt ("Recibo de pago") is issued to a **client of the CRM** (`Cl
 - 2026-10-18: full-branch review origin/master..6eb50f6 approved and acknowledged (lineage review-02b774aa91d916ee); advisory: no action-level test for the "document belongs to another client" resolver failure nor for concurrent counterparty creation (follow-up).
 - 2026-10-18: T2 done (route: delegated writer). Migration `20261018000000_add_recibo_cliente_contacto` (4 nullable columns, matches `migrate diff`; applied to no database), `etiquetaTipoDocumento`, snapshot of contact data at issue time, `elaboradoPor` from `createdBy.name ?? email`, PDF rewritten to the Alegra layout. Writer checks: vitest 967 passed; tsc 37; prisma validate OK; build OK. Orchestrator spot check: demo PDF inspected against the sample; `pnpm test:run lib/pdf lib/utils` 278 passed. Open: SALVOCONDUCTO label "SC"; table area sized for ~17 lines (more may spill to page 2).
 
+- 2026-10-18: T2 review 6eb50f6..5c54789 approved with no findings, acknowledged (lineage review-af51b124399faf68); full-branch review origin/master..5c54789 approved with no findings (lineage review-bb01e6532086de4a).
+- 2026-10-18: local DB: 3 pending migrations applied with `prisma migrate deploy` (20261004, 20261006, 20261018). Production (user-authorized, connection given in chat): only 20261018 was pending; applied with `prisma migrate deploy` through a scratch config that loads no `.env*`; status "up to date". The DB password was shared in chat again and should be rotated.
+- Delivery: single PR to master (user asked for "push y PR"); commits are already reviewed as two slices (T1, T2).
+
 ## Next step
-Apply the new migration (local, then production — user's call); manual browser check; push and PR are the user's call.
-- 2026-10-18: commit b7b25ab. RDD on origin/master..b7b25ab (committed-only): medium, `slice_budget_reached`, consent granted by the user, one reliability lens, approved with no findings, acknowledged (lineage review-510c876783f99966).
+Merge the PR; browser check of both flows and the PDF download.
