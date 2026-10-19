@@ -102,7 +102,11 @@ export function SubProcessDocumentsSection({
       toast.error(`${f.name} excede el límite de 10MB`)
     }
     const valid = files.filter((f) => f.size <= MAX_FILE_SIZE)
-    if (valid.length === 0) return
+    if (valid.length === 0) {
+      // Reset so the same files can be picked again after the error
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
 
     setUploading(true)
     let ok = 0
