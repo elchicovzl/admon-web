@@ -144,6 +144,7 @@ resto del dashboard, se agrega un **flag booleano**, no un valor al enum.
 model User {
   role             UserRole @default(MANAGER)
   canAccessControl Boolean  @default(false)  // módulo Control (caja interna)
+  canAccessWhatsApp Boolean @default(false)  // módulo WhatsApp (bandeja compartida)
 }
 ```
 
@@ -151,6 +152,15 @@ model User {
 // Regla de acceso: SUPER_ADMIN entra por rol; el resto, por flag explícito
 session.user.role === UserRole.SUPER_ADMIN || user.canAccessControl
 ```
+
+**WhatsApp** usa exactamente el mismo patrón con `User.canAccessWhatsApp`:
+SUPER_ADMIN lo otorga por usuario desde "Editar Usuario" (switch "Acceso a
+WhatsApp"). Capas: middleware (`whatsAppRoutes`, lee el JWT), layout de
+`/dashboard/whatsapp` (`hasWhatsAppAccess()`, lee la base) y cada Server Action
+(`requireWhatsAppAuth()` de `lib/whatsapp/access.ts`). La bandeja es compartida
+entre los usuarios con acceso; las notificaciones de escalamiento y leads van
+solo a ellos más los SUPER_ADMIN. Migración nueva: aplicar a producción a mano
+con `pnpm db:deploy`.
 
 ### Protección de Rutas (middleware.ts)
 ```typescript

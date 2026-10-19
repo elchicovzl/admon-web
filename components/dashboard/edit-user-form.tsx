@@ -46,6 +46,7 @@ export function EditUserForm({ open, onOpenChange, user, onUserUpdated }: EditUs
       name: user.name || '',
       email: user.email,
       canAccessControl: user.canAccessControl,
+      canAccessWhatsApp: user.canAccessWhatsApp,
     },
   })
 
@@ -152,6 +153,30 @@ export function EditUserForm({ open, onOpenChange, user, onUserUpdated }: EditUs
                       onCheckedChange={field.onChange}
                       disabled={isLoading}
                       aria-label="Acceso al módulo Control"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="canAccessWhatsApp"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-start justify-between gap-4 rounded-lg border p-4">
+                  <div className="space-y-1">
+                    <FormLabel>Acceso a WhatsApp</FormLabel>
+                    <FormDescription>
+                      Permite ver y responder la bandeja compartida de
+                      WhatsApp y recibir sus notificaciones.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value ?? false}
+                      onCheckedChange={field.onChange}
+                      disabled={isLoading}
+                      aria-label="Acceso al módulo WhatsApp"
                     />
                   </FormControl>
                 </FormItem>
