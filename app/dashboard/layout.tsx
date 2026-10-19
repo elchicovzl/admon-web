@@ -27,13 +27,16 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
+  // Same rule as the sidebar entry; the notification actions re-check it against the database.
+  const canSeeWhatsApp = session.user.role === 'SUPER_ADMIN' || session.user.canAccessWhatsApp === true
+
   return (
     <SessionProvider>
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar user={session.user} />
           <div className="flex flex-1 flex-col min-w-0">
-            <DashboardHeader />
+            <DashboardHeader whatsappNotificationsUserId={canSeeWhatsApp ? session.user.id : null} />
             <main className="flex-1 overflow-y-auto p-6 min-w-0">
               {children}
             </main>

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/breadcrumb'
 import { usePathname } from 'next/navigation'
 import { useDashboardStore } from '@/lib/stores/use-dashboard-store'
+import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
 
 const STATIC_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -26,7 +27,16 @@ const STATIC_LABELS: Record<string, string> = {
   whatsapp: 'WhatsApp',
 }
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  /**
+   * Id of the signed-in user when they can open the WhatsApp module (SUPER_ADMIN or
+   * canAccessWhatsApp); null hides the notification bell. The notification actions check
+   * the permission again on the server.
+   */
+  whatsappNotificationsUserId?: string | null
+}
+
+export function DashboardHeader({ whatsappNotificationsUserId = null }: DashboardHeaderProps) {
   const pathname = usePathname()
   const breadcrumbLabels = useDashboardStore((s) => s.breadcrumbLabels)
 
@@ -78,6 +88,11 @@ export function DashboardHeader() {
           ))}
         </BreadcrumbList>
       </Breadcrumb>
+      {whatsappNotificationsUserId && (
+        <div className="ml-auto flex items-center">
+          <NotificationBell userId={whatsappNotificationsUserId} />
+        </div>
+      )}
     </header>
   )
 }

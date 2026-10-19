@@ -616,8 +616,31 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   al registrar los workers (`setApplyTransitionPort`).
 - Las acciones de servidor para tomar, devolver a IA, cerrar y reabrir se publican en
   el PR de acciones de cabecera (2.4) y deberán llamar a `requireWhatsAppAuth()`.
-- Notificaciones: hoy `NotifyPort` es un no-op. Cuando aterrice PR4.1 los destinatarios
-  deben ser los usuarios con `canAccessWhatsApp` más los SUPER_ADMIN (no todos los MANAGER).
+- Notificaciones: ver la sección siguiente.
+
+### Notificaciones de WhatsApp (solo en la app, sin email)
+
+- `lib/notifications/notify.ts` implementa `NotifyPort` y se registra en `registerWhatsAppWorkers`
+  (`setNotifyPort`). Destinatarios: usuarios activos con `canAccessWhatsApp` más todos los
+  SUPER_ADMIN activos (no todos los MANAGER).
+- Tabla `notifications` (RLS activo): tipo + ids; el título, el texto y el enlace se derivan al
+  leer (`lib/notifications/present.ts`), así que no se guarda contenido de mensajes ni teléfonos.
+- Dedup: `@@unique([userId, dedupKey])` + `skipDuplicates`. Al leer se limpia `dedupKey`, por
+  eso hay a lo sumo una notificación SIN LEER por conversación y usuario para los tipos de
+  actividad. Tipos: `ESCALATION`, `NEW_LEAD`, `NEW_ACTIVITY_ON_ESCALATED`, `AI_FAILURE`,
+  `DRAFT_PENDING_REVIEW`.
+- Acciones (`lib/actions/notification.actions.ts`): contar, listar, marcar una / todas /
+  por conversación como leídas. Todas llaman a `requireWhatsAppAuth()` y filtran por el
+  usuario de la sesión.
+- Cabecera: icono de WhatsApp arriba a la derecha (`components/dashboard/notifications/`),
+  visible solo con acceso a WhatsApp. Contador, pulso mientras haya sin leer (respeta
+  `prefers-reduced-motion`), polling cada ~4 s.
+- Sonido: tono Web Audio, desbloqueado con el primer clic; interruptor de silencio por usuario
+  en `localStorage`. Suena solo si aparece un id nuevo o sube el contador
+  (`lib/notifications/poll-diff.ts`), nunca en el primer poll.
+- Notificaciones del navegador: botón "Activar notificaciones del navegador" (gesto del usuario,
+  nunca al cargar). `tag` = conversación; al hacer clic se enfoca la pestaña y se abre el enlace.
+  Con el navegador cerrado haría falta Web Push (service worker + VAPID): fuera de alcance.
 
 ---
 
