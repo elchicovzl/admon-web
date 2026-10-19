@@ -68,6 +68,21 @@ describe('ReciboPagoDocument', () => {
     expect(pdf.subarray(0, 4).toString('latin1')).toBe('%PDF')
   })
 
+  it('renderiza sin datos de la empresa y pesa menos que con ellos', async () => {
+    const vacio: EmisorRecibo = {
+      razonSocial: '',
+      nit: '',
+      direccion: '',
+      ciudad: '',
+      telefono: '',
+      email: '',
+    }
+    const sinEmisor = await renderizarReciboPdf({ datos, emisor: vacio })
+    const conEmisor = await renderizarReciboPdf({ datos, emisor: EMISOR_PRUEBA })
+    expect(sinEmisor.subarray(0, 4).toString('latin1')).toBe('%PDF')
+    expect(sinEmisor.length).toBeLessThan(conEmisor.length)
+  })
+
   // react-pdf compresses the content streams, so the text "ANULADO" cannot be
   // grepped in the buffer. The ANULADO mark is the only difference between the
   // two renders, so a larger buffer is the proxy that it was drawn.

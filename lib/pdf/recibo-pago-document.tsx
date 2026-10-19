@@ -229,11 +229,14 @@ export function ReciboPagoDocument({ datos, emisor, logoBuffer }: ReciboPagoDocu
             ) : null}
           </View>
           <View style={styles.emisor}>
-            <Text style={styles.emisorNombre}>{emisor.razonSocial}</Text>
-            <Text>NIT {emisor.nit}</Text>
-            <Text>{ubicacion}</Text>
-            <Text>{emisor.telefono}</Text>
-            <Text>{emisor.email}</Text>
+            {/* Blank issuer fields print nothing, not even their label. */}
+            {emisor.razonSocial ? (
+              <Text style={styles.emisorNombre}>{emisor.razonSocial}</Text>
+            ) : null}
+            {emisor.nit ? <Text>NIT {emisor.nit}</Text> : null}
+            {ubicacion ? <Text>{ubicacion}</Text> : null}
+            {emisor.telefono ? <Text>{emisor.telefono}</Text> : null}
+            {emisor.email ? <Text>{emisor.email}</Text> : null}
           </View>
           <View style={styles.tituloCol}>
             <Text style={styles.tituloTexto}>Recibo de pago</Text>
