@@ -11,6 +11,13 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }} # owner/repo → ghcr.io/owner/repo
 
+# Several merges in a row start several runs; without this, the run that
+# finishes last pushes `latest` and wins, even if it built an older commit.
+# Cancelling the in-progress run leaves only the newest commit to deploy.
+concurrency:
+  group: build-and-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
