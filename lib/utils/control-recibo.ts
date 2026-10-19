@@ -144,7 +144,8 @@ export interface EntradaValidarEmisionRecibo {
   alegraEstimateId: string | null
   alegraPaymentId: string | null
   tieneRecibo: boolean
-  cliente: { nombre: string } | null
+  /** Any resolved client; only its presence matters here. */
+  cliente: object | null
   lineas: Array<{ monto: number }>
 }
 
@@ -309,4 +310,15 @@ export function puedeEmitirReciboDeFila(fila: FilaEmitibleRecibo): boolean {
     fila.cantidadServicios > 0 &&
     fila.recibo === null
   )
+}
+
+/**
+ * Label of a client in the receipt pickers. The picker only matches on the
+ * label, so the document goes in it to search by name or by document.
+ */
+export function etiquetaClienteRecibo(cliente: {
+  fullName: string
+  identificationNumber: string
+}): string {
+  return `${cliente.fullName} · ${cliente.identificationNumber}`
 }

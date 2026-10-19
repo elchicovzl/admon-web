@@ -134,6 +134,15 @@ export interface SincronizacionServiciosResultado {
   servicios: ServicioAlegraListItem[]
 }
 
+/** Cliente del CRM elegible como destinatario de un recibo. */
+export interface ClienteReciboItem {
+  id: string
+  fullName: string
+  identificationNumber: string
+  /** Contraparte ya vinculada al cliente, si existe. */
+  contraparteId: string | null
+}
+
 export interface ContraparteListItem {
   id: string
   nombre: string

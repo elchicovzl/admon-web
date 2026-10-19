@@ -55,6 +55,7 @@ import {
   type CategoriaListItem,
   type TipoServicioListItem,
   type ContraparteListItem,
+  type ClienteReciboItem,
   type ServicioAlegraListItem,
   type SincronizacionServiciosResultado,
   type MovimientoListItem,
@@ -112,6 +113,7 @@ import {
   validarEmisionRecibo,
   type DatosRecibo,
 } from '@/lib/utils/control-recibo'
+import { resolverContraparteDeCliente } from '@/lib/utils/control-recibo-cliente'
 import {
   ERROR_NO_AUTENTICADO,
   ERROR_RECIBO_NO_ENCONTRADO,
@@ -977,6 +979,35 @@ export const getContrapartes = cache(
   }
 )
 
+/** Active CRM clients for the receipt pickers, with their linked counterparty. */
+export const getClientesParaRecibo = cache(
+  async (): Promise<ActionResponse<ClienteReciboItem[]>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const clientes = await prisma.client.findMany({
+      where: { isActive: true },
+      orderBy: { fullName: 'asc' },
+      select: {
+        id: true,
+        fullName: true,
+        identificationNumber: true,
+        contraparte: { select: { id: true } },
+      },
+    })
+
+    return {
+      success: true,
+      data: clientes.map((c) => ({
+        id: c.id,
+        fullName: c.fullName,
+        identificationNumber: c.identificationNumber,
+        contraparteId: c.contraparte?.id ?? null,
+      })),
+    }
+  }
+)
+
 export async function createContraparte(
   data: CreateContraparteInput
 ): Promise<ActionResponse<ContraparteListItem>> {
@@ -1187,12 +1218,7 @@ export async function createMovimiento(
 
   // Con recibo: movimiento, desglose y recibo en UNA transacción. Si algo
   // falla, el número del contador también se revierte y no queda hueco.
-  // El schema ya exigió `contraparteId` cuando `emitirRecibo` es true.
-  const cliente = await prisma.contraparte.findUnique({
-    where: { id: entrada.contraparteId ?? '' },
-    select: { id: true, nombre: true, documento: true },
-  })
-
+  // El schema ya exigió `clientId` cuando `emitirRecibo` es true.
   const validacion = validarEmisionRecibo({
     tipo: entrada.tipo,
     monto: entrada.monto,
@@ -1200,21 +1226,28 @@ export async function createMovimiento(
     alegraEstimateId: null,
     alegraPaymentId: null,
     tieneRecibo: false,
-    cliente,
+    cliente: { id: entrada.clientId ?? '' },
     lineas,
   })
   if (!validacion.ok) return { success: false, error: validacion.error }
-  if (!cliente) return { success: false, error: 'El recibo requiere un cliente.' }
 
   try {
     const { movimiento, recibo } = await prisma.$transaction(async (tx) => {
+      // The client's counterparty becomes the movement's counterparty.
+      const resolucion = await resolverContraparteDeCliente(
+        tx,
+        entrada.clientId ?? '',
+        auth.userId
+      )
+      if (!resolucion.ok) throw new ReciboError(resolucion.error)
+
       const creado = await tx.movimiento.create({
-        data: datosMovimiento,
+        data: { ...datosMovimiento, contraparteId: resolucion.contraparte.id },
         select: movimientoSelect,
       })
       const reciboCreado = await crearReciboEnTransaccion(tx, {
         movimientoId: creado.id,
-        contraparte: cliente,
+        contraparte: resolucion.contraparte,
         userId: auth.userId,
       })
       return { movimiento: creado, recibo: reciboCreado }
@@ -1237,8 +1270,8 @@ export async function createMovimiento(
  *
  * No toca el libro (el movimiento es inmutable), así que se permite también en
  * un periodo cerrado. El desglose debe existir ya: no se puede agregar después.
- * Si el movimiento tiene cliente, manda ese; el de `input` solo se usa cuando
- * el movimiento no tiene ninguno.
+ * El cliente sale siempre de `input` (un cliente del CRM), aunque el movimiento
+ * ya tenga otra contraparte.
  */
 export async function emitirReciboDeMovimiento(
   input: EmitirReciboInput
@@ -1262,7 +1295,6 @@ export async function emitirReciboDeMovimiento(
       alegraPaymentId: true,
       recibo: { select: { id: true } },
       anuladoPor: { select: { id: true } },
-      contraparte: { select: { id: true, nombre: true, documento: true } },
       detalleServicios: { select: { monto: true } },
     },
   })
@@ -1271,15 +1303,6 @@ export async function emitirReciboDeMovimiento(
     return { success: false, error: 'No se puede emitir un recibo para un ingreso anulado.' }
   }
 
-  const cliente =
-    movimiento.contraparte ??
-    (validado.data.contraparteId
-      ? await prisma.contraparte.findUnique({
-          where: { id: validado.data.contraparteId },
-          select: { id: true, nombre: true, documento: true },
-        })
-      : null)
-
   const validacion = validarEmisionRecibo({
     tipo: movimiento.tipo,
     monto: decimalANumero(movimiento.monto),
@@ -1287,20 +1310,26 @@ export async function emitirReciboDeMovimiento(
     alegraEstimateId: movimiento.alegraEstimateId,
     alegraPaymentId: movimiento.alegraPaymentId,
     tieneRecibo: movimiento.recibo !== null,
-    cliente,
+    cliente: { id: validado.data.clientId },
     lineas: movimiento.detalleServicios.map((d) => ({ monto: decimalANumero(d.monto) })),
   })
   if (!validacion.ok) return { success: false, error: validacion.error }
-  if (!cliente) return { success: false, error: 'El recibo requiere un cliente.' }
 
   try {
-    const recibo = await prisma.$transaction((tx) =>
-      crearReciboEnTransaccion(tx, {
+    const recibo = await prisma.$transaction(async (tx) => {
+      const resolucion = await resolverContraparteDeCliente(
+        tx,
+        validado.data.clientId,
+        auth.userId
+      )
+      if (!resolucion.ok) throw new ReciboError(resolucion.error)
+
+      return crearReciboEnTransaccion(tx, {
         movimientoId: movimiento.id,
-        contraparte: cliente,
+        contraparte: resolucion.contraparte,
         userId: auth.userId,
       })
-    )
+    })
 
     revalidatePath(RUTA_CONTROL)
 

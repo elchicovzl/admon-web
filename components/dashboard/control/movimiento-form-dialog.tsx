@@ -15,12 +15,14 @@ import {
 import type {
   BolsilloListItem,
   CategoriaListItem,
+  ClienteReciboItem,
   ContraparteListItem,
   ServicioAlegraListItem,
 } from '@/lib/types/control.types'
 import { formatearMonto, hoyComoFechaCalendario } from '@/lib/utils/control-format'
 import {
   esLineaVacia,
+  etiquetaClienteRecibo,
   normalizarEntradaMovimiento,
   rutaPdfRecibo,
   sumaDeLineas,
@@ -85,6 +87,8 @@ interface Props {
   bolsillos: BolsilloListItem[]
   categorias: CategoriaListItem[]
   contrapartes: ContraparteListItem[]
+  /** Clientes del CRM: destinatario del recibo cuando se emite uno. */
+  clientes: ClienteReciboItem[]
   /**
    * Catálogo de servicios de Alegra. Solo aplica a los INGRESOS: es un
    * catálogo de VENTAS, y un egreso no vendió nada.
@@ -96,6 +100,7 @@ export function MovimientoFormDialog({
   bolsillos,
   categorias,
   contrapartes,
+  clientes,
   serviciosAlegra,
 }: Props) {
   const [abierto, setAbierto] = useState(false)
@@ -124,6 +129,7 @@ export function MovimientoFormDialog({
       bolsilloDestinoId: null,
       categoriaId: '',
       contraparteId: null,
+      clientId: null,
       servicioAlegraId: null,
       servicios: [],
       emitirRecibo: false,
@@ -177,6 +183,7 @@ export function MovimientoFormDialog({
    */
   function cambiarEmitirRecibo(activo: boolean) {
     form.setValue('emitirRecibo', activo, { shouldValidate: form.formState.isSubmitted })
+    if (!activo) form.setValue('clientId', null)
     if (activo) {
       if (lineas.fields.length === 0) lineas.append(LINEA_VACIA)
       return
@@ -200,12 +207,16 @@ export function MovimientoFormDialog({
     label: `${categoria.nombre} · ${ETIQUETA_GRUPO[categoria.grupo] ?? categoria.grupo}`,
   }))
 
-  // With a receipt the counterparty is the client, so "no counterparty" is
-  // not a valid choice.
   const opcionesContraparte = [
-    ...(emitirRecibo ? [] : [{ value: '__ninguna__', label: 'Sin contraparte' }]),
+    { value: '__ninguna__', label: 'Sin contraparte' },
     ...contrapartes.map((c) => ({ value: c.id, label: c.nombre })),
   ]
+
+  // The document is in the label because the picker only matches on the label.
+  const opcionesCliente = clientes.map((c) => ({
+    value: c.id,
+    label: etiquetaClienteRecibo(c),
+  }))
 
   /**
    * La referencia va en la etiqueta porque es como el negocio los nombra:
@@ -283,6 +294,7 @@ export function MovimientoFormDialog({
           bolsilloDestinoId: null,
           categoriaId: '',
           contraparteId: null,
+          clientId: null,
           servicioAlegraId: null,
           servicios: [],
           emitirRecibo: false,
@@ -675,37 +687,61 @@ export function MovimientoFormDialog({
               </div>
             )}
 
-            <FormField
-              control={form.control}
-              name="contraparteId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    {emitirRecibo ? 'Cliente' : 'Contraparte (opcional)'}
-                  </FormLabel>
-                  <FormControl>
-                    {/* Buscable igual que las categorías: hoy son cuatro, pero
-                        esta lista crece con cada persona a la que se le paga. */}
-                    <SearchableSelect
-                      options={opcionesContraparte}
-                      value={field.value ?? '__ninguna__'}
-                      onValueChange={(v) =>
-                        field.onChange(!v || v === '__ninguna__' ? null : v)
-                      }
-                      placeholder={emitirRecibo ? 'Seleccioná un cliente…' : 'Sin contraparte'}
-                      searchPlaceholder="Buscar persona o empresa…"
-                      disabled={guardando}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {emitirRecibo
-                      ? 'El recibo necesita un cliente.'
-                      : 'Quién recibe o entrega. Es lo que después permite preguntar cuánto se le pagó a alguien en el año.'}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {emitirRecibo ? (
+              <FormField
+                control={form.control}
+                name="clientId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cliente</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        options={opcionesCliente}
+                        value={field.value ?? null}
+                        onValueChange={(v) => field.onChange(v || null)}
+                        placeholder="Seleccioná un cliente…"
+                        searchPlaceholder="Buscar por nombre o documento…"
+                        disabled={guardando}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      El recibo se emite a nombre de este cliente y queda como la
+                      contraparte del ingreso.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : (
+              <FormField
+                control={form.control}
+                name="contraparteId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contraparte (opcional)</FormLabel>
+                    <FormControl>
+                      {/* Buscable igual que las categorías: hoy son cuatro, pero
+                          esta lista crece con cada persona a la que se le paga. */}
+                      <SearchableSelect
+                        options={opcionesContraparte}
+                        value={field.value ?? '__ninguna__'}
+                        onValueChange={(v) =>
+                          field.onChange(!v || v === '__ninguna__' ? null : v)
+                        }
+                        placeholder="Sin contraparte"
+                        searchPlaceholder="Buscar persona o empresa…"
+                        disabled={guardando}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Quién recibe o entrega. Es lo que después permite preguntar
+                      cuánto se le pagó a alguien en el año.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {esIngreso && (
               <FormField

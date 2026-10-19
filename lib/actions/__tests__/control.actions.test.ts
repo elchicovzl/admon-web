@@ -39,7 +39,8 @@ const {
     categoriaMovimiento: { findFirst: vi.fn(), create: vi.fn() },
     prestamo: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
-    contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn() },
+    contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    client: { findFirst: vi.fn(), findMany: vi.fn() },
     servicioReferenciado: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     conceptoPagoAlegra: { findMany: vi.fn(), create: vi.fn() },
     servicioAlegra: {
@@ -111,6 +112,7 @@ import {
   importarPagosComoEgresos,
   emitirReciboDeMovimiento,
   getReciboParaPdf,
+  getClientesParaRecibo,
 } from '../control.actions'
 
 const SESSION = {
@@ -3141,17 +3143,67 @@ describe('createPrestamo', () => {
 
 // ---------------------------------------------------------------------------
 
+describe('getClientesParaRecibo', () => {
+  it('lista los clientes activos con su contraparte vinculada', async () => {
+    prismaMock.client.findMany.mockResolvedValue([
+      {
+        id: 'cclienteana001',
+        fullName: 'Ana Pérez',
+        identificationNumber: '1020304050',
+        contraparte: { id: 'ccontraana001' },
+      },
+      {
+        id: 'cclientebea001',
+        fullName: 'Bea Ruiz',
+        identificationNumber: '9876543',
+        contraparte: null,
+      },
+    ])
+
+    const res = await getClientesParaRecibo()
+
+    expect(prismaMock.client.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { isActive: true }, orderBy: { fullName: 'asc' } })
+    )
+    expect(res.data).toEqual([
+      {
+        id: 'cclienteana001',
+        fullName: 'Ana Pérez',
+        identificationNumber: '1020304050',
+        contraparteId: 'ccontraana001',
+      },
+      {
+        id: 'cclientebea001',
+        fullName: 'Bea Ruiz',
+        identificationNumber: '9876543',
+        contraparteId: null,
+      },
+    ])
+  })
+
+  it('niega a quien no tiene acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    const res = await getClientesParaRecibo()
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.client.findMany).not.toHaveBeenCalled()
+  })
+})
+
 describe('recibo de pago', () => {
   const SRV_ADMIN = 'csrvadmin0001'
   const SRV_AFIL = 'csrvafil00001'
-  const CLIENTE_ID = 'cclienteana001'
+  // CRM client chosen in the picker, and the counterparty it resolves to.
+  const CLIENT_ID = 'cclienteana001'
+  const CLIENTE_ID = 'ccontraana001'
   const CLIENTE = { id: CLIENTE_ID, nombre: 'Ana Pérez', documento: '1020304050' }
 
   const INGRESO_DOS_LINEAS = {
     ...MOVIMIENTO_VALIDO,
     tipo: TipoMovimiento.INGRESO,
     monto: 300000,
-    contraparteId: CLIENTE_ID,
+    clientId: CLIENT_ID,
     servicios: [
       { servicioAlegraId: SRV_ADMIN, monto: 100000 },
       { servicioAlegraId: SRV_AFIL, monto: 200000 },
@@ -3162,6 +3214,12 @@ describe('recibo de pago', () => {
     prismaMock.movimiento.create.mockResolvedValue(
       filaMovimiento({ id: 'cmovrecibo001', tipo: TipoMovimiento.INGRESO, monto: dec(300000) })
     )
+    prismaMock.client.findFirst.mockResolvedValue({
+      id: CLIENT_ID,
+      fullName: 'Ana Pérez',
+      identificationNumber: '1020304050',
+    })
+    // Already linked: the resolver finds it by `clientId`.
     prismaMock.contraparte.findUnique.mockResolvedValue(CLIENTE)
     prismaMock.consecutivo.update.mockResolvedValue({ ultimo: 7 })
     prismaMock.reciboPago.create.mockResolvedValue({ id: 'crecibo000007', numero: 7 })
@@ -3232,8 +3290,52 @@ describe('recibo de pago', () => {
       expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
+            // The client's counterparty becomes the movement's counterparty.
+            contraparteId: CLIENTE_ID,
             detalleServicios: { create: expect.arrayContaining([expect.anything()]) },
           }),
+        })
+      )
+    })
+
+    it('con recibo y un cliente sin contraparte, crea la contraparte dentro de la transacción', async () => {
+      prismaMock.contraparte.findUnique.mockResolvedValue(null)
+      prismaMock.contraparte.create.mockResolvedValue(CLIENTE)
+
+      const res = await createMovimiento({ ...INGRESO_DOS_LINEAS, emitirRecibo: true })
+
+      expect(res.success).toBe(true)
+      expect(prismaMock.contraparte.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ clientId: CLIENT_ID, tipo: 'CLIENTE' }),
+        })
+      )
+      expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ contraparteId: CLIENTE_ID }),
+        })
+      )
+    })
+
+    it('con recibo y un cliente inexistente, no crea nada', async () => {
+      prismaMock.client.findFirst.mockResolvedValue(null)
+
+      const res = await createMovimiento({ ...INGRESO_DOS_LINEAS, emitirRecibo: true })
+
+      expect(res).toEqual({ success: false, error: 'Cliente no encontrado' })
+      expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+      expect(prismaMock.reciboPago.create).not.toHaveBeenCalled()
+    })
+
+    it('sin recibo conserva la contraparte elegida y no resuelve clientes', async () => {
+      const { clientId: _omitido, ...sinCliente } = INGRESO_DOS_LINEAS
+      const res = await createMovimiento({ ...sinCliente, contraparteId: CLIENTE_ID })
+
+      expect(res.success).toBe(true)
+      expect(prismaMock.client.findFirst).not.toHaveBeenCalled()
+      expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ contraparteId: CLIENTE_ID }),
         })
       )
     })
@@ -3268,7 +3370,7 @@ describe('recibo de pago', () => {
     it('rechaza emitir recibo sin cliente', async () => {
       const res = await createMovimiento({
         ...INGRESO_DOS_LINEAS,
-        contraparteId: null,
+        clientId: null,
         emitirRecibo: true,
       })
 
@@ -3300,7 +3402,7 @@ describe('recibo de pago', () => {
       })
       const conRecibo = await createMovimiento({
         ...MOVIMIENTO_VALIDO,
-        contraparteId: CLIENTE_ID,
+        clientId: CLIENT_ID,
         servicioAlegraId: SRV_ADMIN,
         emitirRecibo: true,
       })
@@ -3362,47 +3464,59 @@ describe('recibo de pago', () => {
       }
     }
 
-    it('emite con el cliente del propio movimiento e ignora el del input', async () => {
+    it('emite a nombre del cliente del input, resuelto a su contraparte', async () => {
       prismaMock.movimiento.findUnique.mockResolvedValue(movimientoExistente())
 
-      const res = await emitirReciboDeMovimiento({
-        movimientoId: MOV_ID,
-        contraparteId: 'cotrocliente001',
-      })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res).toMatchObject({ success: true, data: { id: 'crecibo000007', numero: 7 } })
-      expect(prismaMock.contraparte.findUnique).not.toHaveBeenCalled()
       expect(prismaMock.reciboPago.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ contraparteId: CLIENTE_ID, numero: 7 }),
+          data: expect.objectContaining({
+            contraparteId: CLIENTE_ID,
+            clienteNombre: 'Ana Pérez',
+            numero: 7,
+          }),
         })
       )
     })
 
-    it('usa el cliente del input si el movimiento no tiene', async () => {
+    it('crea la contraparte del cliente si no tenía y no toca el movimiento', async () => {
       prismaMock.movimiento.findUnique.mockResolvedValue(
         movimientoExistente({ contraparte: null })
       )
+      prismaMock.contraparte.findUnique.mockResolvedValue(null)
+      prismaMock.contraparte.create.mockResolvedValue(CLIENTE)
 
-      const res = await emitirReciboDeMovimiento({
-        movimientoId: MOV_ID,
-        contraparteId: CLIENTE_ID,
-      })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(true)
-      expect(prismaMock.contraparte.findUnique).toHaveBeenCalled()
-      expect(prismaMock.reciboPago.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ clienteNombre: 'Ana Pérez' }),
-        })
-      )
+      expect(prismaMock.contraparte.create).toHaveBeenCalledTimes(1)
+      expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+    })
+
+    it('rechaza un cliente inexistente o inactivo sin consumir número', async () => {
+      prismaMock.movimiento.findUnique.mockResolvedValue(movimientoExistente())
+      prismaMock.client.findFirst.mockResolvedValue(null)
+
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
+
+      expect(res).toEqual({ success: false, error: 'Cliente no encontrado' })
+      expect(prismaMock.consecutivo.update).not.toHaveBeenCalled()
+    })
+
+    it('rechaza si no se manda cliente', async () => {
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID } as never)
+
+      expect(res.success).toBe(false)
+      expect(prismaMock.movimiento.findUnique).not.toHaveBeenCalled()
     })
 
     it('se permite en un periodo cerrado', async () => {
       prismaMock.cierreMensual.findUnique.mockResolvedValue({ cerrado: true })
       prismaMock.movimiento.findUnique.mockResolvedValue(movimientoExistente())
 
-      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(true)
     })
@@ -3412,7 +3526,6 @@ describe('recibo de pago', () => {
       ['un recibo existente', { recibo: { id: 'crecibo000001' } }, 'ya tiene'],
       ['un ingreso anulado', { anuladoPor: { id: 'cmovanula0001' } }, 'anulado'],
       ['sin desglose', { detalleServicios: [] }, 'al menos un servicio'],
-      ['sin cliente', { contraparte: null }, 'cliente'],
       [
         'un desglose que no suma',
         { detalleServicios: [{ monto: dec(100000) }] },
@@ -3421,7 +3534,7 @@ describe('recibo de pago', () => {
     ])('rechaza %s', async (_nombre, cambios, fragmento) => {
       prismaMock.movimiento.findUnique.mockResolvedValue(movimientoExistente(cambios))
 
-      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(false)
       expect(res.error).toContain(fragmento)
@@ -3431,7 +3544,7 @@ describe('recibo de pago', () => {
     it('rechaza un movimiento inexistente', async () => {
       prismaMock.movimiento.findUnique.mockResolvedValue(null)
 
-      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(false)
       expect(res.error).toContain('no encontrado')
@@ -3445,7 +3558,7 @@ describe('recibo de pago', () => {
       })
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(false)
       expect(res.error).toContain('ya tiene un recibo')
@@ -3463,7 +3576,7 @@ describe('recibo de pago', () => {
       prismaMock.reciboPago.create.mockRejectedValue(fallo)
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(false)
       expect(res.error).toBe('No se pudo emitir el recibo de pago')
@@ -3474,7 +3587,7 @@ describe('recibo de pago', () => {
     it('niega a quien no tiene acceso a Control', async () => {
       hasControlAccessMock.mockResolvedValue(false)
 
-      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID })
+      const res = await emitirReciboDeMovimiento({ movimientoId: MOV_ID, clientId: CLIENT_ID })
 
       expect(res.success).toBe(false)
       expect(prismaMock.movimiento.findUnique).not.toHaveBeenCalled()
