@@ -18,8 +18,9 @@ const MEDIA_URL_TTL_SECONDS = 600
 const INLINE_MIME = /^(image|audio|video)\/|^application\/pdf$/
 
 /**
- * Presigned URL (10 min) for a stored WhatsApp attachment (MH-2). Module access (SUPER_ADMIN, or a MANAGER with canAccessWhatsApp) is checked first and
- * the R2 key never leaves the server; the Meta URL was never stored (MH-1).
+ * Presigned URL (10 min) for a stored WhatsApp attachment (MH-2). Module access
+ * (SUPER_ADMIN, or a MANAGER with canAccessWhatsApp) is checked first. The R2 key
+ * never leaves the server, and the Meta URL was never stored (MH-1).
  */
 export async function getMediaUrl(input: { messageId: string }): Promise<ActionResponse<MediaUrl>> {
   try {

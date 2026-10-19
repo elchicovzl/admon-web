@@ -23,6 +23,7 @@ const STATIC_LABELS: Record<string, string> = {
   disabilities: 'Incapacidades',
   kanban: 'Kanban',
   'my-assignments': 'Mis Asignaciones',
+  whatsapp: 'WhatsApp',
 }
 
 export function DashboardHeader() {

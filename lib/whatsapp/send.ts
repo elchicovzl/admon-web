@@ -179,11 +179,15 @@ type TxOutcome =
 
 /**
  * True when Meta definitely did not accept the message, so retrying cannot duplicate it:
- * HTTP 429, or any response that carried a Meta error code. Timeouts, network failures and
- * bare 5xx responses are ambiguous: Meta may have accepted the message before failing.
+ * any response that carried a Meta error code, HTTP 429, or any other 4xx except 408
+ * (a gateway 401/403, or a 400 with an unparseable body, still rejected the request).
+ * Timeouts (408), network failures and bare 5xx responses are ambiguous: Meta may have
+ * accepted the message before failing.
  */
 export function isDefiniteRejection(error: CloudApiError): boolean {
-  return error.status === 429 || error.code !== null
+  if (error.code !== null) return true
+  const { status } = error
+  return status !== null && status >= 400 && status < 500 && status !== 408
 }
 
 export interface SendContext {

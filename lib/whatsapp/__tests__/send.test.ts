@@ -438,6 +438,20 @@ describe("at-most-once delivery (no duplicate sends)", () => {
     expect(store).toMatchObject({ status: "FAILED", errorCode: "UNKNOWN_DELIVERY" })
   })
 
+  it.each([
+    ["a gateway 401", new CloudApiError("unauthorized", 401, null, false), "401"],
+    ["a gateway 403", new CloudApiError("forbidden", 403, null, false), "403"],
+    ["a 400 with an unparseable body", new CloudApiError("bad request", 400, null, false), "400"],
+  ])("%s is a definite rejection: FAILED with the status, no retry, not UNKNOWN_DELIVERY", async (_label, error, code) => {
+    const store = useRowStore()
+    m.sendText.mockRejectedValue(error)
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).resolves.toBeUndefined()
+
+    expect(m.sendText).toHaveBeenCalledTimes(1)
+    expect(store).toMatchObject({ status: "FAILED", errorCode: code })
+  })
+
   it("a message whose attempt marker is set and has no wamid is never sent", async () => {
     m.msgFindUnique.mockImplementation(async ({ select }) =>
       "conversationId" in select ? { conversationId: "conv-1" } : row({ sendAttemptedAt: NOW })

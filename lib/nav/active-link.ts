@@ -140,3 +140,17 @@ export function containsActiveHref<T extends NavLinkLike>(
       : item.href === activeHref,
   )
 }
+
+/** The dashboard home: every other page lives under it, so it must match exactly. */
+export const DASHBOARD_ROOT_HREF = '/dashboard'
+
+/**
+ * Highlight rule for a TOP-LEVEL sidebar entry. Prefix matching lets a detail
+ * page light up its list (/clients/9 -> Clientes), but applied to the dashboard
+ * root it would light up "Dashboard" on every /dashboard/* page, so the root
+ * entry matches its own URL only.
+ */
+export function isTopLevelActive(href: string, pathname: string): boolean {
+  if (href === DASHBOARD_ROOT_HREF) return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
