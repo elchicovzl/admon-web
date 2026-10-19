@@ -73,6 +73,9 @@ model User {
   affiliationStatusLogs          AffiliationStatusLog[]   @relation("StatusLogChangedBy")
   sentEmails                     SentEmail[]              @relation("SentEmailSentBy")
 
+  // WhatsApp in-app notifications addressed to this user
+  notifications                  Notification[]           @relation("UserNotifications")
+
   // Blog relations
   blogPosts                      BlogPost[]               @relation("BlogPostAuthor")
 
@@ -1880,6 +1883,7 @@ model Conversation {
   purgePendingAt         DateTime?
   messages               WhatsAppMessage[]
   events                 ConversationEvent[]
+  notifications          Notification[]
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
 
@@ -2035,4 +2039,35 @@ model WhatsAppSettings {
   updatedAt   DateTime @updatedAt
 
   @@map("whatsapp_settings")
+}
+
+enum NotificationType {
+  ESCALATION
+  NEW_LEAD
+  NEW_ACTIVITY_ON_ESCALATED
+  AI_FAILURE
+  DRAFT_PENDING_REVIEW
+}
+
+// In-app notification for one user (WhatsApp staff bell). Title, body and link are derived at
+// read time from `type` and the conversation, so the row holds no message content or phone.
+model Notification {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  type           NotificationType
+  conversationId String?
+  conversation   Conversation?    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // Lead or draft id for types that are not about a conversation; no FK on purpose.
+  entityId       String?
+  // Idempotency key, unique per user. Cleared when the notification is read, so activity types
+  // have at most one UNREAD row per conversation and user, and a later event notifies again.
+  dedupKey       String?
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@unique([userId, dedupKey])
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([conversationId])
+  @@map("notifications")
 }
