@@ -483,8 +483,45 @@ MANAGER y SUPER_ADMIN. Se construye en PRs encadenados detrás de flags
 Postgres con la extensión `vector` (imagen `pgvector/pgvector:0.8.7-pg18-trixie`;
 la migración `enable_pgvector` falla si la extensión no está disponible, así que
 en producción primero se cambia la imagen y recién después se hace `pnpm db:deploy`
-a mano). Tanto el webhook (`/api/whatsapp/webhook`) como el worker pg-boss se
-documentan en este archivo a medida que aterrizan sus PRs.
+a mano). El worker pg-boss se documenta en este archivo a medida que aterrizan
+sus PRs.
+
+### Webhook de WhatsApp (`/api/whatsapp/webhook`)
+
+Excepción documentada a "Sin API Routes": lo llama Meta, no un usuario, así que no
+puede ser una Server Action. Reglas:
+
+- Queda **fuera del middleware** (el matcher excluye `/api`) y se autentica **solo
+  por firma**: `X-Hub-Signature-256` = HMAC-SHA256 del body crudo con
+  `WHATSAPP_APP_SECRET`, comparación en tiempo constante. Firma ausente o inválida
+  responde 401 sin guardar ni encolar nada. Body mayor a 1 MiB responde 413.
+- `GET` devuelve el `hub.challenge` solo si `hub.verify_token` coincide con
+  `WHATSAPP_VERIFY_TOKEN` (si no, 403).
+- `POST` no ejecuta lógica de negocio: parte el payload en ítems, los guarda en
+  `whatsapp_webhook_events` (`dedupKey` único, `createMany skipDuplicates`), encola
+  `wa.event.process` solo para los ítems nuevos y responde 200. Las entregas
+  duplicadas o concurrentes responden 200 sin efecto adicional. El barrendero
+  (`wa.event.sweep`, cada minuto) reencola lo que siga sin procesar tras 60 s.
+- Con `WHATSAPP_ENABLED` distinto de `true` solo verifica y guarda; no toca pg-boss.
+- Nunca se loguean secretos, firmas, cuerpos ni teléfonos completos.
+
+Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
+en `.env.local`):
+
+```bash
+# GET: debe imprimir 12345
+curl "http://localhost:3000/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=token&hub.challenge=12345"
+
+# POST firmado: 200
+BODY='{"object":"whatsapp_business_account","entry":[]}'
+SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac secret | sed 's/^.* //')"
+curl -i -X POST http://localhost:3000/api/whatsapp/webhook \
+  -H "content-type: application/json" -H "x-hub-signature-256: $SIG" -d "$BODY"
+
+# Firma incorrecta: 401
+curl -i -X POST http://localhost:3000/api/whatsapp/webhook \
+  -H "x-hub-signature-256: sha256=00" -d "$BODY"
+```
 
 ---
 

@@ -6,6 +6,8 @@ const ensureQueues = vi.fn(async () => {})
 const ensureSchedules = vi.fn(async () => {})
 const startWorkers = vi.fn(async () => 0)
 
+const registerWhatsAppWorkers = vi.fn()
+vi.mock("@/lib/whatsapp/event-worker", () => ({ registerWhatsAppWorkers }))
 vi.mock("../boss", () => ({ startBoss }))
 vi.mock("../queues", () => ({ ensureQueues }))
 vi.mock("../schedules", () => ({ ensureSchedules }))
