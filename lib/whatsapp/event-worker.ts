@@ -3,6 +3,7 @@ import prisma from "@/lib/db/prisma"
 import { QUEUES } from "@/lib/queue/queues"
 import { getRegisteredWorkers, registerWorker } from "@/lib/queue/workers"
 import { recoverMissingLeads } from "./contacts"
+import { handleEchoReconcileJobs } from "./echoes"
 import { isWhatsAppEnabled } from "./ingest"
 import { processWebhookEvent } from "./process-event"
 import { handleSendJobs } from "./send"
@@ -99,6 +100,9 @@ export function registerWhatsAppWorkers(): void {
   }
   if (!registered.has(QUEUES.EVENT_SWEEP)) {
     registerWorker({ queue: QUEUES.EVENT_SWEEP, handler: handleSweepJobs })
+  }
+  if (!registered.has(QUEUES.ECHO_RECONCILE)) {
+    registerWorker({ queue: QUEUES.ECHO_RECONCILE, handler: handleEchoReconcileJobs })
   }
   if (!registered.has(QUEUES.MESSAGE_SEND)) {
     registerWorker({ queue: QUEUES.MESSAGE_SEND, handler: handleSendJobs })

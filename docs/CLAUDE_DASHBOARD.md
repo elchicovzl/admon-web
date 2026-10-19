@@ -509,12 +509,23 @@ puede ser una Server Action. Reglas:
   = `MATCHED`, varias = `AMBIGUOUS` sin lead, ninguna = lead `NEW`), reutiliza la única
   conversación del contacto (la reabre si estaba `CLOSED`) y guarda el mensaje. Un
   `STATUS` se guarda y se aplica de forma monótona (un `delivered` tardío no pisa `read`).
-  Los ECHO se dejan sin procesar (diferidos, sin gastar intentos) hasta que exista su
-  manejador, para no perderlos. Si un despliegue anterior ya los marcó como procesados,
-  reencolarlos con `UPDATE whatsapp_webhook_events SET "processedAt" = NULL, attempts = 0
-  WHERE kind = 'ECHO'`. El barrendero ignora eventos con 12 o más intentos (los registra
-  como conteo); siguen guardados para reprocesarlos a mano. Cada minuto también crea los
-  leads que fallaron tras guardarse el mensaje (contacto sin cliente, con conversación y sin lead).
+  Un ECHO (`smb_message_echoes`, mensaje espejo de lo que envía el negocio) se compara con
+  nuestros propios envíos por `wamid`: si ya está guardado es nuestro y no cambia el estado.
+  Si hay un envío en cola sin `wamid` de hace menos de 120 s se reintenta con
+  `wa.echo.reconcile` (5 s, máx. 3). Si no, se guarda como `OUT`/`PHONE_APP` y, salvo que
+  sea anterior al último envío de la IA, la conversación pasa a `HUMAN`. La forma real del
+  payload de eco está pendiente de confirmar en un número Coexistence (tarea 1.4.8).
+- Envío (`wa.message.send` → `lib/whatsapp/send.ts`): `queueOutbound` inserta el mensaje
+  `OUT`/`QUEUED` sin `wamid` y el job lo entrega con un candado por conversación, revisando
+  justo antes de llamar a Meta que el estado no haya cambiado y que la ventana de 24 h siga
+  abierta (solo las plantillas aprobadas salen fuera de ella). Guarda `wamid` + `SENT`, aplica
+  los estados que llegaron antes y marca `FAILED` con el código de Meta si el error es
+  permanente. El cliente Graph (`cloud-api.ts`) usa `WHATSAPP_GRAPH_VERSION` (p. ej. `v25.0`).
+  Un evento ya marcado como procesado por un despliegue anterior se reencola con
+  `UPDATE whatsapp_webhook_events SET "processedAt" = NULL, attempts = 0 WHERE kind = 'ECHO'`.
+  El barrendero ignora eventos con 12 o más intentos (los registra como conteo); siguen
+  guardados para reprocesarlos a mano. Cada minuto también crea los leads que fallaron tras
+  guardarse el mensaje (contacto sin cliente, con conversación y sin lead).
 
 Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
 en `.env.local`):

@@ -12,6 +12,7 @@ vi.mock("@/lib/db/prisma", () => ({ default: { whatsAppWebhookEvent: { findUniqu
 vi.mock("../sweeper", () => ({ sweepUnprocessedEvents }))
 vi.mock("../contacts", () => ({ recoverMissingLeads }))
 vi.mock("../send", () => ({ handleSendJobs: vi.fn() }))
+vi.mock("../echoes", () => ({ handleEchoReconcileJobs: vi.fn() }))
 
 import { clearWorkerRegistry, getRegisteredWorkers } from "@/lib/queue/workers"
 import { handleEventJobs, handleSweepJobs, registerWhatsAppWorkers, setEventProcessor } from "../event-worker"
@@ -119,6 +120,7 @@ describe("registerWhatsAppWorkers", () => {
     registerWhatsAppWorkers()
 
     expect(getRegisteredWorkers().map((worker) => worker.queue).sort()).toEqual([
+      "wa.echo.reconcile",
       "wa.event.process",
       "wa.event.sweep",
       "wa.message.send",

@@ -1,3 +1,4 @@
+import { processEcho } from "./echoes"
 import { processInboundMessage } from "./inbound"
 import type { ProcessOutcome, StoredWebhookEvent } from "./event-worker"
 import { parseMetaStatus, recordAndApplyStatus } from "./statuses"
@@ -23,8 +24,7 @@ async function processStatus(payload: unknown, receivedAt: Date): Promise<void> 
 /**
  * Dispatches one stored webhook item by kind. Plugged into `wa.event.process` through
  * `setEventProcessor`. Throwing leaves the raw event intact for retry (S-WC-9).
- * ECHO is deferred (left unprocessed) until the echo handler exists so no echo is lost;
- * OTHER has nothing to process.
+ * ECHO is reconciled against our own sends (`echoes.ts`); OTHER has nothing to process.
  */
 export async function processWebhookEvent(
   event: StoredWebhookEvent,
@@ -36,7 +36,8 @@ export async function processWebhookEvent(
     case "STATUS":
       return processStatus(event.payload, receivedAt)
     case "ECHO":
-      return "deferred"
+      await processEcho(event.payload, { eventId: event.id, receivedAt })
+      return
     default:
       return
   }

@@ -1,4 +1,4 @@
-import { type Conversation, type MessageType, type WhatsAppContact } from "@prisma/client"
+import { type Conversation, type ConversationActor, type MessageType, type WhatsAppContact } from "@prisma/client"
 import prisma from "@/lib/db/prisma"
 import { getBoss } from "@/lib/queue/boss"
 import { QUEUES } from "@/lib/queue/queues"
@@ -123,12 +123,26 @@ async function initialStatus(): Promise<"AI" | "HUMAN"> {
   return settings?.aiEnabled ? "AI" : "HUMAN"
 }
 
-/** One conversation per contact. A concurrent first contact that loses the race re-reads (D4.6). */
-async function getOrCreateConversation(contact: WhatsAppContact, firstMessageAt: Date): Promise<Conversation> {
+export interface ConversationOrigin {
+  /** Initial state; defaults to the AI-eligibility rule used for inbound first contact. */
+  status?: "AI" | "HUMAN"
+  event?: string
+  actor?: ConversationActor
+}
+
+/**
+ * One conversation per contact. A concurrent first contact that loses the race re-reads (D4.6).
+ * Echo-created conversations pass their own origin (HUMAN, PHONE_APP): a person already wrote first.
+ */
+export async function getOrCreateConversation(
+  contact: WhatsAppContact,
+  firstMessageAt: Date,
+  origin: ConversationOrigin = {}
+): Promise<Conversation> {
   const existing = await prisma.conversation.findUnique({ where: { contactId: contact.id } })
   if (existing) return existing
 
-  const status = await initialStatus()
+  const status = origin.status ?? (await initialStatus())
   try {
     return await prisma.conversation.create({
       data: {
@@ -136,7 +150,12 @@ async function getOrCreateConversation(contact: WhatsAppContact, firstMessageAt:
         status,
         lastMessageAt: firstMessageAt,
         events: {
-          create: { fromStatus: null, toStatus: status, event: "INBOUND_FIRST_CONTACT", actor: "CLIENT" },
+          create: {
+            fromStatus: null,
+            toStatus: status,
+            event: origin.event ?? "INBOUND_FIRST_CONTACT",
+            actor: origin.actor ?? "CLIENT",
+          },
         },
       },
     })
@@ -149,7 +168,7 @@ async function getOrCreateConversation(contact: WhatsAppContact, firstMessageAt:
 }
 
 /** Queues the media download. Throws on failure so the event retries; singletonKey makes a retry safe. */
-async function enqueueMediaDownload(messageId: string): Promise<void> {
+export async function enqueueMediaDownload(messageId: string): Promise<void> {
   const boss = await getBoss()
   await boss.send(QUEUES.MEDIA_DOWNLOAD, { messageId }, { singletonKey: messageId })
 }
