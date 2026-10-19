@@ -13,6 +13,10 @@ const superAdminRoutes = ['/dashboard/users']
 // Open to SUPER_ADMIN, or to any active user with the canAccessControl flag.
 const controlRoutes = ['/dashboard/control']
 
+// Routes that require access to the WhatsApp module.
+// Open to SUPER_ADMIN, or to any active user with the canAccessWhatsApp flag.
+const whatsAppRoutes = ['/dashboard/whatsapp']
+
 // Public routes (accessible without authentication)
 const publicRoutes = ['/login', '/']
 
@@ -34,6 +38,11 @@ export default async function middleware(request: NextRequest) {
 
   // Check if route requires Control module access
   const requiresControlAccess = controlRoutes.some((route) =>
+    pathname.startsWith(route)
+  )
+
+  // Check if route requires WhatsApp module access
+  const requiresWhatsAppAccess = whatsAppRoutes.some((route) =>
     pathname.startsWith(route)
   )
 
@@ -72,6 +81,22 @@ export default async function middleware(request: NextRequest) {
     const allowed =
       session.user.role === UserRole.SUPER_ADMIN ||
       session.user.canAccessControl === true
+
+    if (!allowed) {
+      const dashboardUrl = new URL('/dashboard', request.url)
+      dashboardUrl.searchParams.set('error', 'unauthorized')
+      return NextResponse.redirect(dashboardUrl)
+    }
+  }
+
+  // Check WhatsApp module authorization. Same caveat as Control: this reads the
+  // JWT (up to 30 days stale), so it is a cheap gate only. The layout under
+  // /dashboard/whatsapp and every WhatsApp Server Action re-check against the
+  // database (hasWhatsAppAccess / requireWhatsAppAuth).
+  if (requiresWhatsAppAccess && session) {
+    const allowed =
+      session.user.role === UserRole.SUPER_ADMIN ||
+      session.user.canAccessWhatsApp === true
 
     if (!allowed) {
       const dashboardUrl = new URL('/dashboard', request.url)

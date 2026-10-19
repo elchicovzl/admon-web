@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UserRole } from '@prisma/client'
 
-const { prismaMock, authMock, presignGetMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, hasWhatsAppAccessMock, presignGetMock } = vi.hoisted(() => ({
   prismaMock: { whatsAppMedia: { findUnique: vi.fn() } },
   authMock: vi.fn(),
+  hasWhatsAppAccessMock: vi.fn(),
   presignGetMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
 vi.mock('@/lib/auth/auth', () => ({ auth: authMock }))
+vi.mock('@/lib/auth/rbac', () => ({ hasWhatsAppAccess: hasWhatsAppAccessMock }))
 vi.mock('@/lib/storage/r2', () => ({ presignGet: presignGetMock }))
 
 import { getMediaUrl } from '../whatsapp.actions'
@@ -30,6 +32,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
   authMock.mockResolvedValue({ user: { id: 'u1', role: UserRole.MANAGER } })
+  hasWhatsAppAccessMock.mockResolvedValue(true)
   prismaMock.whatsAppMedia.findUnique.mockResolvedValue(stored())
   presignGetMock.mockResolvedValue('https://signed.example/object')
 })
@@ -45,22 +48,44 @@ describe('getMediaUrl: authorization (S-MH-8, MH-2)', () => {
     expect(presignGetMock).not.toHaveBeenCalled()
   })
 
-  it('denies any other role (a legacy USER role no longer exists in the enum)', async () => {
-    authMock.mockResolvedValue({ user: { id: 'u2', role: 'USER' as unknown as UserRole } })
+  it('denies a MANAGER without WhatsApp access', async () => {
+    hasWhatsAppAccessMock.mockResolvedValue(false)
 
     const r = await getMediaUrl({ messageId: MESSAGE_ID })
 
-    expect(r).toEqual({ success: false, error: 'No tienes permisos para esta acción' })
+    expect(r).toEqual({ success: false, error: 'No tienes acceso al módulo de WhatsApp' })
     expect(prismaMock.whatsAppMedia.findUnique).not.toHaveBeenCalled()
     expect(presignGetMock).not.toHaveBeenCalled()
   })
 
-  it.each([UserRole.MANAGER, UserRole.SUPER_ADMIN])('allows %s', async (role) => {
-    authMock.mockResolvedValue({ user: { id: 'u1', role } })
+  it('allows a MANAGER with WhatsApp access', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u1', role: UserRole.MANAGER } })
+    hasWhatsAppAccessMock.mockResolvedValue(true)
 
     const r = await getMediaUrl({ messageId: MESSAGE_ID })
 
     expect(r.success).toBe(true)
+  })
+
+  it('allows SUPER_ADMIN (hasWhatsAppAccess grants it by role)', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u9', role: UserRole.SUPER_ADMIN } })
+    hasWhatsAppAccessMock.mockResolvedValue(true)
+
+    const r = await getMediaUrl({ messageId: MESSAGE_ID })
+
+    expect(r.success).toBe(true)
+  })
+
+  it('does not trust a session claim: the database check decides', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', role: UserRole.MANAGER, canAccessWhatsApp: true },
+    })
+    hasWhatsAppAccessMock.mockResolvedValue(false)
+
+    const r = await getMediaUrl({ messageId: MESSAGE_ID })
+
+    expect(r.success).toBe(false)
+    expect(hasWhatsAppAccessMock).toHaveBeenCalled()
   })
 })
 
