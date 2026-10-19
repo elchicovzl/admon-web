@@ -19,6 +19,24 @@ import { isWindowOpen } from "./window"
  * The job serializes sends per conversation with a transaction-scoped advisory lock and
  * re-checks everything that may have changed since queueing (message state, conversation
  * state version, 24 h window) immediately before calling Meta (CH-4, CH-5, WC-13).
+ *
+ * DELIVERY GUARANTEE: at-most-once. A WhatsApp message cannot be recalled, and Meta gives us
+ * no idempotency key for sends, so a duplicate is worse than a missing message the dashboard
+ * can show and a person can resend. The job therefore:
+ *
+ *   1. commits `sendAttemptedAt` on its OWN connection (outside the lock transaction)
+ *      BEFORE it calls Meta;
+ *   2. stores the wamid on that same autocommit connection right after Meta answers, so a
+ *      failed transaction commit cannot lose it;
+ *   3. treats any row that has `sendAttemptedAt` but no wamid on a later run as an unknown
+ *      delivery (FAILED / UNKNOWN_DELIVERY): it is NEVER resent automatically and is surfaced
+ *      in the thread for manual review. This covers a crash after Meta accepted, a lost
+ *      wamid write, and ambiguous errors (timeouts, network, 5xx without a Meta error body).
+ *
+ * Only a definite rejection (HTTP 429, or any response carrying a Meta error code) clears the
+ * marker so pg-boss can retry. `hooks` registered with `setOnSentHook` may run more than once
+ * for the same message (a retry after a failed commit re-enters through the already-sent
+ * path), so they must be idempotent.
  */
 
 export type OutboundSource = Extract<MessageSource, "AI" | "DASHBOARD" | "SYSTEM">
@@ -62,6 +80,8 @@ export const SendErrorCode = {
   RETRIES_EXHAUSTED: "RETRIES_EXHAUSTED",
   QUEUE_UNAVAILABLE: "QUEUE_UNAVAILABLE",
   INVALID_MESSAGE: "INVALID_MESSAGE",
+  /** Meta may or may not have accepted the message; never resent automatically (at-most-once). */
+  UNKNOWN_DELIVERY: "UNKNOWN_DELIVERY",
 } as const
 
 const MAX_ERROR_LENGTH = 300
@@ -155,7 +175,16 @@ type TxOutcome =
   | { kind: "skipped" }
   | { kind: "already-sent"; wamid: string }
   | { kind: "failed" }
-  | { kind: "sent"; wamid: string }
+  | { kind: "sent"; wamid: string; persisted: boolean }
+
+/**
+ * True when Meta definitely did not accept the message, so retrying cannot duplicate it:
+ * HTTP 429, or any response that carried a Meta error code. Timeouts, network failures and
+ * bare 5xx responses are ambiguous: Meta may have accepted the message before failing.
+ */
+export function isDefiniteRejection(error: CloudApiError): boolean {
+  return error.status === 429 || error.code !== null
+}
 
 export interface SendContext {
   /** True when pg-boss will not retry this job again. */
@@ -194,6 +223,7 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
           templateName: true,
           templateParams: true,
           contextWamid: true,
+          sendAttemptedAt: true,
           conversation: { select: { stateVersion: true, lastInboundAt: true, contact: { select: { waId: true } } } },
         },
       })
@@ -201,6 +231,19 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
       // A redelivered job for a message that already left: never send twice.
       if (message.wamid) return { kind: "already-sent", wamid: message.wamid }
       if (message.status !== "QUEUED") return { kind: "skipped" }
+
+      // A previous run committed its attempt marker but never stored a wamid: Meta may have
+      // accepted the message. Never resend (at-most-once); surface it for manual review.
+      if (message.sendAttemptedAt) {
+        await markFailed(
+          tx,
+          message.id,
+          SendErrorCode.UNKNOWN_DELIVERY,
+          "No se pudo confirmar si el mensaje fue entregado. Revise el chat de WhatsApp antes de reenviarlo."
+        )
+        console.error(`[whatsapp] message ${message.id} has an unconfirmed delivery; not resending`)
+        return { kind: "failed" }
+      }
 
       const { conversation } = message
 
@@ -221,28 +264,60 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
         return { kind: "failed" }
       }
 
+      const isText = message.type === "TEXT" && Boolean(message.text?.trim())
+      const isTemplate = message.type === "TEMPLATE" && Boolean(message.templateName)
+      if (!isText && !isTemplate) {
+        await markFailed(tx, message.id, SendErrorCode.INVALID_MESSAGE, "El mensaje no se puede enviar por este canal.")
+        return { kind: "failed" }
+      }
+
+      // Commit the attempt BEFORE Meta is called, on a separate connection: it must survive a
+      // rollback or crash of this transaction. If this write fails nothing was sent and the
+      // error propagates, so pg-boss retries safely.
+      const claimed = await prisma.whatsAppMessage.updateMany({
+        where: { id: message.id, wamid: null, status: "QUEUED", sendAttemptedAt: null },
+        data: { sendAttemptedAt: now() },
+      })
+      if (claimed.count === 0) return { kind: "skipped" }
+
       const to = conversation.contact.waId
       try {
-        if (message.type === "TEXT" && message.text?.trim()) {
-          const { wamid } = await sendText(to, message.text, { contextWamid: message.contextWamid })
-          return { kind: "sent", wamid }
-        }
-        if (message.type === "TEMPLATE" && message.templateName) {
+        let wamid: string
+        if (isText) {
+          wamid = (await sendText(to, message.text as string, { contextWamid: message.contextWamid })).wamid
+        } else {
           const params = Array.isArray(message.templateParams)
             ? message.templateParams.filter((param): param is string => typeof param === "string")
             : []
-          const { wamid } = await sendTemplate(to, {
-            name: message.templateName,
-            language: getWhatsAppConfig().templates.language,
-            params,
-          })
-          return { kind: "sent", wamid }
+          wamid = (
+            await sendTemplate(to, {
+              name: message.templateName as string,
+              language: getWhatsAppConfig().templates.language,
+              params,
+            })
+          ).wamid
         }
-        await markFailed(tx, message.id, SendErrorCode.INVALID_MESSAGE, "El mensaje no se puede enviar por este canal.")
-        return { kind: "failed" }
+        // Store the wamid immediately on the autocommit connection, not at transaction commit.
+        const persisted = await persistSent(message.id, wamid, now())
+        return { kind: "sent", wamid, persisted }
       } catch (error) {
         if (!(error instanceof CloudApiError)) throw error
-        if (error.retryable && !context.isLastAttempt) throw error // pg-boss retries with backoff
+        if (!isDefiniteRejection(error)) {
+          // Ambiguous: Meta may have accepted it. Keep the marker, never resend, surface it.
+          await markFailed(
+            tx,
+            message.id,
+            SendErrorCode.UNKNOWN_DELIVERY,
+            "No se pudo confirmar si el mensaje fue entregado. Revise el chat de WhatsApp antes de reenviarlo."
+          )
+          console.error(`[whatsapp] send of message ${message.id} ended with an ambiguous error; not resending`)
+          return { kind: "failed" }
+        }
+        // Definite rejection: nothing was sent, so the marker can be cleared and a retry is safe.
+        if (error.retryable && !context.isLastAttempt) {
+          await clearAttempt(message.id)
+          throw error // pg-boss retries with backoff
+        }
         const code = error.code ?? (error.retryable ? SendErrorCode.RETRIES_EXHAUSTED : String(error.status ?? "UNKNOWN"))
         await markFailed(tx, message.id, code, error.message)
         return { kind: "failed" }
@@ -254,27 +329,51 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
   if (outcome.kind === "already-sent") {
     // Re-applies stored statuses in case the previous attempt died between SENT and this step.
     await applyStoredStatuses(outcome.wamid)
+    await runOnSentHook(data.messageId)
     return
   }
   if (outcome.kind !== "sent") return
-
-  const persisted = await persistSent(data.messageId, outcome.wamid, now())
-  if (!persisted) return
+  if (!outcome.persisted) {
+    // Accepted by Meta but the wamid is lost: leave the row visible for manual review instead
+    // of QUEUED forever. The wamid goes in the message so an operator can reconcile it.
+    await markFailed(
+      prisma,
+      data.messageId,
+      SendErrorCode.UNKNOWN_DELIVERY,
+      `Meta aceptó el mensaje pero no se pudo registrar su id (${outcome.wamid}). No se reenviará automáticamente.`
+    ).catch(() => undefined)
+    return
+  }
 
   await applyStoredStatuses(outcome.wamid)
-  if (onSentHook) {
-    try {
-      await onSentHook(data.messageId)
-    } catch {
-      console.error(`[whatsapp] onSent hook failed for message ${data.messageId}`)
-    }
+  await runOnSentHook(data.messageId)
+}
+
+async function runOnSentHook(messageId: string): Promise<void> {
+  if (!onSentHook) return
+  try {
+    await onSentHook(messageId)
+  } catch {
+    console.error(`[whatsapp] onSent hook failed for message ${messageId}`)
+  }
+}
+
+/** A definite rejection leaves nothing to reconcile, so the next attempt may send. Best effort: a failure here only makes the retry an UNKNOWN_DELIVERY. */
+async function clearAttempt(messageId: string): Promise<void> {
+  try {
+    await prisma.whatsAppMessage.updateMany({
+      where: { id: messageId, wamid: null, status: "QUEUED" },
+      data: { sendAttemptedAt: null },
+    })
+  } catch {
+    console.error(`[whatsapp] could not clear the send attempt of message ${messageId}`)
   }
 }
 
 /**
- * Records the wamid Meta returned (WC-11). Runs AFTER the send, outside the lock: if this
- * keeps failing the job must not throw, because a retry would send the message twice.
- * At-most-once is the safer failure mode; the id is logged so an operator can reconcile.
+ * Records the wamid Meta returned (WC-11), right after the send and on its own connection.
+ * It must not throw: a retry would find the attempt marker and (correctly) refuse to resend,
+ * so the id is logged for an operator instead. Returns false when it could not be stored.
  */
 async function persistSent(messageId: string, wamid: string, sentAt: Date): Promise<boolean> {
   for (let attempt = 1; attempt <= PERSIST_ATTEMPTS; attempt++) {

@@ -107,6 +107,80 @@ describe("processEcho: our own sends (CH-10, S-CH-3)", () => {
 
     expect(m.convUpdateMany).not.toHaveBeenCalled()
   })
+
+  it.each(["AI", "DASHBOARD", "SYSTEM"])("does not take over for a stored %s message", async (source) => {
+    m.msgFindUnique.mockResolvedValue({ id: "existing", source, conversation: conversation() })
+
+    await expect(run()).resolves.toBe("own")
+
+    expect(m.applyTransition).not.toHaveBeenCalled()
+    expect(m.msgCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe("processEcho: own send stores its wamid mid-classification (race)", () => {
+  it("applies NO HUMAN_ECHO when the insert hits P2002 because our send won (no false takeover)", async () => {
+    // Known-wamid lookup misses, the in-flight lookup misses (the row just became SENT), and
+    // by the time we insert, the send job has stored the wamid.
+    m.msgFindUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "ours", source: "AI", conversation: conversation() })
+    m.msgCreate.mockRejectedValue(p2002())
+
+    await expect(run()).resolves.toBe("own")
+
+    expect(m.applyTransition).not.toHaveBeenCalled()
+    expect(m.convUpdateMany).not.toHaveBeenCalled()
+    expect(m.eventCreate).not.toHaveBeenCalled()
+  })
+
+  it("never calls the transition before the insert has succeeded", async () => {
+    m.msgCreate.mockImplementation(async () => {
+      expect(m.applyTransition).not.toHaveBeenCalled()
+      return { id: "msg-1" }
+    })
+
+    await run()
+
+    expect(m.applyTransition).toHaveBeenCalledTimes(1)
+  })
+
+  it("lets a concurrent delivery of the same phone echo finish the (guarded) takeover", async () => {
+    m.msgFindUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "theirs", source: "PHONE_APP", conversation: conversation() })
+    m.msgCreate.mockRejectedValue(p2002())
+    m.applyTransition.mockResolvedValue(false) // the other run already moved it
+
+    await expect(run()).resolves.toBe("stored")
+
+    expect(m.applyTransition).toHaveBeenCalledTimes(1)
+    expect(m.msgCreate).toHaveBeenCalledTimes(1)
+  })
+
+  it("finishes the takeover on redelivery when a run died between the insert and the transition", async () => {
+    m.msgFindUnique.mockResolvedValue({ id: "inserted", source: "PHONE_APP", conversation: conversation() })
+
+    await expect(run()).resolves.toBe("stored-takeover")
+
+    expect(m.applyTransition).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: "conv-1", event: "HUMAN_ECHO", reason: "echo:wamid.ECHO1" })
+    )
+    expect(m.msgCreate).not.toHaveBeenCalled()
+    expect(m.applyStoredStatuses).toHaveBeenCalledWith("wamid.ECHO1")
+  })
+
+  it("does not take over on redelivery when the stored echo is older than the last AI send", async () => {
+    m.msgFindUnique.mockResolvedValue({
+      id: "inserted",
+      source: "PHONE_APP",
+      conversation: conversation({ lastAiSentAt: new Date(ECHO_AT.getTime() + 60_000) }),
+    })
+
+    await expect(run()).resolves.toBe("stored")
+
+    expect(m.applyTransition).not.toHaveBeenCalled()
+  })
 })
 
 describe("processEcho: in-flight sends (D7.2)", () => {
@@ -186,10 +260,10 @@ describe("processEcho: phone-app echoes (WC-8, S-WC-6, S-CH-1)", () => {
     expect(m.applyStoredStatuses).toHaveBeenCalledWith("wamid.ECHO1")
   })
 
-  it("runs the transition before the insert so a retry cannot lose the takeover", async () => {
+  it("inserts first and only then applies the takeover, so the insert arbitrates own vs phone", async () => {
     await run()
 
-    expect(m.applyTransition.mock.invocationCallOrder[0]).toBeLessThan(m.msgCreate.mock.invocationCallOrder[0])
+    expect(m.msgCreate.mock.invocationCallOrder[0]).toBeLessThan(m.applyTransition.mock.invocationCallOrder[0])
   })
 
   it("updates the preview without touching unread count or the 24 h window", async () => {
@@ -289,7 +363,7 @@ describe("handleEchoReconcileJobs", () => {
     await handleEchoReconcileJobs([job])
 
     expect(m.eventFindUnique).toHaveBeenCalledWith({ where: { id: "ev1" }, select: { payload: true } })
-    expect(m.msgFindUnique).toHaveBeenCalledWith({ where: { wamid: "wamid.ECHO1" }, select: { id: true } })
+    expect(m.msgFindUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { wamid: "wamid.ECHO1" } }))
   })
 
   it("ignores events that no longer exist", async () => {

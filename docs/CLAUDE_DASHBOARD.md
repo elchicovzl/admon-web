@@ -512,20 +512,33 @@ puede ser una Server Action. Reglas:
   Un ECHO (`smb_message_echoes`, mensaje espejo de lo que envía el negocio) se compara con
   nuestros propios envíos por `wamid`: si ya está guardado es nuestro y no cambia el estado.
   Si hay un envío en cola sin `wamid` de hace menos de 120 s se reintenta con
-  `wa.echo.reconcile` (5 s, máx. 3). Si no, se guarda como `OUT`/`PHONE_APP` y, salvo que
-  sea anterior al último envío de la IA, la conversación pasa a `HUMAN`. La forma real del
+  `wa.echo.reconcile` (5 s, máx. 3). Si no, se inserta primero como `OUT`/`PHONE_APP` (el
+  `wamid` único decide si es nuestro o del teléfono: un `P2002` significa que fue un envío
+  propio y NO hay traspaso) y solo entonces, salvo que sea anterior al último envío de la
+  IA, la conversación pasa a `HUMAN`. Si el proceso muere entre ambos pasos, la reentrega
+  encuentra la fila `PHONE_APP` y completa el traspaso (la transición es idempotente). La forma real del
   payload de eco está pendiente de confirmar en un número Coexistence (tarea 1.4.8).
 - Envío (`wa.message.send` → `lib/whatsapp/send.ts`): `queueOutbound` inserta el mensaje
   `OUT`/`QUEUED` sin `wamid` y el job lo entrega con un candado por conversación, revisando
   justo antes de llamar a Meta que el estado no haya cambiado y que la ventana de 24 h siga
   abierta (solo las plantillas aprobadas salen fuera de ella). Guarda `wamid` + `SENT`, aplica
   los estados que llegaron antes y marca `FAILED` con el código de Meta si el error es
-  permanente. El cliente Graph (`cloud-api.ts`) usa `WHATSAPP_GRAPH_VERSION` (p. ej. `v25.0`).
+  permanente. Entrega como máximo una vez: `sendAttemptedAt` se confirma en su propia
+  conexión ANTES de llamar a Meta y el `wamid` se guarda justo después; una fila con intento
+  pero sin `wamid` (caída tras aceptar Meta, error ambiguo como timeout/red/5xx sin código)
+  queda `FAILED` con `UNKNOWN_DELIVERY` y nunca se reenvía sola (revisar el chat antes de
+  reenviar a mano; el reenvío manual de PR2.3 debe limpiar `sendAttemptedAt`). Solo un
+  rechazo definitivo (429 o respuesta con código de Meta) limpia la marca y deja reintentar.
+  El cliente Graph (`cloud-api.ts`) usa `WHATSAPP_GRAPH_VERSION` (p. ej. `v25.0`).
   Un evento ya marcado como procesado por un despliegue anterior se reencola con
   `UPDATE whatsapp_webhook_events SET "processedAt" = NULL, attempts = 0 WHERE kind = 'ECHO'`.
   El barrendero ignora eventos con 12 o más intentos (los registra como conteo); siguen
   guardados para reprocesarlos a mano. Cada minuto también crea los leads que fallaron tras
-  guardarse el mensaje (contacto sin cliente, con conversación y sin lead).
+  guardarse el mensaje (contacto sin cliente, con conversación y sin lead): cada fallo suma
+  `leadRecoveryAttempts`, se reintenta tras 15 min y como máximo 5 veces (un contacto que
+  falla siempre no bloquea el lote de 50). Un lead eliminado a propósito se borra con
+  `removeLead` (marca `leadSuppressed`) para que ni el barrido ni un mensaje nuevo lo
+  recreen; un lead `DISCARDED` conserva su fila y tampoco se recrea.
 
 Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
 en `.env.local`):

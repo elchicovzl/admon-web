@@ -1803,6 +1803,12 @@ model WhatsAppContact {
   matchStatus  ContactMatchStatus @default(UNMATCHED)
   // Manual link/unlink disables the automatic client matching.
   matchLocked  Boolean            @default(false)
+  // Lead recovery bookkeeping (recoverMissingLeads): failed attempts and the last one, so a
+  // permanently failing contact backs off and then drops out instead of starving the batch.
+  leadRecoveryAttempts Int         @default(0)
+  leadRecoveryAt       DateTime?
+  // A manager removed this contact's lead on purpose: neither recovery nor inbound recreates it.
+  leadSuppressed       Boolean     @default(false)
   lastSeenAt   DateTime?
   conversation Conversation?
   lead         Lead?
@@ -1902,6 +1908,9 @@ model WhatsAppMessage {
   usageRecordId  String?
   timestamp      DateTime
   sentAt         DateTime?
+  // Set (and committed) BEFORE Meta is called. An attempted row without a wamid is an unknown
+  // delivery and is never resent automatically (at-most-once, see lib/whatsapp/send.ts).
+  sendAttemptedAt DateTime?
   media          WhatsAppMedia?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt

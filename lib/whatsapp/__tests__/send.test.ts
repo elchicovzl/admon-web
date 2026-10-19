@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
   applyStoredStatuses: vi.fn(),
+  runTx: vi.fn(),
 }))
 
 const tx = {
@@ -18,7 +19,7 @@ const tx = {
 vi.mock("@/lib/db/prisma", () => ({
   default: {
     whatsAppMessage: { create: m.msgCreate, findUnique: m.msgFindUnique, updateMany: m.msgUpdateMany },
-    $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
+    $transaction: (fn: (client: typeof tx) => unknown) => m.runTx(fn),
   },
 }))
 vi.mock("@/lib/queue/boss", () => ({ getBoss: async () => ({ send: m.bossSend }) }))
@@ -60,6 +61,7 @@ function row(overrides: Record<string, unknown> = {}) {
     templateName: null,
     templateParams: null,
     contextWamid: null,
+    sendAttemptedAt: null,
     conversation: {
       stateVersion: 3,
       lastInboundAt: new Date(NOW.getTime() - 60 * 60 * 1000),
@@ -86,6 +88,7 @@ beforeEach(() => {
   m.sendText.mockResolvedValue({ wamid: "wamid.OUT1" })
   m.sendTemplate.mockResolvedValue({ wamid: "wamid.TPL1" })
   m.bossSend.mockResolvedValue("job")
+  m.runTx.mockImplementation(async (fn: (client: typeof tx) => unknown) => fn(tx))
 })
 
 describe("queueOutbound (outbox insert, WC-10)", () => {
@@ -171,6 +174,10 @@ describe("sendOutboundMessage", () => {
     await sendOutboundMessage({ messageId: "m1" }, RETRYING)
 
     expect(m.sendText).toHaveBeenCalledWith("573001234567", "Hola", { contextWamid: null })
+    expect(m.msgUpdateMany).toHaveBeenCalledWith({
+      where: { id: "m1", wamid: null, status: "QUEUED", sendAttemptedAt: null },
+      data: { sendAttemptedAt: NOW },
+    })
     expect(m.msgUpdateMany).toHaveBeenCalledWith({
       where: { id: "m1", wamid: null, status: "QUEUED" },
       data: expect.objectContaining({ wamid: "wamid.OUT1", status: "SENT", statusRank: 1, sentAt: NOW }),
@@ -264,16 +271,26 @@ describe("sendOutboundMessage", () => {
     expect(m.msgUpdateMany).not.toHaveBeenCalled()
   })
 
-  it("rethrows a retryable error so pg-boss retries, leaving the row QUEUED", async () => {
-    m.sendText.mockRejectedValue(new CloudApiError("busy", 503, null, true))
+  it("rethrows a definite rejection (429) so pg-boss retries, clearing the attempt marker and leaving the row QUEUED", async () => {
+    m.sendText.mockRejectedValue(new CloudApiError("busy", 429, null, true))
 
     await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("busy")
 
-    expect(m.msgUpdateMany).not.toHaveBeenCalled()
+    expect(m.msgUpdateMany).toHaveBeenLastCalledWith({
+      where: { id: "m1", wamid: null, status: "QUEUED" },
+      data: { sendAttemptedAt: null },
+    })
+    expect(failedWith("UNKNOWN_DELIVERY")).toBeUndefined()
+  })
+
+  it("treats a 5xx that carries a Meta error code as a definite rejection and retries", async () => {
+    m.sendText.mockRejectedValue(new CloudApiError("Something went wrong", 500, "131000", true))
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("Something went wrong")
   })
 
   it("marks FAILED when a retryable error exhausts its attempts", async () => {
-    m.sendText.mockRejectedValue(new CloudApiError("busy", 503, null, true))
+    m.sendText.mockRejectedValue(new CloudApiError("busy", 429, null, true))
 
     await sendOutboundMessage({ messageId: "m1" }, LAST_ATTEMPT)
 
@@ -291,13 +308,22 @@ describe("sendOutboundMessage", () => {
   })
 
   it("does not throw when the wamid cannot be stored, to avoid a duplicate send", async () => {
-    m.msgUpdateMany.mockRejectedValue(new Error("db down"))
+    m.msgUpdateMany.mockResolvedValueOnce({ count: 1 }).mockRejectedValue(new Error("db down"))
 
     await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).resolves.toBeUndefined()
 
     expect(m.sendText).toHaveBeenCalledTimes(1)
-    expect(m.msgUpdateMany).toHaveBeenCalledTimes(3)
+    // marker + 3 wamid writes + the best-effort UNKNOWN_DELIVERY mark
+    expect(m.msgUpdateMany).toHaveBeenCalledTimes(5)
     expect(m.applyStoredStatuses).not.toHaveBeenCalled()
+  })
+
+  it("does not call Meta when the attempt marker cannot be committed, and lets pg-boss retry", async () => {
+    m.msgUpdateMany.mockRejectedValue(new Error("db down"))
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("db down")
+
+    expect(m.sendText).not.toHaveBeenCalled()
   })
 
   it("calls the onSent hook once the message is SENT, and survives a hook failure", async () => {
@@ -320,6 +346,135 @@ describe("sendOutboundMessage", () => {
   })
 })
 
+describe("at-most-once delivery (no duplicate sends)", () => {
+  /** A one-row in-memory table behind the prisma mocks, so retries observe what earlier runs wrote. */
+  function bindStore(store: Record<string, any>) {
+    m.msgFindUnique.mockImplementation(async ({ select }) =>
+      "conversationId" in select ? { conversationId: "conv-1" } : { ...store }
+    )
+    m.msgUpdateMany.mockImplementation(async ({ where, data }) => {
+      const matches = Object.entries(where).every(([key, value]) => store[key] === value)
+      if (matches) Object.assign(store, data)
+      return { count: matches ? 1 : 0 }
+    })
+  }
+
+  function useRowStore(initial: Record<string, unknown> = {}) {
+    const store = { ...row(), ...initial } as Record<string, any>
+    bindStore(store)
+    return store
+  }
+
+  it("commits the attempt marker before Meta is called", async () => {
+    const store = useRowStore()
+    m.sendText.mockImplementation(async () => {
+      expect(store.sendAttemptedAt).toEqual(NOW)
+      return { wamid: "wamid.OUT1" }
+    })
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendText).toHaveBeenCalledTimes(1)
+    expect(store).toMatchObject({ wamid: "wamid.OUT1", status: "SENT" })
+  })
+
+  it("stores the wamid before the transaction commits, so a commit failure cannot lose it", async () => {
+    const store = useRowStore()
+    m.runTx.mockImplementation(async (fn: (client: typeof tx) => unknown) => {
+      await fn(tx)
+      throw new Error("commit failed")
+    })
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("commit failed")
+    expect(store.wamid).toBe("wamid.OUT1")
+
+    // pg-boss retries the job: the message is recognized as already sent and not sent again.
+    m.runTx.mockImplementation(async (fn: (client: typeof tx) => unknown) => fn(tx))
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendText).toHaveBeenCalledTimes(1)
+    expect(m.applyStoredStatuses).toHaveBeenCalledWith("wamid.OUT1")
+  })
+
+  it("crash after Meta accepted and before the wamid was stored: the retry does NOT resend", async () => {
+    const store = useRowStore()
+    // The process dies right after Meta answers: the wamid write and the commit never happen.
+    m.sendText.mockImplementation(async () => {
+      m.msgUpdateMany.mockRejectedValue(new Error("process died"))
+      m.runTx.mockRejectedValue(new Error("connection lost"))
+      return { wamid: "wamid.LOST" }
+    })
+    m.runTx.mockImplementation(async (fn: (client: typeof tx) => unknown) => {
+      await fn(tx)
+      throw new Error("connection lost")
+    })
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("connection lost")
+    expect(m.sendText).toHaveBeenCalledTimes(1)
+    expect(store.sendAttemptedAt).toEqual(NOW)
+    expect(store.wamid).toBeNull()
+
+    // Retry on a healthy process: the attempted-but-no-wamid row is an unknown delivery.
+    bindStore(store)
+    m.runTx.mockImplementation(async (fn: (client: typeof tx) => unknown) => fn(tx))
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendText).toHaveBeenCalledTimes(1) // still one: never resent
+    expect(store).toMatchObject({ status: "FAILED", errorCode: "UNKNOWN_DELIVERY" })
+  })
+
+  it.each([
+    ["a network failure", new CloudApiError("network", null, null, true)],
+    ["a timeout", new CloudApiError("timeout", 408, null, true)],
+    ["a bare 5xx", new CloudApiError("bad gateway", 502, null, true)],
+  ])("%s is ambiguous: no retry, no resend, flagged UNKNOWN_DELIVERY", async (_label, error) => {
+    const store = useRowStore()
+    m.sendText.mockRejectedValue(error)
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).resolves.toBeUndefined()
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING) // a redelivered job
+
+    expect(m.sendText).toHaveBeenCalledTimes(1)
+    expect(store).toMatchObject({ status: "FAILED", errorCode: "UNKNOWN_DELIVERY" })
+  })
+
+  it("a message whose attempt marker is set and has no wamid is never sent", async () => {
+    m.msgFindUnique.mockImplementation(async ({ select }) =>
+      "conversationId" in select ? { conversationId: "conv-1" } : row({ sendAttemptedAt: NOW })
+    )
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendText).not.toHaveBeenCalled()
+    expect(m.sendTemplate).not.toHaveBeenCalled()
+    expect(failedWith("UNKNOWN_DELIVERY")).toBeDefined()
+  })
+
+  it("after a definite 429 the cleared marker lets the retry send exactly once", async () => {
+    const store = useRowStore()
+    m.sendText.mockRejectedValueOnce(new CloudApiError("busy", 429, null, true))
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("busy")
+    expect(store.sendAttemptedAt).toBeNull()
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendText).toHaveBeenCalledTimes(2) // the first one was rejected by Meta
+    expect(store).toMatchObject({ wamid: "wamid.OUT1", status: "SENT" })
+  })
+
+  it("re-runs the onSent hook when a retry finds the message already sent after a failed commit", async () => {
+    const hook = vi.fn().mockResolvedValue(undefined)
+    setOnSentHook(hook)
+    useRowStore({ wamid: "wamid.OLD", status: "SENT" })
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendText).not.toHaveBeenCalled()
+    expect(hook).toHaveBeenCalledWith("m1")
+  })
+})
+
 describe("handleSendJobs", () => {
   it("is a no-op while WHATSAPP_ENABLED is off (WC-12)", async () => {
     vi.stubEnv("WHATSAPP_ENABLED", "false")
@@ -331,7 +486,7 @@ describe("handleSendJobs", () => {
   })
 
   it("treats the retry-limit attempt as the last one", async () => {
-    m.sendText.mockRejectedValue(new CloudApiError("busy", 503, null, true))
+    m.sendText.mockRejectedValue(new CloudApiError("busy", 429, null, true))
 
     // wa.message.send retryLimit is 4: retryCount 4 is the final run.
     await expect(
