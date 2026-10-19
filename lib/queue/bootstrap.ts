@@ -7,7 +7,8 @@ import { startWorkers } from "./workers"
 /**
  * Server boot sequence, called from `instrumentation.ts`.
  *
- * With WHATSAPP_ENABLED not "true" this is a strict no-op: no config validation,
+ * A WHATSAPP_ENABLED value that is set but is neither "true" nor "false" aborts startup.
+ * With WHATSAPP_ENABLED unset or "false" this is a strict no-op: no config validation,
  * no pg-boss connection, no `pgboss` schema DDL, no queues, no schedules. Deploying
  * with the flag off leaves the database and runtime exactly as they were.
  *
@@ -19,7 +20,12 @@ import { startWorkers } from "./workers"
 export async function bootstrapRuntime(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<void> {
-  if (env.WHATSAPP_ENABLED?.trim() !== "true") {
+  const flag = env.WHATSAPP_ENABLED?.trim()
+  // A typo such as "True" or "yes" must not silently leave the feature off.
+  if (flag && flag !== "true" && flag !== "false") {
+    throw new Error('Invalid WHATSAPP_ENABLED: must be "true" or "false"')
+  }
+  if (flag !== "true") {
     console.info("[queue] WhatsApp is disabled (WHATSAPP_ENABLED!=true): queue not started")
     return
   }

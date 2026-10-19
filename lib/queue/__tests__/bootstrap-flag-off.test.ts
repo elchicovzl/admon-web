@@ -11,7 +11,7 @@ vi.mock("pg-boss", () => ({
 }))
 
 describe("bootstrapRuntime with WHATSAPP_ENABLED off (real modules)", () => {
-  it.each([undefined, "", "false", "yes"])(
+  it.each([undefined, "", "false"])(
     "never constructs pg-boss for WHATSAPP_ENABLED=%j",
     async (value) => {
       vi.spyOn(console, "info").mockImplementation(() => {})
@@ -21,6 +21,21 @@ describe("bootstrapRuntime with WHATSAPP_ENABLED off (real modules)", () => {
 
       await bootstrapRuntime(env)
 
+      expect(constructed).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(["True", "yes", "1", "TRUE"])(
+    "aborts startup for the invalid WHATSAPP_ENABLED=%j without touching pg-boss",
+    async (value) => {
+      vi.spyOn(console, "info").mockImplementation(() => {})
+      const { bootstrapRuntime } = await import("../bootstrap")
+      const env = {
+        DIRECT_URL: "postgresql://localhost/db",
+        WHATSAPP_ENABLED: value,
+      } as unknown as NodeJS.ProcessEnv
+
+      await expect(bootstrapRuntime(env)).rejects.toThrow(/WHATSAPP_ENABLED/)
       expect(constructed).not.toHaveBeenCalled()
     }
   )
