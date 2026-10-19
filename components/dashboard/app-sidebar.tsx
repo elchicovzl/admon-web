@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { containsActiveHref, findActiveHref } from '@/lib/nav/active-link'
+import { containsActiveHref, findActiveHref, isTopLevelActive } from '@/lib/nav/active-link'
 import { cn } from '@/lib/utils'
 
 /**
@@ -546,7 +546,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <SidebarMenu>
               {filteredNavItems.map((item) => {
                 const Icon = item.icon
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                const isActive = isTopLevelActive(item.href, pathname)
 
                 // If item has sub-items, render as Collapsible
                 if (item.subItems && item.subItems.length > 0) {

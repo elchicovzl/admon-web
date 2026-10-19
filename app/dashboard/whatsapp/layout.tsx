@@ -22,7 +22,8 @@ export default async function WhatsAppLayout({
     redirect('/dashboard?error=unauthorized')
   }
 
-  // Returning the children directly keeps this module free of JSX, so the
-  // guard can be unit tested.
+  // Return the children as-is instead of wrapping them in JSX. Vitest only
+  // parses .ts files here, so a JSX-free layout is what lets the guard above
+  // be unit tested.
   return children
 }

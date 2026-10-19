@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { containsActiveHref, findActiveHref, scoreLink } from '../active-link'
+import { containsActiveHref, findActiveHref, isTopLevelActive, scoreLink } from '../active-link'
 
 // -----------------------------------------------------------------------------
 // The real Finanzas menu, trimmed to what matters here
@@ -209,5 +209,22 @@ describe('containsActiveHref', () => {
 
     expect(containsActiveHref(ingresos, cobros)).toBe(true)
     expect(containsActiveHref(egresos, cobros)).toBe(false)
+  })
+})
+
+describe('isTopLevelActive', () => {
+  it('el Dashboard raíz solo coincide con su propia URL', () => {
+    expect(isTopLevelActive('/dashboard', '/dashboard')).toBe(true)
+    expect(isTopLevelActive('/dashboard', '/dashboard/whatsapp')).toBe(false)
+    expect(isTopLevelActive('/dashboard', '/dashboard/clients/9')).toBe(false)
+  })
+
+  it('las demás entradas siguen coincidiendo por prefijo', () => {
+    expect(isTopLevelActive('/dashboard/clients', '/dashboard/clients')).toBe(true)
+    expect(isTopLevelActive('/dashboard/clients', '/dashboard/clients/9')).toBe(true)
+  })
+
+  it('un prefijo parcial de segmento no coincide', () => {
+    expect(isTopLevelActive('/dashboard/clients', '/dashboard/clients-archive')).toBe(false)
   })
 })
