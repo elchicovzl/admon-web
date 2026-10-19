@@ -1,26 +1,10 @@
 'use server'
 
-import { auth } from '@/lib/auth/auth'
 import prisma from '@/lib/db/prisma'
-import { UserRole } from '@prisma/client'
 import type { ActionResponse } from '@/lib/types/auth.types'
+import { requireWhatsAppAuth } from '@/lib/whatsapp/access'
 import { presignGet } from '@/lib/storage/r2'
 import { getMediaUrlSchema } from '@/lib/validations/whatsapp.schema'
-
-/** Inbox actions are limited to MANAGER and SUPER_ADMIN (WI-1, WI-11). */
-async function requireManagerOrAdmin() {
-  const session = await auth()
-
-  if (!session?.user) {
-    return { authorized: false as const, error: 'No autenticado' }
-  }
-
-  if (session.user.role !== UserRole.SUPER_ADMIN && session.user.role !== UserRole.MANAGER) {
-    return { authorized: false as const, error: 'No tienes permisos para esta acción' }
-  }
-
-  return { authorized: true as const, userId: session.user.id }
-}
 
 export interface MediaUrl {
   url: string
@@ -34,12 +18,12 @@ const MEDIA_URL_TTL_SECONDS = 600
 const INLINE_MIME = /^(image|audio|video)\/|^application\/pdf$/
 
 /**
- * Presigned URL (10 min) for a stored WhatsApp attachment (MH-2). RBAC is checked first and
+ * Presigned URL (10 min) for a stored WhatsApp attachment (MH-2). Module access (SUPER_ADMIN, or a MANAGER with canAccessWhatsApp) is checked first and
  * the R2 key never leaves the server; the Meta URL was never stored (MH-1).
  */
 export async function getMediaUrl(input: { messageId: string }): Promise<ActionResponse<MediaUrl>> {
   try {
-    const authCheck = await requireManagerOrAdmin()
+    const authCheck = await requireWhatsAppAuth()
     if (!authCheck.authorized) {
       return { success: false, error: authCheck.error }
     }

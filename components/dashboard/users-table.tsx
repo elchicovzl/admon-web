@@ -23,7 +23,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle, Pencil, Coins } from 'lucide-react'
+import { MoreHorizontal, Shield, UserCheck, Ban, CheckCircle, Pencil, Coins, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -135,6 +135,13 @@ export function UsersTable({ users }: UsersTableProps) {
                         <Badge variant="outline" className="gap-1">
                           <Coins className="h-3 w-3" />
                           Control
+                        </Badge>
+                      )}
+                      {(user.role === UserRole.SUPER_ADMIN ||
+                        user.canAccessWhatsApp) && (
+                        <Badge variant="outline" className="gap-1">
+                          <MessageCircle className="h-3 w-3" />
+                          WhatsApp
                         </Badge>
                       )}
                     </div>

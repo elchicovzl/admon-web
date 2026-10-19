@@ -69,6 +69,7 @@ import {
   HandCoins,
   Handshake,
   BookLock,
+  MessageCircle,
 } from 'lucide-react'
 import { UserRole } from '@prisma/client'
 import {
@@ -151,6 +152,11 @@ interface NavItem {
    * sin que eso cambie nada de lo demás (ver User.canAccessControl).
    */
   requiresControlAccess?: boolean
+  /**
+   * Visible solo con acceso al módulo WhatsApp. Igual que Control, es
+   * ortogonal al rol (ver User.canAccessWhatsApp).
+   */
+  requiresWhatsAppAccess?: boolean
   subItems?: NavSubItem[]
 }
 
@@ -231,6 +237,8 @@ interface AppSidebarProps {
      * servidor: esconder un link no protege nada.
      */
     canAccessControl?: boolean
+    /** Igual que canAccessControl: solo pinta el ítem, no autoriza nada. */
+    canAccessWhatsApp?: boolean
   }
 }
 
@@ -438,6 +446,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
       roles: [UserRole.SUPER_ADMIN],
     },
     {
+      title: 'WhatsApp',
+      href: '/dashboard/whatsapp',
+      icon: MessageCircle,
+      requiresWhatsAppAccess: true,
+    },
+    {
       title: 'Configuración',
       href: '/dashboard/settings',
       icon: Settings,
@@ -463,8 +477,12 @@ export function AppSidebar({ user }: AppSidebarProps) {
   const puedeVerControl =
     user.role === UserRole.SUPER_ADMIN || user.canAccessControl === true
 
+  const puedeVerWhatsApp =
+    user.role === UserRole.SUPER_ADMIN || user.canAccessWhatsApp === true
+
   const filteredNavItems = navItems.filter((item) => {
     if (item.requiresControlAccess && !puedeVerControl) return false
+    if (item.requiresWhatsAppAccess && !puedeVerWhatsApp) return false
     if (!item.roles) return true
     return item.roles.includes(user.role)
   })

@@ -22,6 +22,8 @@ export interface SafeUser {
   isActive: boolean
   /** Acceso al módulo Control (caja interna). SUPER_ADMIN entra igual. */
   canAccessControl: boolean
+  /** Acceso al módulo WhatsApp. SUPER_ADMIN entra igual. */
+  canAccessWhatsApp: boolean
   createdAt: Date
   updatedAt: Date
 }

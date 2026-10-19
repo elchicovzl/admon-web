@@ -56,6 +56,7 @@ const USUARIO_ACTIVO = {
   role: UserRole.SUPER_ADMIN,
   isActive: true,
   canAccessControl: false,
+  canAccessWhatsApp: true,
 }
 
 /** Fila de permiso tal como la devuelve el delete. */
@@ -112,6 +113,7 @@ describe('authorize — camino legítimo', () => {
       email: EMAIL,
       role: UserRole.SUPER_ADMIN,
       canAccessControl: false,
+      canAccessWhatsApp: true,
     })
   })
 

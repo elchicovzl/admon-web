@@ -61,6 +61,7 @@ export const getUsers = cache(async (
         role: true,
         isActive: true,
         canAccessControl: true,
+        canAccessWhatsApp: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -110,6 +111,7 @@ export const getManagers = cache(async (): Promise<ActionResponse<SafeUser[]>> =
         role: true,
         isActive: true,
         canAccessControl: true,
+        canAccessWhatsApp: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -157,6 +159,7 @@ export const getUserById = cache(async (
         role: true,
         isActive: true,
         canAccessControl: true,
+        canAccessWhatsApp: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -208,7 +211,7 @@ export async function createManager(
       }
     }
 
-    const { name, email, role, canAccessControl } = validatedFields.data
+    const { name, email, role, canAccessControl, canAccessWhatsApp } = validatedFields.data
 
     // Only allow creating managers
     if (role === UserRole.SUPER_ADMIN) {
@@ -237,6 +240,7 @@ export async function createManager(
         email,
         role: UserRole.MANAGER,
         canAccessControl,
+        canAccessWhatsApp,
         createdById: authCheck.userId,
       },
       select: {
@@ -247,6 +251,7 @@ export async function createManager(
         role: true,
         isActive: true,
         canAccessControl: true,
+        canAccessWhatsApp: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -341,6 +346,7 @@ export async function updateUser(
         role: true,
         isActive: true,
         canAccessControl: true,
+        canAccessWhatsApp: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -561,6 +567,7 @@ export async function updateProfile(
         role: true,
         isActive: true,
         canAccessControl: true,
+        canAccessWhatsApp: true,
         createdAt: true,
         updatedAt: true,
       },

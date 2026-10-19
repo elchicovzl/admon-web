@@ -20,6 +20,10 @@ export const createUserSchema = z.object({
   canAccessControl: z
     .boolean()
     .default(false),
+  // Acceso al módulo WhatsApp. Igual que Control: se otorga explícitamente.
+  canAccessWhatsApp: z
+    .boolean()
+    .default(false),
 })
 
 export type CreateUserInput = z.infer<typeof createUserSchema>
@@ -39,6 +43,9 @@ export const updateUserSchema = z.object({
     .nativeEnum(UserRole)
     .optional(),
   canAccessControl: z
+    .boolean()
+    .optional(),
+  canAccessWhatsApp: z
     .boolean()
     .optional(),
 })

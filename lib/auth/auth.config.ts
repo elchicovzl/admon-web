@@ -94,6 +94,7 @@ export const authConfig = {
             image: user.image ? `/api/avatar/${user.id}` : null,
             role: user.role,
             canAccessControl: user.canAccessControl,
+            canAccessWhatsApp: user.canAccessWhatsApp,
           }
         } catch (error) {
           console.error('Auth error:', error)
@@ -115,6 +116,7 @@ export const authConfig = {
         token.name = user.name
         token.picture = user.image
         token.canAccessControl = user.canAccessControl
+        token.canAccessWhatsApp = user.canAccessWhatsApp
       }
 
       // Re-fetch user data when session update is triggered
@@ -127,6 +129,7 @@ export const authConfig = {
             image: true,
             role: true,
             canAccessControl: true,
+            canAccessWhatsApp: true,
           },
         })
         if (freshUser) {
@@ -135,6 +138,7 @@ export const authConfig = {
           token.picture = freshUser.image ? `/api/avatar/${token.id}` : null
           token.role = freshUser.role
           token.canAccessControl = freshUser.canAccessControl
+          token.canAccessWhatsApp = freshUser.canAccessWhatsApp
         }
       }
 
@@ -151,6 +155,7 @@ export const authConfig = {
         // desactualizado. Sirve para pintar la UI y para el gate barato del
         // middleware — nunca para autorizar una acción. Ver lib/auth/rbac.ts.
         session.user.canAccessControl = token.canAccessControl === true
+        session.user.canAccessWhatsApp = token.canAccessWhatsApp === true
       }
       return session
     },
