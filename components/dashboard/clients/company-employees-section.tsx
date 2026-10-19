@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { CompanyEmployee } from '@/lib/types/client.types'
 import { deactivateEmployment } from '@/lib/actions'
@@ -29,13 +29,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { filterEmployeesByQuery } from '@/lib/utils/employee-search'
 import {
   Users,
   UserPlus,
   MoreHorizontal,
   Eye,
   UserMinus,
-  Plus
+  Plus,
+  Search
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -72,6 +75,11 @@ export function CompanyEmployeesSection({
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
+  const [query, setQuery] = useState('')
+  const filteredEmployees = useMemo(
+    () => filterEmployeesByQuery(employees, query),
+    [employees, query]
+  )
 
   const getIdentificationTypeLabel = (type: IdentificationType) => {
     const labels: Record<IdentificationType, string> = {
@@ -169,6 +177,17 @@ export function CompanyEmployeesSection({
               </p>
             </div>
           ) : (
+            <div className="space-y-3">
+            <div className="relative max-w-sm">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar empleado por nombre o identificación…"
+                className="pl-8"
+              />
+            </div>
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
@@ -182,7 +201,14 @@ export function CompanyEmployeesSection({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {employees.map((employee) => (
+                  {filteredEmployees.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-16 text-center text-sm text-muted-foreground">
+                        Ningún empleado coincide
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {filteredEmployees.map((employee) => (
                     <TableRow key={employee.id}>
                       <TableCell
                         className="font-medium cursor-pointer hover:text-primary hover:underline transition-colors"
@@ -249,6 +275,7 @@ export function CompanyEmployeesSection({
                   ))}
                 </TableBody>
               </Table>
+            </div>
             </div>
           )}
         </CardContent>
