@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 const instances: MockBoss[] = []
 
 let startError: Error | undefined
+let createQueueError: Error | undefined
 
 class MockBoss {
   options: Record<string, unknown>
@@ -12,6 +13,10 @@ class MockBoss {
   })
   stop = vi.fn(async () => {})
   on = vi.fn()
+  createQueue = vi.fn(async (_name: string, _options?: unknown) => {
+    if (createQueueError) throw createQueueError
+  })
+  updateQueue = vi.fn(async () => {})
   constructor(options: Record<string, unknown>) {
     this.options = options
     instances.push(this)
@@ -21,6 +26,20 @@ class MockBoss {
 vi.mock("pg-boss", () => ({ PgBoss: MockBoss }))
 
 const DB_URL = "postgresql://user:pass@localhost:55432/admon"
+
+const ENABLED_ENV = {
+  WHATSAPP_ENABLED: "true",
+  WHATSAPP_APP_SECRET: "app-secret-value",
+  WHATSAPP_VERIFY_TOKEN: "verify-token-value",
+  WHATSAPP_ACCESS_TOKEN: "access-token-value",
+  WHATSAPP_PHONE_NUMBER_ID: "1352461227955884",
+  WHATSAPP_WABA_ID: "877851298749286",
+  WHATSAPP_GRAPH_VERSION: "v25.0",
+}
+
+function enableWhatsApp() {
+  for (const [key, value] of Object.entries(ENABLED_ENV)) vi.stubEnv(key, value)
+}
 
 async function load() {
   vi.resetModules()
@@ -40,6 +59,7 @@ describe("pg-boss lifecycle", () => {
   beforeEach(() => {
     instances.length = 0
     startError = undefined
+    createQueueError = undefined
     sigtermBefore = process.listeners("SIGTERM")
     resetGlobals()
   })
@@ -107,6 +127,7 @@ describe("pg-boss lifecycle", () => {
   })
 
   it("getBoss lazily creates a send-only instance from the configured URL", async () => {
+    enableWhatsApp()
     vi.stubEnv("DIRECT_URL", DB_URL)
     const { getBoss } = await load()
 
@@ -120,7 +141,48 @@ describe("pg-boss lifecycle", () => {
     })
   })
 
+  it("getBoss ensures the queues exist on a send-only instance (WORKER_ENABLED=false)", async () => {
+    enableWhatsApp()
+    vi.stubEnv("WORKER_ENABLED", "false")
+    vi.stubEnv("DIRECT_URL", DB_URL)
+    const { getBoss } = await load()
+
+    await getBoss()
+
+    const created = instances[0].createQueue.mock.calls.map((call) => call[0])
+    expect(created).toContain("wa.dead")
+    expect(created).toContain("wa.message.send")
+    expect(created).toContain("wa.event.process")
+  })
+
+  it("getBoss does not cache a send-only instance whose queue setup failed", async () => {
+    enableWhatsApp()
+    vi.stubEnv("DIRECT_URL", DB_URL)
+    const { getBoss } = await load()
+
+    createQueueError = new Error("ddl denied")
+    await expect(getBoss()).rejects.toThrow("ddl denied")
+    expect(instances[0].stop).toHaveBeenCalled()
+
+    createQueueError = undefined
+    await expect(getBoss()).resolves.toBeDefined()
+    expect(instances).toHaveLength(2)
+  })
+
+  it.each([undefined, "", "false", "yes"])(
+    "getBoss throws and never connects when WHATSAPP_ENABLED=%s",
+    async (value) => {
+      vi.stubEnv("WHATSAPP_ENABLED", value ?? "")
+      vi.stubEnv("DIRECT_URL", DB_URL)
+      const { getBoss } = await load()
+
+      await expect(getBoss()).rejects.toThrow(/WHATSAPP_ENABLED/)
+      expect(instances).toHaveLength(0)
+    }
+  )
+
   it("getBoss fails clearly when no queue database is configured", async () => {
+    enableWhatsApp()
     vi.stubEnv("DIRECT_URL", "")
     vi.stubEnv("QUEUE_DATABASE_URL", "")
     const { getBoss } = await load()

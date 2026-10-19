@@ -1,5 +1,6 @@
 import { PgBoss } from "pg-boss"
 import { getRuntimeConfig } from "@/lib/config/runtime-config"
+import { ensureQueues } from "./queues"
 
 /**
  * pg-boss lives in its own `pgboss` schema on the application database.
@@ -61,13 +62,20 @@ function connect(databaseUrl: string, mode: "server" | "send-only"): Promise<PgB
   const boss = createBoss(databaseUrl, mode)
   g.__bossStarting = boss
     .start()
+    // A send-only process (WORKER_ENABLED=false) never runs the bootstrap, so it
+    // makes sure the queues exist before the first send. Idempotent, safe to race.
+    .then(async () => {
+      if (mode === "send-only") await ensureQueues(boss)
+    })
     .then(() => {
       g.__boss = boss
       registerGracefulShutdown(boss)
       return boss
     })
-    .catch((error) => {
+    .catch(async (error) => {
       g.__bossStarting = undefined
+      // Do not leak a half-initialized pool when the post-start step fails.
+      await boss.stop({ graceful: false }).catch(() => undefined)
       throw error
     })
   return g.__bossStarting
@@ -89,6 +97,12 @@ export async function startBoss(databaseUrl: string): Promise<PgBoss> {
 export async function getBoss(): Promise<PgBoss> {
   if (g.__boss) return g.__boss
   if (g.__bossStarting) return g.__bossStarting
+
+  // Starting pg-boss installs the `pgboss` schema. Never do that while the
+  // feature is off, whatever code path asked for a queue.
+  if (process.env.WHATSAPP_ENABLED?.trim() !== "true") {
+    throw new Error("Queue is unavailable: WHATSAPP_ENABLED is not \"true\"")
+  }
 
   const databaseUrl = getRuntimeConfig().worker.databaseUrl
   if (!databaseUrl) {
