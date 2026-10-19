@@ -220,7 +220,6 @@ describe("runtime config", () => {
 
     it("validates lazily from process.env on first access when nothing is cached", () => {
       vi.stubEnv("WHATSAPP_ENABLED", "")
-      vi.stubEnv("DEBOUNCE_PROBE", "x")
       try {
         expect(getWhatsAppConfig().enabled).toBe(false)
       } finally {

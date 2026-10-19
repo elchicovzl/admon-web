@@ -504,6 +504,13 @@ puede ser una Server Action. Reglas:
   (`wa.event.sweep`, cada minuto) reencola lo que siga sin procesar tras 60 s.
 - Con `WHATSAPP_ENABLED` distinto de `true` solo verifica y guarda; no toca pg-boss.
 - Nunca se loguean secretos, firmas, cuerpos ni teléfonos completos.
+- Procesamiento (`wa.event.process` → `lib/whatsapp/process-event.ts`): un `MESSAGE`
+  crea/actualiza el contacto (match con `Client` por teléfono normalizado: 1 coincidencia
+  = `MATCHED`, varias = `AMBIGUOUS` sin lead, ninguna = lead `NEW`), reutiliza la única
+  conversación del contacto (la reabre si estaba `CLOSED`) y guarda el mensaje. Un
+  `STATUS` se guarda y se aplica de forma monótona (un `delivered` tardío no pisa `read`).
+  Los ECHO se guardan crudos hasta PR1.4. El barrendero ignora eventos con 12 o más
+  intentos (los registra como conteo); siguen guardados para reprocesarlos a mano.
 
 Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
 en `.env.local`):

@@ -3,9 +3,10 @@ import prisma from "@/lib/db/prisma"
 import { QUEUES } from "@/lib/queue/queues"
 import { getRegisteredWorkers, registerWorker } from "@/lib/queue/workers"
 import { isWhatsAppEnabled } from "./ingest"
+import { processWebhookEvent } from "./process-event"
 import { sweepUnprocessedEvents } from "./sweeper"
 
-/** A stored webhook item handed to the processor (implemented in PR1.3). */
+/** A stored webhook item handed to the processor. */
 export interface StoredWebhookEvent {
   id: string
   kind: string
@@ -17,7 +18,7 @@ export type EventProcessor = (event: StoredWebhookEvent) => Promise<void>
 
 let processor: EventProcessor | undefined
 
-/** PR1.3 plugs the real inbound/status processing in here. */
+/** Replaces the event processor; `registerWhatsAppWorkers` installs the real one. */
 export function setEventProcessor(next: EventProcessor | undefined): void {
   processor = next
 }
@@ -28,7 +29,7 @@ const MAX_ERROR_LENGTH = 300
  * `wa.event.process` handler: counts the attempt, hands the stored item to the
  * processor and marks it processed. A processor failure leaves the raw event intact
  * and rethrows so pg-boss retries and finally dead-letters (WC-5, S-WC-9).
- * With no processor registered yet the event is left unprocessed for the sweeper.
+ * With no processor set (tests) the event is left unprocessed for the sweeper.
  */
 export async function handleEventJobs(jobs: Job<{ eventId: string }>[]): Promise<void> {
   if (!isWhatsAppEnabled()) return // S-WC-10: store-only while the flag is off
@@ -68,8 +69,9 @@ export async function handleSweepJobs(): Promise<void> {
   await sweepUnprocessedEvents()
 }
 
-/** Idempotent: registers the ingress handlers once per process. */
+/** Idempotent: registers the ingress handlers and the real event processor once per process. */
 export function registerWhatsAppWorkers(): void {
+  processor ??= processWebhookEvent
   const registered = new Set(getRegisteredWorkers().map((worker) => worker.queue))
   if (!registered.has(QUEUES.EVENT_PROCESS)) {
     registerWorker({ queue: QUEUES.EVENT_PROCESS, handler: handleEventJobs })

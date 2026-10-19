@@ -14,7 +14,8 @@ vi.mock("@/lib/db/prisma", () => ({
 }))
 vi.mock("@/lib/queue/boss", () => ({ getBoss }))
 
-import { GET, MAX_BODY_BYTES, POST } from "../route"
+import { MAX_BODY_BYTES } from "@/lib/whatsapp/webhook-limits"
+import { GET, POST } from "../route"
 
 const SECRET = "test-app-secret"
 const VERIFY = "test-verify-token"

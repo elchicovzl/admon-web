@@ -49,6 +49,9 @@ const pipeList = z
 
 const optionalString = z.string().optional()
 
+/** Quiet period before an AI turn runs. Shared with the queue send defaults so the two cannot drift. */
+export const DEFAULT_AI_DEBOUNCE_SECONDS = 8
+
 const envSchema = z.object({
   // Feature flags (XC-2): everything is off unless explicitly enabled.
   WHATSAPP_ENABLED: flag,
@@ -79,7 +82,7 @@ const envSchema = z.object({
 
   // AI behaviour tuning.
   AI_MIN_SIMILARITY: z.coerce.number().min(0).max(1).default(0.35),
-  AI_DEBOUNCE_SECONDS: positiveInt(8),
+  AI_DEBOUNCE_SECONDS: positiveInt(DEFAULT_AI_DEBOUNCE_SECONDS),
   AI_DEBOUNCE_MAX_SECONDS: positiveInt(30),
   AI_MAX_STEPS: positiveInt(4),
   AI_MAX_TURNS_PER_DAY: positiveInt(30),
@@ -98,6 +101,10 @@ const envSchema = z.object({
   WHATSAPP_HONOR_HOLIDAYS: flag,
 
   // Queue / worker.
+  // INVERTED relative to the feature flags above: the worker is ON unless explicitly
+  // "false" (unset or empty included), because a deployed web process should consume
+  // jobs by default. Only the literal "true"/"false" are accepted; any other value is
+  // rejected at startup. WHATSAPP_ENABLED still gates whether the queue starts at all.
   WORKER_ENABLED: z
     .enum(["true", "false"], { message: 'must be "true" or "false"' })
     .optional()

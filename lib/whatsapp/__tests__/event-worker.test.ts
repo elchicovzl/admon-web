@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-const { findUnique, update } = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn() }))
+const { findUnique, update, processWebhookEvent } = vi.hoisted(() => ({
+  findUnique: vi.fn(),
+  update: vi.fn(),
+  processWebhookEvent: vi.fn(),
+}))
+vi.mock("../process-event", () => ({ processWebhookEvent }))
 vi.mock("@/lib/db/prisma", () => ({ default: { whatsAppWebhookEvent: { findUnique, update } } }))
 vi.mock("../sweeper", () => ({ sweepUnprocessedEvents: vi.fn() }))
 
@@ -85,5 +90,26 @@ describe("registerWhatsAppWorkers", () => {
       "wa.event.process",
       "wa.event.sweep",
     ])
+  })
+
+  it("installs the real event processor so stored events are processed (S-WC-9 path)", async () => {
+    registerWhatsAppWorkers()
+
+    await handleEventJobs([job])
+
+    expect(processWebhookEvent).toHaveBeenCalledWith(expect.objectContaining({ id: "e1" }))
+    expect(update.mock.calls.at(-1)?.[0].data).toMatchObject({ processedAt: expect.any(Date) })
+  })
+
+  it("keeps a processor that was set explicitly", () => {
+    const custom = vi.fn(async () => {})
+    setEventProcessor(custom)
+
+    registerWhatsAppWorkers()
+
+    return handleEventJobs([job]).then(() => {
+      expect(custom).toHaveBeenCalledTimes(1)
+      expect(processWebhookEvent).not.toHaveBeenCalled()
+    })
   })
 })
