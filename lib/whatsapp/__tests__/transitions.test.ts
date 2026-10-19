@@ -312,6 +312,7 @@ describe("applyTransition", () => {
       const inner = {
         conversation: { findUnique: vi.fn().mockResolvedValue({ status: "HUMAN", stateVersion: 1, aiPaused: false }), updateMany: vi.fn() },
         conversationEvent: { create: vi.fn() },
+        whatsAppSettings: { findUnique: vi.fn().mockResolvedValue({ aiEnabled: true }) },
       }
 
       const outcome = await applyTransition(
@@ -322,6 +323,37 @@ describe("applyTransition", () => {
       expect(outcome).toMatchObject({ ok: true, changed: false })
       expect(inner.conversation.findUnique).toHaveBeenCalled()
       expect(tx.conversation.findUnique).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("AI eligibility lookup uses no extra connection", () => {
+    it("reads the settings through the caller's transaction, not the global client", async () => {
+      const inner = {
+        conversation: { findUnique: vi.fn().mockResolvedValue({ status: "HUMAN", stateVersion: 1, aiPaused: false }), updateMany: vi.fn() },
+        conversationEvent: { create: vi.fn() },
+        whatsAppSettings: { findUnique: vi.fn().mockResolvedValue({ aiEnabled: true }) },
+      }
+
+      await applyTransition({ conversationId: "conv-1", event: "INBOUND", actor: "CLIENT" }, { db: inner as never })
+
+      expect(inner.whatsAppSettings.findUnique).toHaveBeenCalledTimes(1)
+      expect(m.settingsFindUnique).not.toHaveBeenCalled()
+    })
+
+    it("does not read the settings at all when the caller pre-resolved them", async () => {
+      seed({ status: "CLOSED" })
+
+      const outcome = await applyTransition(
+        { conversationId: "conv-1", event: "INBOUND", actor: "CLIENT" },
+        { globalAi: true }
+      )
+
+      expect(outcome).toMatchObject({ ok: true, to: "AI" })
+      expect(m.settingsFindUnique).not.toHaveBeenCalled()
+
+      seed({ status: "CLOSED" })
+      await applyTransition({ conversationId: "conv-1", event: "INBOUND", actor: "CLIENT" }, { globalAi: false })
+      expect(db.row.status).toBe("HUMAN")
     })
   })
 
@@ -434,6 +466,26 @@ describe("applyTransitionForPort", () => {
     seed({ status: "CLOSED" })
     await expect(applyTransitionForPort(request)).resolves.toBe(false)
     expect(db.row.status).toBe("CLOSED")
+  })
+
+  it("throws on a lost version race so the echo job retries instead of dropping the takeover", async () => {
+    // Another writer bumps the version between our read and write, both times.
+    const original = tx.conversation.updateMany.getMockImplementation()!
+    tx.conversation.updateMany.mockImplementation(async () => ({ count: 0 }))
+
+    await expect(applyTransitionForPort(request)).rejects.toThrow(/not applied/)
+    expect(db.row.status).toBe("AI")
+
+    tx.conversation.updateMany.mockImplementation(original)
+  })
+
+  it("reports a missing conversation distinctly: logged, not thrown, not silent", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    await expect(applyTransitionForPort({ ...request, conversationId: "gone" })).resolves.toBe(false)
+
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("gone"))
+    error.mockRestore()
   })
 })
 

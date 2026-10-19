@@ -237,10 +237,13 @@ function findStoredMessage(wamid: string) {
 
 async function persistMessage(conversation: Conversation, message: ParsedInboundMessage) {
   const ts = message.timestamp
+  // Resolved before the transaction opens: reading it inside would take a second pooled
+  // connection per inbound message while the transaction holds the first.
+  const globalAi = await isAiGloballyEnabled()
   return prisma.$transaction(async (tx) => {
     // INBOUND is a real transition: a CLOSED conversation reopens (CH-2, CH-11) inside this
     // transaction, so the reopen and the message it carries commit together or not at all.
-    const moved = await applyTransition({ conversationId: conversation.id, event: "INBOUND", actor: "CLIENT" }, { db: tx })
+    const moved = await applyTransition({ conversationId: conversation.id, event: "INBOUND", actor: "CLIENT" }, { db: tx, globalAi })
     if (!moved.ok) throw new Error(`inbound transition failed: ${moved.code}`)
 
     const created = await tx.whatsAppMessage.create({

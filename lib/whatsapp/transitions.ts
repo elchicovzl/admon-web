@@ -19,7 +19,8 @@ import type { ApplyTransition } from "./transition-port"
  * timeout: nothing here moves a conversation out of HUMAN on its own (A15, S-CH-4).
  */
 
-type Db = Pick<Prisma.TransactionClient, "conversation" | "conversationEvent">
+type SettingsDb = Pick<Prisma.TransactionClient, "whatsAppSettings">
+type Db = Pick<Prisma.TransactionClient, "conversation" | "conversationEvent"> & SettingsDb
 
 /** One optimistic retry after losing the version race. */
 const MAX_ATTEMPTS = 2
@@ -40,6 +41,12 @@ export interface TransitionInput {
 export interface TransitionOptions {
   /** Run inside the caller's transaction instead of opening one (inbound persistence). */
   db?: Db
+  /**
+   * Pre-resolved global AI eligibility (see `isAiGloballyEnabled`). Callers that already hold
+   * a transaction read it BEFORE opening the transaction, so the settings lookup never takes a
+   * second pooled connection while the first one is pinned.
+   */
+  globalAi?: boolean
   now?: () => Date
 }
 
@@ -60,9 +67,9 @@ export type TransitionOutcome =
  * Global AI eligibility (kill switches, D9): WHATSAPP_AI_ENABLED and WhatsAppSettings.aiEnabled.
  * The per-conversation `aiPaused` switch is applied on top of this by `applyTransition`.
  */
-export async function isAiGloballyEnabled(): Promise<boolean> {
+export async function isAiGloballyEnabled(db: SettingsDb = prisma): Promise<boolean> {
   if (process.env.WHATSAPP_AI_ENABLED?.trim() !== "true") return false
-  const settings = await prisma.whatsAppSettings.findUnique({
+  const settings = await db.whatsAppSettings.findUnique({
     where: { id: "singleton" },
     select: { aiEnabled: true },
   })
@@ -176,7 +183,9 @@ export async function applyTransition(
 ): Promise<TransitionOutcome> {
   const now = (options.now ?? (() => new Date()))()
   // Only inbound traffic depends on AI eligibility; skip the settings read for everything else.
-  const globalAi = input.event === "INBOUND" ? await isAiGloballyEnabled() : false
+  // A caller-supplied value or transaction is honoured so no extra pooled connection is used.
+  const globalAi =
+    options.globalAi ?? (input.event === "INBOUND" ? await isAiGloballyEnabled(options.db ?? prisma) : false)
 
   for (let tries = 0; tries < MAX_ATTEMPTS; tries++) {
     const outcome = options.db
@@ -239,7 +248,8 @@ export async function setConversationAiPaused(
 /**
  * The real implementation behind `transition-port.ts` (`setApplyTransitionPort`): echo
  * reconciliation asks for HUMAN_ECHO and gets the full state machine, version check and audit.
- * Resolves true only when the conversation actually changed state.
+ * Resolves true only when the conversation actually changed state, false for a legitimate
+ * no-op, and throws on a lost version race so the caller's job retries.
  */
 export const applyTransitionForPort: ApplyTransition = async (request) => {
   const outcome = await applyTransition({
@@ -248,5 +258,18 @@ export const applyTransitionForPort: ApplyTransition = async (request) => {
     actor: request.actor,
     reason: request.reason,
   })
-  return outcome.ok && outcome.changed
+  if (outcome.ok) return outcome.changed
+  switch (outcome.code) {
+    case "CONFLICT":
+      // Lost the version race twice: the takeover is NOT applied. Throw so the job retries
+      // instead of silently dropping it (the echo insert is idempotent on retry).
+      throw new Error(`HUMAN_ECHO not applied for conversation ${request.conversationId}: ${outcome.message}`)
+    case "NOT_FOUND":
+      // Retrying cannot help; surface it distinctly so it is not mistaken for a no-op.
+      console.error(`[whatsapp] echo takeover skipped: conversation ${request.conversationId} not found`)
+      return false
+    default:
+      // The state table legitimately refuses this event here (for example a CLOSED conversation).
+      return false
+  }
 }
