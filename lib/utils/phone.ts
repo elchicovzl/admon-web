@@ -80,3 +80,43 @@ export function formatPhone(dialCode: string, national: string): string {
   const n = national.trim()
   return n ? `+${dialCode} ${n}` : ''
 }
+
+/** E.164 allows at most 15 digits; shorter than 8 cannot be a real subscriber number. */
+const MIN_WA_ID_DIGITS = 8
+const MAX_WA_ID_DIGITS = 15
+
+/**
+ * Normalizes a WhatsApp id (`wa_id`, digits with country code) to digits only.
+ * Returns null when the value cannot be a phone number.
+ */
+export function normalizeWaId(value: string | null | undefined): string | null {
+  const digits = (value ?? '').replace(/\D/g, '')
+  if (digits.length < MIN_WA_ID_DIGITS || digits.length > MAX_WA_ID_DIGITS) return null
+  return digits
+}
+
+/** E.164 representation of a wa_id ("573001234567" -> "+573001234567"). */
+export function waIdToE164(waId: string): string {
+  return `+${waId.replace(/\D/g, '')}`
+}
+
+/**
+ * Digit strings a free-form `Client.phone` may reduce to for this wa_id.
+ *
+ * - `full`: country code + number ("573001234567"), what "+57 300 123 4567" reduces to.
+ * - `national`: the number without country code ("3001234567"). Only produced for the
+ *   default country, because a stored value with no country code is always read as
+ *   Colombian (see `parsePhone`); offering it for other countries would invite false matches.
+ *
+ * Client.phone itself is never rewritten: matching compares digits at query time.
+ */
+export function waIdMatchCandidates(waId: string): string[] {
+  const digits = normalizeWaId(waId)
+  if (!digits) return []
+  const candidates = [digits]
+  const { dialCode } = DEFAULT_PHONE_COUNTRY
+  if (digits.startsWith(dialCode) && digits.length > dialCode.length) {
+    candidates.push(digits.slice(dialCode.length))
+  }
+  return candidates
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatPhone, parsePhone } from '../phone'
+import { formatPhone, normalizeWaId, parsePhone, waIdMatchCandidates, waIdToE164 } from '../phone'
 
 describe('parsePhone', () => {
   it('splits a Colombian number', () => {
@@ -36,5 +36,41 @@ describe('formatPhone', () => {
     const v = '+593 99 123 4567'
     const p = parsePhone(v)
     expect(formatPhone(p.dialCode, p.national)).toBe(v)
+  })
+})
+
+describe('waId helpers', () => {
+  it('normalizes to digits and rejects values that cannot be a phone number', () => {
+    expect(normalizeWaId('+57 300 123 4567')).toBe('573001234567')
+    expect(normalizeWaId('573001234567')).toBe('573001234567')
+    expect(normalizeWaId('123')).toBeNull()
+    expect(normalizeWaId('1234567890123456')).toBeNull()
+    expect(normalizeWaId('')).toBeNull()
+    expect(normalizeWaId(null)).toBeNull()
+  })
+
+  it('renders E.164', () => {
+    expect(waIdToE164('573001234567')).toBe('+573001234567')
+  })
+
+  it('offers full and national candidates for Colombian numbers', () => {
+    expect(waIdMatchCandidates('573001234567')).toEqual(['573001234567', '3001234567'])
+  })
+
+  it('offers only the full number for other countries (national-only values are read as Colombian)', () => {
+    expect(waIdMatchCandidates('13055550100')).toEqual(['13055550100'])
+    expect(waIdMatchCandidates('593991234567')).toEqual(['593991234567'])
+  })
+
+  it('returns no candidates for invalid ids', () => {
+    expect(waIdMatchCandidates('12')).toEqual([])
+  })
+
+  it('does not touch the stored phone format: candidates match what Client.phone reduces to', () => {
+    const stored = ['+57 300 123 4567', '300 123 4567', '3001234567', '573001234567']
+    const candidates = waIdMatchCandidates('573001234567')
+    for (const phone of stored) {
+      expect(candidates).toContain(phone.replace(/\D/g, ''))
+    }
   })
 })
