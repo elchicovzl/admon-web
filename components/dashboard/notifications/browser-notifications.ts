@@ -21,9 +21,13 @@ export async function requestBrowserPermission(): Promise<BrowserPermission> {
   }
 }
 
-/** Shows an OS notification; clicking it focuses this tab and opens the link. */
+/**
+ * Shows an OS notification; clicking it focuses this tab and opens the link. Skipped while the
+ * dashboard is visible: the bell's sound and badge already cover that case.
+ */
 export function showBrowserNotification(spec: BrowserNotificationSpec, open: (link: string) => void): void {
   if (getBrowserPermission() !== 'granted') return
+  if (document.visibilityState === 'visible') return
   try {
     // `renotify` makes a replaced notification (same tag) alert again; it is missing from older DOM typings.
     const options: NotificationOptions & { renotify?: boolean } = {
