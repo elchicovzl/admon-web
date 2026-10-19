@@ -125,7 +125,7 @@ describe("presignGet", () => {
 
     expect(url).toBe("https://signed.example/object")
     const [, command, options] = m.getSignedUrl.mock.calls[0]
-    expect(command.input).toEqual({ Bucket: "bucket", Key: "whatsapp/c/m/id.jpg" })
+    expect(command.input).toEqual({ Bucket: "bucket", Key: "whatsapp/c/m/id.jpg", ResponseContentDisposition: "inline" })
     expect(options).toEqual({ expiresIn: 600 })
   })
 
@@ -136,5 +136,11 @@ describe("presignGet", () => {
     expect(command.input.ResponseContentType).toBe("application/pdf")
     expect(command.input.ResponseContentDisposition).toBe('inline; filename="a_b__.pdf"')
     expect(options).toEqual({ expiresIn: 60 })
+  })
+
+  it("can force a download", async () => {
+    await presignGet("k", { disposition: "attachment" })
+
+    expect(m.getSignedUrl.mock.calls[0][1].input.ResponseContentDisposition).toBe("attachment")
   })
 })

@@ -115,18 +115,21 @@ export interface PresignOptions {
   /** Filename suggested to the browser (downloads). */
   fileName?: string
   contentType?: string
+  /** `inline` renders in the browser (images, audio, PDF); `attachment` forces a download. Defaults to inline. */
+  disposition?: "inline" | "attachment"
 }
 
 /** Short-lived signed GET URL. Authorization is the caller's job; the URL itself is a bearer capability. */
 export async function presignGet(key: string, options: PresignOptions = {}): Promise<string> {
   const safeName = options.fileName?.replace(/[^\w.\- ]/g, "_")
+  const disposition = options.disposition ?? "inline"
   return getSignedUrl(
     getClient(),
     new GetObjectCommand({
       Bucket: getBucket(),
       Key: key,
       ...(options.contentType ? { ResponseContentType: options.contentType } : {}),
-      ...(safeName ? { ResponseContentDisposition: `inline; filename="${safeName}"` } : {}),
+      ResponseContentDisposition: safeName ? `${disposition}; filename="${safeName}"` : disposition,
     }),
     { expiresIn: options.expiresInSeconds ?? DEFAULT_PRESIGN_SECONDS }
   )
