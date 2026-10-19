@@ -1,0 +1,40 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550001111",
+              "phone_number_id": "PNID"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Test User"
+                },
+                "wa_id": "573001234567"
+              }
+            ],
+            "messages": [
+              {
+                "from": "573001234567",
+                "timestamp": "1760000000",
+                "id": "wamid.STICK1",
+                "type": "sticker",
+                "sticker": {
+                  "id": "MEDIA3",
+                  "mime_type": "image/webp"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
