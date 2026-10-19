@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { enqueueEvent, isWhatsAppEnabled, storeWebhookItems } from "@/lib/whatsapp/ingest"
 import { verifySignature } from "@/lib/whatsapp/signature"
+import { MAX_BODY_BYTES } from "@/lib/whatsapp/webhook-limits"
 import {
   malformedWebhookItem,
   sha256Hex,
@@ -18,9 +19,6 @@ import {
  */
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-/** Meta payloads are small; anything bigger is not a legitimate delivery. */
-export const MAX_BODY_BYTES = 1_048_576
 
 function safeEqual(a: string, b: string): boolean {
   // Compare fixed-length digests so neither the content nor the length leaks.
