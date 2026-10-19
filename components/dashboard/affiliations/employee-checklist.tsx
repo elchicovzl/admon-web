@@ -35,6 +35,8 @@ export function EmployeeChecklist({
     [employees, query]
   )
   const visibleIds = visible.map((e) => e.id)
+  // Count only ids still in the list; a selection can outlive its employee
+  const selectedCount = employees.filter((e) => selectedIds.includes(e.id)).length
   const allVisibleSelected =
     visible.length > 0 && visible.every((e) => selectedIds.includes(e.id))
 
@@ -104,7 +106,7 @@ export function EmployeeChecklist({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        {selectedIds.length} de {employees.length} seleccionados
+        {selectedCount} de {employees.length} seleccionados
       </p>
     </div>
   )

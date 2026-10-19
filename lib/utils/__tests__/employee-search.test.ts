@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { filterEmployeesByQuery, normalizeSearchText } from '../employee-search'
+import {
+  filterEmployeesByQuery,
+  normalizeSearchText,
+  toggleVisibleSelection,
+} from '../employee-search'
 
 const employees = [
   { id: '1', fullName: 'José Ángel Pérez', identificationNumber: '1001' },
@@ -30,5 +34,15 @@ describe('filterEmployeesByQuery', () => {
 
   it('returns an empty list when nothing matches', () => {
     expect(filterEmployeesByQuery(employees, 'zzz')).toEqual([])
+  })
+})
+
+describe('toggleVisibleSelection', () => {
+  it('adds the visible ids that are missing and keeps hidden selections', () => {
+    expect(toggleVisibleSelection(['9'], ['1', '2'])).toEqual(['9', '1', '2'])
+  })
+
+  it('removes only the visible ids when all of them are selected', () => {
+    expect(toggleVisibleSelection(['9', '1', '2'], ['1', '2'])).toEqual(['9'])
   })
 })

@@ -29,5 +29,7 @@ Make employee selection in affiliations workable for companies with many employe
 
 - 2026-10-18: T1 done (route: delegated writer). `EmployeeChecklist` + `lib/utils/employee-search.ts` (accent/case-insensitive filter, tested), used in the wizard and add-subprocess dialog; search on the company employees table; `modal` on three list popovers. Writer checks: vitest 977 passed; tsc 37; build OK. Not clicked through in a browser.
 
+- 2026-10-18: 4-lens review of 3a59bb4 approved and acknowledged (lineage review-d96e18f72e741408). Applied 4 of its 5 suggestions on the user's OK: `\u0300-\u036f` escape, selected count limited to listed employees, `toggleVisibleSelection` shared helper (tested) instead of the duplicated toggle, indentation in the company employees section. Skipped: per-keystroke perf note (only matters for very large lists). vitest 979 passed; tsc 37; build OK.
+
 ## Next step
-Browser check; PR.
+Browser check; merge the PR.

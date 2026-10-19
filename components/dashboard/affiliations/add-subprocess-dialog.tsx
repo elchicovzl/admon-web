@@ -33,6 +33,7 @@ import { getCompanyEmployees } from '@/lib/actions/client.actions'
 import { getManagers } from '@/lib/actions'
 import { addSubProcesses } from '@/lib/actions/affiliation.actions'
 import { EmployeeChecklist } from './employee-checklist'
+import { toggleVisibleSelection } from '@/lib/utils/employee-search'
 import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import type { SafeAffiliationSubProcess } from '@/lib/types/affiliation.types'
@@ -156,16 +157,10 @@ export function AddSubProcessDialog({
 
   // Toggles only the given (visible) employees; hidden selections are kept.
   function toggleVisibleEmployeesForType(type: AffiliationSubProcessType, visibleIds: string[]) {
-    setSelectedEmployeesByType((prev) => {
-      const current = prev[type]
-      const allSelected = visibleIds.every((id) => current.includes(id))
-      return {
-        ...prev,
-        [type]: allSelected
-          ? current.filter((id) => !visibleIds.includes(id))
-          : [...current, ...visibleIds.filter((id) => !current.includes(id))],
-      }
-    })
+    setSelectedEmployeesByType((prev) => ({
+      ...prev,
+      [type]: toggleVisibleSelection(prev[type], visibleIds),
+    }))
   }
 
   function resetState() {

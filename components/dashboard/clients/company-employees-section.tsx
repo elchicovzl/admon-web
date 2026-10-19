@@ -178,104 +178,104 @@ export function CompanyEmployeesSection({
             </div>
           ) : (
             <div className="space-y-3">
-            <div className="relative max-w-sm">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar empleado por nombre o identificación…"
-                className="pl-8"
-              />
-            </div>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Identificación</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Días laborados</TableHead>
-                    <TableHead>Fecha de Registro</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredEmployees.length === 0 && (
+              <div className="relative max-w-sm">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar empleado por nombre o identificación…"
+                  className="pl-8"
+                />
+              </div>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="h-16 text-center text-sm text-muted-foreground">
-                        Ningún empleado coincide
-                      </TableCell>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Identificación</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Días laborados</TableHead>
+                      <TableHead>Fecha de Registro</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  )}
-                  {filteredEmployees.map((employee) => (
-                    <TableRow key={employee.id}>
-                      <TableCell
-                        className="font-medium cursor-pointer hover:text-primary hover:underline transition-colors"
-                        onClick={() => handleViewEmployee(employee)}
-                      >
-                        {employee.fullName}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground">
-                            {getIdentificationTypeLabel(employee.identificationType)}
-                          </span>
-                          <span className="font-mono text-sm">
-                            {employee.identificationNumber}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {employee.employeeType ? (
-                          <Badge variant="secondary" className="text-xs">
-                            {EMPLOYEE_TYPE_LABELS[employee.employeeType]}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {employee.workDaysRange
-                          ? WORK_DAYS_LABELS[employee.workDaysRange]
-                          : '—'}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(employee.createdAt), "d 'de' MMMM, yyyy", {
-                          locale: es,
-                        })}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Abrir menú</span>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleViewEmployee(employee)}>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Ver Detalles
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleRemoveEmployee(employee)}
-                              disabled={isRemoving}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <UserMinus className="mr-2 h-4 w-4" />
-                              Desasignar
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredEmployees.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-16 text-center text-sm text-muted-foreground">
+                          Ningún empleado coincide
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {filteredEmployees.map((employee) => (
+                      <TableRow key={employee.id}>
+                        <TableCell
+                          className="font-medium cursor-pointer hover:text-primary hover:underline transition-colors"
+                          onClick={() => handleViewEmployee(employee)}
+                        >
+                          {employee.fullName}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs text-muted-foreground">
+                              {getIdentificationTypeLabel(employee.identificationType)}
+                            </span>
+                            <span className="font-mono text-sm">
+                              {employee.identificationNumber}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {employee.employeeType ? (
+                            <Badge variant="secondary" className="text-xs">
+                              {EMPLOYEE_TYPE_LABELS[employee.employeeType]}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {employee.workDaysRange
+                            ? WORK_DAYS_LABELS[employee.workDaysRange]
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {format(new Date(employee.createdAt), "d 'de' MMMM, yyyy", {
+                            locale: es,
+                          })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Abrir menú</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => handleViewEmployee(employee)}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                Ver Detalles
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleRemoveEmployee(employee)}
+                                disabled={isRemoving}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <UserMinus className="mr-2 h-4 w-4" />
+                                Desasignar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
         </CardContent>

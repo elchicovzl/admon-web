@@ -58,6 +58,7 @@ import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
 import { EmployeeChecklist } from './employee-checklist'
+import { toggleVisibleSelection } from '@/lib/utils/employee-search'
 
 const createAffiliationFormSchema = z.object({
   clientId: z.string().min(1, 'Debe seleccionar un cliente'),
@@ -276,16 +277,10 @@ export function AffiliationCreateWizard({
 
   // Toggles only the given (visible) employees; hidden selections are kept.
   function toggleVisibleEmployeesForType(type: AffiliationSubProcessType, visibleIds: string[]) {
-    setSelectedEmployeesByType((prev) => {
-      const current = prev[type]
-      const allSelected = visibleIds.every((id) => current.includes(id))
-      return {
-        ...prev,
-        [type]: allSelected
-          ? current.filter((id) => !visibleIds.includes(id))
-          : [...current, ...visibleIds.filter((id) => !current.includes(id))],
-      }
-    })
+    setSelectedEmployeesByType((prev) => ({
+      ...prev,
+      [type]: toggleVisibleSelection(prev[type], visibleIds),
+    }))
   }
 
   async function onSubmit(data: CreateAffiliationFormValues) {
