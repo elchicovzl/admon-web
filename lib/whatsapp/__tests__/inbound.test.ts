@@ -19,6 +19,7 @@ const m = vi.hoisted(() => {
     ensureLead: vi.fn(),
     send: vi.fn(),
     getBoss: vi.fn(),
+    order: [] as string[],
   }
 })
 vi.mock("@/lib/db/prisma", () => ({
@@ -26,7 +27,10 @@ vi.mock("@/lib/db/prisma", () => ({
     conversation: { findUnique: m.convFindUnique, create: m.convCreate },
     whatsAppMessage: { findUnique: m.msgFindUnique },
     whatsAppSettings: { findUnique: m.settingsFindUnique },
-    $transaction: (fn: (tx: typeof m.tx) => unknown) => fn(m.tx),
+    $transaction: (fn: (tx: typeof m.tx) => unknown) => {
+      m.order.push("transaction")
+      return fn(m.tx)
+    },
   },
 }))
 vi.mock("@/lib/queue/boss", () => ({ getBoss: m.getBoss }))
@@ -60,7 +64,11 @@ beforeEach(() => {
   m.convFindUnique.mockResolvedValue(conversation)
   m.convCreate.mockImplementation(async ({ data }) => ({ id: "conv-new", ...data }))
   m.msgFindUnique.mockResolvedValue(null)
-  m.settingsFindUnique.mockResolvedValue({ aiEnabled: true })
+  m.order.length = 0
+  m.settingsFindUnique.mockImplementation(async () => {
+    m.order.push("settings")
+    return { aiEnabled: true }
+  })
   m.tx.whatsAppMessage.create.mockImplementation(async ({ data }) => ({
     id: "msg1",
     media: data.media ? { status: "PENDING" } : null,
@@ -156,6 +164,17 @@ describe("processInboundMessage", () => {
       text: "Hola",
       status: "RECEIVED",
     })
+  })
+
+  it("reads the AI settings before opening the transaction, never inside it (pool safety)", async () => {
+    vi.stubEnv("WHATSAPP_AI_ENABLED", "true")
+
+    await processInboundMessage(payloadOf(fixtures.text), RECEIVED)
+
+    // One settings read, strictly before the transaction starts; the transaction client has no
+    // settings access in this mock, so a read through it would have failed the message.
+    expect(m.order).toEqual(["settings", "transaction"])
+    expect(m.tx.whatsAppMessage.create).toHaveBeenCalledTimes(1)
   })
 
   it("starts in AI when both the env flag and the DB switch are on (CH-1)", async () => {
