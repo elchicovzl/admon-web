@@ -52,3 +52,4 @@ The payment receipt ("Recibo de pago") is issued to a **client of the CRM** (`Cl
 
 ## Next step
 User decision above; manual browser check of both flows; PR.
+- 2026-10-18: commit b7b25ab. RDD on origin/master..b7b25ab (committed-only): medium, `slice_budget_reached`, consent granted by the user, one reliability lens, approved with no findings, acknowledged (lineage review-510c876783f99966).
