@@ -10,15 +10,7 @@
  * inspected by hand on a real render, not asserted.
  */
 
-import {
-  Document,
-  Image,
-  Page,
-  StyleSheet,
-  Text,
-  View,
-  renderToBuffer,
-} from '@react-pdf/renderer'
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
 import type { EmisorRecibo } from '@/lib/config/recibo-emisor'
 import type { DatosRecibo } from '@/lib/utils/control-recibo'
 import { formatearFecha, formatearMonto } from '@/lib/utils/control-format'
@@ -44,9 +36,11 @@ const ANCHO_CANTIDAD = 66
 const ANCHO_DESCUENTO = 66
 const ANCHO_TOTAL = 88
 const ANCHO_FECHAS = 150
-// The item area keeps this minimum height so a short receipt still looks like
+// The item area is padded up to this height so a short receipt still looks like
 // the sample (ruled columns running down the page). Each line is budgeted at
-// ALTO_LINEA to size the empty filler that completes the area.
+// ALTO_LINEA to size the empty filler that completes the area; with many (or
+// wrapped) lines the filler shrinks to nothing and the table flows to the next
+// page, where the totals and signature block follow the last item.
 const ALTO_AREA_ITEMS = 420
 const ALTO_LINEA = 24
 
@@ -62,7 +56,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
   logoCol: { width: 90 },
   logo: { width: 80, objectFit: 'contain' },
-  emisor: { flexGrow: 1, flexShrink: 1, alignItems: 'center', textAlign: 'center' },
+  emisor: {
+    flexGrow: 1,
+    flexShrink: 1,
+    alignItems: 'center',
+    textAlign: 'center',
+  },
   emisorNombre: { fontFamily: 'Helvetica-Bold', fontSize: 10 },
   tituloCol: { width: 100, paddingLeft: 8 },
   tituloTexto: { fontSize: 8 },
@@ -76,23 +75,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     overflow: 'hidden',
   },
-  cajaIzq: { flexGrow: 1, flexShrink: 1 },
-  cajaDer: { width: ANCHO_FECHAS, borderLeftWidth: 0.5, borderColor: COLOR_LINEA },
-  filaCaja: { flexDirection: 'row', height: 16, alignItems: 'center' },
+  cajaIzq: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
+  cajaDer: {
+    width: ANCHO_FECHAS,
+    borderLeftWidth: 0.5,
+    borderColor: COLOR_LINEA,
+  },
+  // minHeight, not height: a long name or address wraps and grows the row.
+  filaCaja: { flexDirection: 'row', minHeight: 16, alignItems: 'stretch' },
   filaConBorde: { borderBottomWidth: 0.5, borderColor: COLOR_LINEA },
   etiqueta: {
     width: 62,
-    height: '100%',
     backgroundColor: COLOR_GRIS,
     fontFamily: 'Helvetica-Bold',
     fontSize: 8,
     paddingHorizontal: 3,
     paddingTop: 4,
   },
-  valor: { flexGrow: 1, flexShrink: 1, paddingLeft: 4 },
+  valor: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    paddingLeft: 4,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
   tipoDoc: {
     width: 70,
-    height: '100%',
     backgroundColor: COLOR_GRIS,
     fontFamily: 'Helvetica-Bold',
     fontSize: 8,
@@ -100,9 +110,9 @@ const styles = StyleSheet.create({
     paddingRight: 4,
     paddingTop: 4,
   },
-  numeroDoc: { width: 150, paddingLeft: 4 },
+  numeroDoc: { width: 150, paddingLeft: 4, paddingTop: 4 },
   cabeceraDer: {
-    height: 16,
+    minHeight: 16,
     backgroundColor: COLOR_GRIS,
     fontFamily: 'Helvetica-Bold',
     fontSize: 7,
@@ -110,7 +120,7 @@ const styles = StyleSheet.create({
     paddingTop: 5,
   },
   valorDer: {
-    height: 16,
+    minHeight: 16,
     fontSize: 8,
     textAlign: 'center',
     paddingTop: 4,
@@ -132,10 +142,15 @@ const styles = StyleSheet.create({
     borderRightWidth: 0.5,
     borderBottomWidth: 3,
     borderColor: COLOR_GRIS,
-    minHeight: ALTO_AREA_ITEMS,
   },
   filaItem: { flexDirection: 'row' },
-  colItem: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingHorizontal: 5, paddingVertical: 3 },
+  colItem: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+  },
   colPrecio: { width: ANCHO_PRECIO },
   colCantidad: { width: ANCHO_CANTIDAD },
   colDescuento: { width: ANCHO_DESCUENTO },
@@ -160,7 +175,7 @@ const styles = StyleSheet.create({
   enLetras: { marginBottom: 6 },
   negrita: { fontFamily: 'Helvetica-Bold' },
 
-  firma: { position: 'absolute', left: MARGEN, bottom: 80, width: 190 },
+  firma: { marginTop: 40, width: 190 },
   firmaNombre: { textAlign: 'center', marginBottom: 2, fontSize: 9 },
   firmaLinea: { borderTopWidth: 0.5, borderColor: COLOR_TEXTO, paddingTop: 3 },
   firmaEtiqueta: { textAlign: 'center', fontSize: 8 },
@@ -281,7 +296,7 @@ export function ReciboPagoDocument({ datos, emisor, logoBuffer }: ReciboPagoDocu
             </View>
           ))}
           {/* Empty row that carries the column rules down to the bottom. */}
-          <View style={[styles.filaItem, { height: altoRelleno }]}>
+          <View style={[styles.filaItem, { minHeight: altoRelleno }]}>
             <View style={[styles.colItem, { paddingVertical: 0 }]} />
             <View style={[styles.colPrecio, styles.celdaNumero]} />
             <View style={[styles.colCantidad, styles.celdaNumero]} />
@@ -290,33 +305,36 @@ export function ReciboPagoDocument({ datos, emisor, logoBuffer }: ReciboPagoDocu
           </View>
         </View>
 
-        <View style={styles.resumen} wrap={false}>
-          <View style={styles.resumenIzq}>
-            <Text style={styles.enLetras}>
-              <Text style={styles.negrita}>Son: </Text>
-              {datos.totalEnLetras}
-            </Text>
-            <Text>
-              <Text style={styles.negrita}>Concepto: </Text>
-              {datos.concepto}
-            </Text>
-          </View>
-          <View style={styles.totales}>
-            <View style={styles.totalFila}>
-              <Text style={styles.totalEtiqueta}>Subtotal</Text>
-              <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
+        {/* Totals and signature stay together and flow after the last item. */}
+        <View wrap={false}>
+          <View style={styles.resumen}>
+            <View style={styles.resumenIzq}>
+              <Text style={styles.enLetras}>
+                <Text style={styles.negrita}>Son: </Text>
+                {datos.totalEnLetras}
+              </Text>
+              <Text>
+                <Text style={styles.negrita}>Concepto: </Text>
+                {datos.concepto}
+              </Text>
             </View>
-            <View style={[styles.totalFila, styles.totalFilaGris]}>
-              <Text style={styles.totalEtiqueta}>Total</Text>
-              <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
+            <View style={styles.totales}>
+              <View style={styles.totalFila}>
+                <Text style={styles.totalEtiqueta}>Subtotal</Text>
+                <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
+              </View>
+              <View style={[styles.totalFila, styles.totalFilaGris]}>
+                <Text style={styles.totalEtiqueta}>Total</Text>
+                <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        <View style={styles.firma}>
-          <Text style={styles.firmaNombre}>{datos.elaboradoPor}</Text>
-          <View style={styles.firmaLinea}>
-            <Text style={styles.firmaEtiqueta}>ELABORADO POR</Text>
+          <View style={styles.firma}>
+            <Text style={styles.firmaNombre}>{datos.elaboradoPor}</Text>
+            <View style={styles.firmaLinea}>
+              <Text style={styles.firmaEtiqueta}>ELABORADO POR</Text>
+            </View>
           </View>
         </View>
 

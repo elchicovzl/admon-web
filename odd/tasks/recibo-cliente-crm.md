@@ -63,5 +63,7 @@ The payment receipt ("Recibo de pago") is issued to a **client of the CRM** (`Cl
 - 2026-10-18: local DB: 3 pending migrations applied with `prisma migrate deploy` (20261004, 20261006, 20261018). Production (user-authorized, connection given in chat): only 20261018 was pending; applied with `prisma migrate deploy` through a scratch config that loads no `.env*`; status "up to date". The DB password was shared in chat again and should be rotated.
 - Delivery: single PR to master (user asked for "push y PR"); commits are already reviewed as two slices (T1, T2).
 
+- 2026-10-18: PR #49 opened. Review of origin/master..f1d737a approved and acknowledged (lineage review-d5f662d0fff76cc9) with two warnings, fixed on the user's request (route: delegated writer): `normalizarDocumento(id, tipo?)` strips only dots/hyphens/spaces, returns null when letters remain (no lookup by document; counterparty without document; receipt prints the raw value), and drops the DV of a NIT (`901485874-1` → `901485874`); PDF client box wraps long text (`minHeight`), totals + signature flow together (`wrap={false}`), items spill to further pages without overlap (40-line demo inspected). Table header does not repeat on page 2 (react-pdf `fixed` would duplicate it on page 1). Checks: vitest 972 passed; tsc 37; build OK.
+
 ## Next step
 Merge the PR; browser check of both flows and the PDF download.

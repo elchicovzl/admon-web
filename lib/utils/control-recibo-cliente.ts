@@ -30,14 +30,22 @@ const vacioANull = (valor: string | null | undefined): string | null =>
   valor?.trim() || null
 
 /**
- * Same shape `createContraparteSchema` accepts: digits only, 5 to 15. Anything
- * else ("901.485.874-1" is reduced to digits first) that does not fit comes
- * back as `null`, so the counterparty is created without a document instead of
- * with one the Contraparte catalog would never accept.
+ * Same shape `createContraparteSchema` accepts: digits only, 5 to 15, and a NIT
+ * stored without its DIAN check digit. Only separators (dots, hyphens, spaces)
+ * are stripped; anything left that is not 5-15 digits (a passport such as
+ * "AB123456") comes back as `null`, so the counterparty lookup by document is
+ * skipped and the counterparty is created without one rather than matching an
+ * unrelated record on the digits alone.
  */
-export function normalizarDocumento(identificacion: string): string | null {
-  const digitos = identificacion.replace(/\D/g, '')
-  return /^\d{5,15}$/.test(digitos) ? digitos : null
+export function normalizarDocumento(
+  identificacion: string,
+  tipo?: string | null
+): string | null {
+  let valor = identificacion.trim()
+  // "901.485.874-1": the trailing "-<digit>" of a NIT is the check digit.
+  if (tipo === 'NIT') valor = valor.replace(/\s*-\s*\d$/, '')
+  const limpio = valor.replace(/[.\-\s]/g, '')
+  return /^\d{5,15}$/.test(limpio) ? limpio : null
 }
 
 export async function resolverContraparteDeCliente(
@@ -79,7 +87,10 @@ export async function resolverContraparteDeCliente(
   })
   if (vinculada) return delCliente(vinculada.id)
 
-  const documento = normalizarDocumento(cliente.identificationNumber)
+  const documento = normalizarDocumento(
+    cliente.identificationNumber,
+    cliente.identificationType
+  )
 
   if (documento) {
     const mismoDocumento = await tx.contraparte.findUnique({

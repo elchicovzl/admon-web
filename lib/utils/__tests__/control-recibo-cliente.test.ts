@@ -41,6 +41,17 @@ describe('normalizarDocumento', () => {
     expect(normalizarDocumento('1.020.304.050')).toBe('1020304050')
   })
 
+  it('devuelve null si el documento tiene letras (pasaporte)', () => {
+    expect(normalizarDocumento('AB123456')).toBeNull()
+    expect(normalizarDocumento('AB123456', 'PASAPORTE')).toBeNull()
+  })
+
+  it('quita el dígito de verificación de un NIT', () => {
+    expect(normalizarDocumento('901485874-1', 'NIT')).toBe('901485874')
+    expect(normalizarDocumento('901.485.874-1', 'NIT')).toBe('901485874')
+    expect(normalizarDocumento('901485874', 'NIT')).toBe('901485874')
+  })
+
   it('devuelve null si no cabe en el formato de contraparte', () => {
     expect(normalizarDocumento('AB12')).toBeNull()
     expect(normalizarDocumento('1234567890123456')).toBeNull()
@@ -153,6 +164,53 @@ describe('resolverContraparteDeCliente', () => {
     expect(tx.contraparte.findUnique).toHaveBeenCalledTimes(1)
     expect(tx.contraparte.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ documento: null }) })
+    )
+  })
+
+  it('con pasaporte alfanumérico no busca por documento, crea sin documento e imprime el original', async () => {
+    tx.client.findFirst.mockResolvedValue({
+      ...CLIENTE,
+      identificationType: 'PASAPORTE',
+      identificationNumber: 'AB123456',
+    })
+    tx.contraparte.create.mockResolvedValue({ id: 'c8' })
+
+    const res = await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
+
+    expect(res).toEqual({
+      ok: true,
+      contraparte: {
+        id: 'c8',
+        nombre: 'Ana Pérez',
+        documento: 'AB123456',
+        ...CONTACTO,
+        tipoDocumento: 'PA',
+      },
+    })
+    expect(tx.contraparte.findUnique).toHaveBeenCalledTimes(1)
+    expect(tx.contraparte.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { clientId: CLIENT_ID } })
+    )
+    expect(tx.contraparte.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ documento: null }) })
+    )
+  })
+
+  it('un NIT con dígito de verificación busca y crea con el NIT sin DV', async () => {
+    tx.client.findFirst.mockResolvedValue({
+      ...CLIENTE,
+      identificationType: 'NIT',
+      identificationNumber: '901485874-1',
+    })
+    tx.contraparte.create.mockResolvedValue({ id: 'c9' })
+
+    await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
+
+    expect(tx.contraparte.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { documento: '901485874' } })
+    )
+    expect(tx.contraparte.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ documento: '901485874' }) })
     )
   })
 

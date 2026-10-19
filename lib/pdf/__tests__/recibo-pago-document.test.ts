@@ -79,4 +79,29 @@ describe('ReciboPagoDocument', () => {
     expect(anulado.subarray(0, 4).toString('latin1')).toBe('%PDF')
     expect(anulado.length).toBeGreaterThan(normal.length)
   })
+
+  // Long names/addresses and many lines must wrap and flow onto further pages
+  // instead of throwing or clipping. Pages cannot be counted (compressed
+  // streams), so the extra page shows up as a larger buffer than the short one.
+  it('renderiza un recibo con textos largos y 40 líneas, más grande que el corto', async () => {
+    const largo = await renderizarReciboPdf({
+      datos: {
+        ...datos,
+        cliente: {
+          ...datos.cliente,
+          nombre: 'Corporación Internacional de Servicios Profesionales y Asesorías Jurídicas '.repeat(2),
+          direccion: 'Carrera 74 número 89-95 apartamento 1201 torre 3 conjunto residencial '.repeat(3),
+        },
+        lineas: Array.from({ length: 40 }, (_, i) => ({
+          servicio: `Servicio de administración número ${i + 1}`,
+          referencia: null,
+          monto: 10000,
+        })),
+      },
+      emisor: EMISOR_PRUEBA,
+    })
+    const corto = await render({ logo: false })
+    expect(largo.subarray(0, 4).toString('latin1')).toBe('%PDF')
+    expect(largo.length).toBeGreaterThan(corto.length)
+  })
 })
