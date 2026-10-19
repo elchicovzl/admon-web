@@ -125,6 +125,27 @@ todo queda detrás de flags que **arrancan apagados**:
 - Webhook: `app/api/whatsapp/webhook/route.ts`. Es la **excepción documentada** a "sin API routes" (llamador externo, firma HMAC sobre el body crudo).
 - La imagen de Postgres requiere la extensión `vector` (ver Quick Start). En producción la migración `enable_pgvector` NO se corre hasta que Dokploy use la imagen pgvector.
 
+### Variables de entorno del módulo
+
+Se validan **al arrancar el servidor** (`instrumentation.ts` → `lib/config/runtime-config.ts`), nunca al importar ni durante `next build` (el build corre sin secretos). Si `WHATSAPP_ENABLED=true` y falta alguna variable de Meta, el servidor aborta el arranque con un único error que lista todas las faltantes. Con los flags apagados no se exige nada.
+
+| Variable | Default | Requerida cuando |
+|----------|---------|------------------|
+| `WHATSAPP_ENABLED`, `WHATSAPP_AI_ENABLED`, `WHATSAPP_AI_DRAFTS_ENABLED` | `false` | — |
+| `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID`, `WHATSAPP_GRAPH_VERSION` | — | `WHATSAPP_ENABLED=true` |
+| `WHATSAPP_TEMPLATE_RESUME`, `WHATSAPP_TEMPLATE_PROCESS_UPDATE`, `WHATSAPP_APPROVED_TEMPLATES` (CSV) | vacío | opcional (se conocen tras aprobar plantillas en Meta) |
+| `WHATSAPP_TEMPLATE_LANG` | `es` | — |
+| `ANTHROPIC_API_KEY`, `AI_CHAT_MODEL`, `OPENAI_API_KEY` | — | `WHATSAPP_AI_ENABLED=true` |
+| `AI_EMBEDDING_MODEL` / `AI_EMBEDDING_DIMENSIONS` / `AI_STT_MODEL` | `text-embedding-3-small` / `1536` / `gpt-4o-mini-transcribe` | — |
+| `AI_MIN_SIMILARITY`, `AI_DEBOUNCE_SECONDS`, `AI_DEBOUNCE_MAX_SECONDS`, `AI_MAX_STEPS`, `AI_MAX_TURNS_PER_DAY`, `AI_MAX_CONSECUTIVE_FAILURES`, `AI_MAX_REPLY_AGE_MINUTES` | `0.35`, `8`, `30`, `4`, `30`, `2`, `15` | — |
+| `AI_FORBIDDEN_TOPICS` (lista separada por `\|`) | vacío | — |
+| `WHATSAPP_MEDIA_MAX_BYTES`, `AI_STT_MAX_SECONDS`, `KB_UPLOAD_MAX_BYTES` | `26214400`, `600`, `15728640` | — |
+| `WHATSAPP_RETENTION_DAYS`, `WHATSAPP_WEBHOOK_EVENT_RETENTION_DAYS`, `WHATSAPP_HONOR_HOLIDAYS` | `365`, `30`, `false` | — |
+| `WORKER_ENABLED` | `true` | — |
+| `QUEUE_DATABASE_URL` | cae a `DIRECT_URL` | — |
+
+Cola (`lib/queue/`): con `WHATSAPP_ENABLED` distinto de `true` el arranque es un no-op total (no valida config, no conecta, no crea el schema `pgboss` ni colas). Con `true`, pg-boss crea el schema `pgboss` en la base al arrancar el servidor (necesita permisos DDL con `DIRECT_URL`) y cualquier fallo de config o de la cola aborta el arranque. Topología y reintentos en `lib/queue/queues.ts`; los jobs agotados van a la cola `wa.dead`. Los handlers se registran con `registerWorker` en `lib/queue/workers.ts`.
+
 ---
 
 ## 📋 Comandos Comunes

@@ -11,6 +11,9 @@ const nextConfig = {
       "./node_modules/.pnpm/pdfkit@*/node_modules/pdfkit/js/**/*",
     ],
   },
+  // pg-boss is ESM-only and pulls in `pg`; keep it out of the server bundle so
+  // it loads from node_modules (traced into the standalone output).
+  serverExternalPackages: ["pg-boss"],
   eslint: {
     ignoreDuringBuilds: true,
   },
