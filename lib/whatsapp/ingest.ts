@@ -4,6 +4,7 @@ import prisma from "@/lib/db/prisma"
 import { getBoss } from "@/lib/queue/boss"
 import { QUEUES, QUEUE_SEND_DEFAULTS } from "@/lib/queue/queues"
 import type { WebhookItem } from "./split-payload"
+import { isUniqueViolation } from "./utils"
 
 /** WHATSAPP_ENABLED is read straight from the environment: the flag-off path must not validate config. */
 export function isWhatsAppEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -46,7 +47,7 @@ export async function storeWebhookItems(
     }))
   } catch (error) {
     // A racing delivery that wins the unique constraint is not a failure.
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (isUniqueViolation(error)) {
       return { newEventIds: [], duplicates: rows.length }
     }
     throw error

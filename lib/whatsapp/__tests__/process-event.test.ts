@@ -60,10 +60,14 @@ describe("processWebhookEvent", () => {
     expect(m.recordAndApplyStatus).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ["echo", fixtures.echo],
-    ["unknown", fixtures.unknown],
-  ])("leaves %s items to later PRs without error", async (_name, fixture) => {
+  it("defers echoes so they stay unprocessed until the echo handler exists", async () => {
+    await expect(processWebhookEvent(eventOf(fixtures.echo), RECEIVED)).resolves.toBe("deferred")
+
+    expect(m.processInboundMessage).not.toHaveBeenCalled()
+    expect(m.recordAndApplyStatus).not.toHaveBeenCalled()
+  })
+
+  it.each([["unknown", fixtures.unknown]])("has nothing to do for %s items", async (_name, fixture) => {
     await expect(processWebhookEvent(eventOf(fixture), RECEIVED)).resolves.toBeUndefined()
 
     expect(m.processInboundMessage).not.toHaveBeenCalled()

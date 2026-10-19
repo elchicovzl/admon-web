@@ -509,8 +509,12 @@ puede ser una Server Action. Reglas:
   = `MATCHED`, varias = `AMBIGUOUS` sin lead, ninguna = lead `NEW`), reutiliza la única
   conversación del contacto (la reabre si estaba `CLOSED`) y guarda el mensaje. Un
   `STATUS` se guarda y se aplica de forma monótona (un `delivered` tardío no pisa `read`).
-  Los ECHO se guardan crudos hasta PR1.4. El barrendero ignora eventos con 12 o más
-  intentos (los registra como conteo); siguen guardados para reprocesarlos a mano.
+  Los ECHO se dejan sin procesar (diferidos, sin gastar intentos) hasta que exista su
+  manejador, para no perderlos. Si un despliegue anterior ya los marcó como procesados,
+  reencolarlos con `UPDATE whatsapp_webhook_events SET "processedAt" = NULL, attempts = 0
+  WHERE kind = 'ECHO'`. El barrendero ignora eventos con 12 o más intentos (los registra
+  como conteo); siguen guardados para reprocesarlos a mano. Cada minuto también crea los
+  leads que fallaron tras guardarse el mensaje (contacto sin cliente, con conversación y sin lead).
 
 Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
 en `.env.local`):
