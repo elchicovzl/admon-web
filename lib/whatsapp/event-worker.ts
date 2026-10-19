@@ -1,5 +1,7 @@
 import type { Job } from "pg-boss"
 import prisma from "@/lib/db/prisma"
+import { dbNotifyPort } from "@/lib/notifications/notify"
+import { setNotifyPort } from "@/lib/notifications/port"
 import { QUEUES } from "@/lib/queue/queues"
 import { getRegisteredWorkers, registerWorker } from "@/lib/queue/workers"
 import { recoverMissingLeads } from "./contacts"
@@ -99,6 +101,8 @@ export function registerWhatsAppWorkers(): void {
   processor ??= processWebhookEvent
   // Echo takeover runs through the real state machine instead of the PR1.4 stand-in writer.
   setApplyTransitionPort(applyTransitionForPort)
+  // Staff notifications: producers (leads, escalated activity) reach the in-app fan-out.
+  setNotifyPort(dbNotifyPort)
   const registered = new Set(getRegisteredWorkers().map((worker) => worker.queue))
   if (!registered.has(QUEUES.EVENT_PROCESS)) {
     registerWorker({ queue: QUEUES.EVENT_PROCESS, handler: handleEventJobs })

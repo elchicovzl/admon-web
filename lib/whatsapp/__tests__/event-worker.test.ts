@@ -17,6 +17,8 @@ vi.mock("../echoes", () => ({ handleEchoReconcileJobs: vi.fn() }))
 vi.mock("../media", () => ({ handleMediaJobs: vi.fn() }))
 vi.mock("../transitions", () => ({ applyTransitionForPort }))
 
+import { dbNotifyPort } from "@/lib/notifications/notify"
+import { getNotifyPort, noopNotifyPort, setNotifyPort } from "@/lib/notifications/port"
 import { clearWorkerRegistry, getRegisteredWorkers } from "@/lib/queue/workers"
 import { applyTransitionPort, setApplyTransitionPort } from "../transition-port"
 import { handleEventJobs, handleSweepJobs, registerWhatsAppWorkers, setEventProcessor } from "../event-worker"
@@ -151,6 +153,16 @@ describe("registerWhatsAppWorkers", () => {
     await expect(applyTransitionPort(request)).resolves.toBe(true)
     expect(applyTransitionForPort).toHaveBeenCalledWith(request)
     setApplyTransitionPort()
+  })
+
+  it("registers the in-app notification fan-out behind the notify port (PR4.1)", () => {
+    setNotifyPort()
+    expect(getNotifyPort()).toBe(noopNotifyPort)
+
+    registerWhatsAppWorkers()
+
+    expect(getNotifyPort()).toBe(dbNotifyPort)
+    setNotifyPort()
   })
 
   it("keeps a processor that was set explicitly", () => {
