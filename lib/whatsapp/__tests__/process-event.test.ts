@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { fixtures } from "./fixtures"
 import { splitWebhookPayload } from "../split-payload"
 
-const m = vi.hoisted(() => ({ processInboundMessage: vi.fn(), recordAndApplyStatus: vi.fn() }))
+const m = vi.hoisted(() => ({ processInboundMessage: vi.fn(), recordAndApplyStatus: vi.fn(), processEcho: vi.fn() }))
+vi.mock("../echoes", () => ({ processEcho: m.processEcho }))
 vi.mock("../inbound", () => ({ processInboundMessage: m.processInboundMessage }))
 vi.mock("../statuses", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../statuses")>()),
@@ -60,8 +61,12 @@ describe("processWebhookEvent", () => {
     expect(m.recordAndApplyStatus).not.toHaveBeenCalled()
   })
 
-  it("defers echoes so they stay unprocessed until the echo handler exists", async () => {
-    await expect(processWebhookEvent(eventOf(fixtures.echo), RECEIVED)).resolves.toBe("deferred")
+  it("hands ECHO items to echo reconciliation", async () => {
+    const event = eventOf(fixtures.echo)
+
+    await expect(processWebhookEvent(event, RECEIVED)).resolves.toBeUndefined()
+
+    expect(m.processEcho).toHaveBeenCalledWith(event.payload, { eventId: "e1", receivedAt: RECEIVED })
 
     expect(m.processInboundMessage).not.toHaveBeenCalled()
     expect(m.recordAndApplyStatus).not.toHaveBeenCalled()
