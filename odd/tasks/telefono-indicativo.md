@@ -33,5 +33,7 @@ Phone fields accept numbers from any country: a country (dialing code) selector 
 
 - 2026-10-18: T1 done (route: delegated writer). `lib/utils/phone.ts` (11 countries, `parsePhone`/`formatPhone`, tested), `components/ui/phone-input.tsx` (shadcn Select + IMask for Colombia), used in client, employee and legal-representative forms. Writer checks: vitest 981 passed; tsc 37; build OK. Not clicked through in a browser. Open: República Dominicana not listed (shares +1); switching country keeps typed digits.
 
+- 2026-10-18: review b2b75a9 approved and acknowledged (lineage review-36167b351daa4022). Fixed its warning on the user's OK: switching country clears the number (masks are not portable); the remembered country follows values loaded after mount. tsc 37.
+
 ## Next step
-Browser check; PR.
+Browser check; merge the PR.

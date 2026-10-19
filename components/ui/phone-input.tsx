@@ -36,15 +36,19 @@ export function PhoneInput({ value, onChange, onBlur, disabled, id, className }:
   const parsed = parsePhone(value)
   // An empty number carries no code in the value, so remember the chosen country locally
   const [pickedDial, setPickedDial] = React.useState(parsed.dialCode)
+  // Follow values loaded or reset after mount (e.g. an edit dialog filled later)
+  React.useEffect(() => {
+    if (value) setPickedDial(parsePhone(value).dialCode)
+  }, [value])
   const dialCode = value ? parsed.dialCode : pickedDial
   const country = getCountryByDialCode(dialCode) ?? DEFAULT_PHONE_COUNTRY
 
   const handleCountry = (code: string) => {
     const next = PHONE_COUNTRIES.find((c) => c.code === code) ?? DEFAULT_PHONE_COUNTRY
+    if (next.dialCode === dialCode) return
     setPickedDial(next.dialCode)
-    // National numbers are not portable between masks; keep digits only when the mask changes
-    const national = parsed.national
-    onChange(formatPhone(next.dialCode, national))
+    // National numbers are not portable between masks, so a new country starts empty
+    onChange('')
   }
 
   return (
