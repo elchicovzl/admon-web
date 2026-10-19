@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 
@@ -63,9 +64,6 @@ const ID_MASK_CONFIG: Record<IdentificationType, MaskConfig> = {
   SALVOCONDUCTO:      { type: 'regex',   mask: /^[A-Za-z0-9\-]{1,20}$/, placeholder: 'SC-12345678' },
   NIT:                { type: 'pattern', mask: '000000000-0',   placeholder: '123456789-0' },
 }
-
-const PHONE_MASK = '+57 000 000 0000'
-const PHONE_PLACEHOLDER = '+57 300 123 4567'
 
 interface LegalRepresentativeFormDialogProps {
   open: boolean
@@ -265,14 +263,11 @@ export function LegalRepresentativeFormDialog({
                       control={form.control}
                       name="phone"
                       render={({ field: { onChange, onBlur, value } }) => (
-                        <IMaskInput
-                          mask={PHONE_MASK}
+                        <PhoneInput
                           value={value ?? ''}
-                          onAccept={(val: string) => onChange(val)}
+                          onChange={onChange}
                           onBlur={onBlur}
-                          placeholder={PHONE_PLACEHOLDER}
                           disabled={isLoading}
-                          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         />
                       )}
                     />
