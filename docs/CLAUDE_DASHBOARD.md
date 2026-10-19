@@ -534,7 +534,11 @@ puede ser una Server Action. Reglas:
   `UPDATE whatsapp_webhook_events SET "processedAt" = NULL, attempts = 0 WHERE kind = 'ECHO'`.
   El barrendero ignora eventos con 12 o más intentos (los registra como conteo); siguen
   guardados para reprocesarlos a mano. Cada minuto también crea los leads que fallaron tras
-  guardarse el mensaje (contacto sin cliente, con conversación y sin lead).
+  guardarse el mensaje (contacto sin cliente, con conversación y sin lead): cada fallo suma
+  `leadRecoveryAttempts`, se reintenta tras 15 min y como máximo 5 veces (un contacto que
+  falla siempre no bloquea el lote de 50). Un lead eliminado a propósito se borra con
+  `removeLead` (marca `leadSuppressed`) para que ni el barrido ni un mensaje nuevo lo
+  recreen; un lead `DISCARDED` conserva su fila y tampoco se recrea.
 
 Verificación local (con `WHATSAPP_APP_SECRET=secret` y `WHATSAPP_VERIFY_TOKEN=token`
 en `.env.local`):

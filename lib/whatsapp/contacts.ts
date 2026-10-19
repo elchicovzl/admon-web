@@ -74,20 +74,29 @@ export async function upsertAndMatchContact(input: {
   return contact
 }
 
-export interface EnsureLeadResult {
-  lead: Lead
-  created: boolean
-}
+export type EnsureLeadResult =
+  | { lead: Lead; created: boolean }
+  /** The lead was removed on purpose (`removeLead`); nothing is recreated. */
+  | { lead: null; created: false; suppressed: true }
+
+type LeadContact = Pick<WhatsAppContact, "id" | "waId" | "profileName"> & { leadSuppressed?: boolean }
 
 /**
  * Idempotent: exactly one Lead per contact (unique contactId). A concurrent first message
  * that loses the race re-reads the winner's row (S-LD-3). The NEW_LEAD notification fires
  * only for the call that actually created the lead, and a notifier failure never undoes it.
+ * A contact whose lead was removed on purpose (`leadSuppressed`) never gets a new one here;
+ * only `confirmContactAsUnknown` (an explicit manager decision) lifts that.
  */
-export async function ensureLead(
-  contact: Pick<WhatsAppContact, "id" | "waId" | "profileName">,
+export async function ensureLead(contact: LeadContact, conversationId?: string | null): Promise<EnsureLeadResult> {
+  if (contact.leadSuppressed) return { lead: null, created: false, suppressed: true }
+  return createLeadOnce(contact, conversationId)
+}
+
+async function createLeadOnce(
+  contact: LeadContact,
   conversationId?: string | null
-): Promise<EnsureLeadResult> {
+): Promise<{ lead: Lead; created: boolean }> {
   const existing = await prisma.lead.findUnique({ where: { contactId: contact.id } })
   if (existing) return { lead: existing, created: false }
 
@@ -124,6 +133,18 @@ export async function ensureLead(
 }
 
 /**
+ * Deletes the contact's lead on purpose and remembers it, so neither the next inbound nor the
+ * recovery sweep recreates it. Use this (not a bare `lead.delete`) whenever a person removes a
+ * lead. A DISCARDED lead needs no flag: its row still exists, so it is never "missing".
+ */
+export async function removeLead(contactId: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.lead.deleteMany({ where: { contactId } }),
+    prisma.whatsAppContact.update({ where: { id: contactId }, data: { leadSuppressed: true } }),
+  ])
+}
+
+/**
  * A manager confirms an AMBIGUOUS number belongs to nobody on file (LD-8). The contact is
  * locked as UNMATCHED so the next inbound does not flip it back to ambiguous, and the
  * lead that was withheld is created now.
@@ -131,15 +152,20 @@ export async function ensureLead(
 export async function confirmContactAsUnknown(
   contactId: string,
   conversationId?: string | null
-): Promise<EnsureLeadResult> {
+): Promise<{ lead: Lead; created: boolean }> {
   const contact = await prisma.whatsAppContact.update({
     where: { id: contactId },
-    data: { matchStatus: "UNMATCHED", matchLocked: true, clientId: null },
+    // An explicit confirmation overrides an earlier deliberate removal of the lead.
+    data: { matchStatus: "UNMATCHED", matchLocked: true, clientId: null, leadSuppressed: false },
   })
-  return ensureLead(contact, conversationId)
+  return createLeadOnce(contact, conversationId)
 }
 
 const LEAD_RECOVERY_BATCH = 50
+/** A contact that fails this many sweeps stops being retried (needs a person; see the warning). */
+export const LEAD_RECOVERY_MAX_ATTEMPTS = 5
+/** Minimum wait between two recovery attempts for the same contact. */
+export const LEAD_RECOVERY_COOLDOWN_MS = 15 * 60 * 1000
 
 /**
  * Recovery for a swallowed `ensureLead` failure (LD-2 lets lead creation fail without
@@ -149,12 +175,31 @@ const LEAD_RECOVERY_BATCH = 50
  * anything matching this query is a lead that should exist. Idempotent: `ensureLead`
  * never duplicates. Runs from the `wa.event.sweep` cron; one failure does not stop the
  * rest. Returns how many leads were created.
+ *
+ * Starvation guard: each failed attempt bumps `leadRecoveryAttempts` and stamps
+ * `leadRecoveryAt`; a contact is retried only after the cooldown and at most
+ * LEAD_RECOVERY_MAX_ATTEMPTS times, and never-tried contacts go first, so permanently failing
+ * contacts cannot occupy the whole batch and block healthy ones.
+ *
+ * Deliberate removals are respected: `leadSuppressed` contacts are skipped, and a DISCARDED
+ * lead still has its row, so `lead: null` never matches it.
  */
-export async function recoverMissingLeads(limit: number = LEAD_RECOVERY_BATCH): Promise<number> {
+export async function recoverMissingLeads(
+  limit: number = LEAD_RECOVERY_BATCH,
+  now: Date = new Date()
+): Promise<number> {
+  const retryBefore = new Date(now.getTime() - LEAD_RECOVERY_COOLDOWN_MS)
   const orphans = await prisma.whatsAppContact.findMany({
-    where: { matchStatus: "UNMATCHED", lead: null, conversation: { isNot: null } },
-    select: { id: true, waId: true, profileName: true, conversation: { select: { id: true } } },
-    orderBy: { createdAt: "asc" },
+    where: {
+      matchStatus: "UNMATCHED",
+      leadSuppressed: false,
+      lead: null,
+      conversation: { isNot: null },
+      leadRecoveryAttempts: { lt: LEAD_RECOVERY_MAX_ATTEMPTS },
+      OR: [{ leadRecoveryAt: null }, { leadRecoveryAt: { lt: retryBefore } }],
+    },
+    select: { id: true, waId: true, profileName: true, leadSuppressed: true, conversation: { select: { id: true } } },
+    orderBy: [{ leadRecoveryAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
     take: limit,
   })
 
@@ -164,8 +209,24 @@ export async function recoverMissingLeads(limit: number = LEAD_RECOVERY_BATCH): 
       const result = await ensureLead(contact, contact.conversation?.id)
       if (result.created) created++
     } catch {
-      console.error("[whatsapp] lead recovery failed; will retry on the next sweep")
+      console.error("[whatsapp] lead recovery failed; will retry after the cooldown")
+      await recordRecoveryFailure(contact.id, now)
     }
   }
   return created
+}
+
+async function recordRecoveryFailure(contactId: string, now: Date): Promise<void> {
+  try {
+    const { leadRecoveryAttempts } = await prisma.whatsAppContact.update({
+      where: { id: contactId },
+      data: { leadRecoveryAttempts: { increment: 1 }, leadRecoveryAt: now },
+      select: { leadRecoveryAttempts: true },
+    })
+    if (leadRecoveryAttempts >= LEAD_RECOVERY_MAX_ATTEMPTS) {
+      console.warn(`[whatsapp] lead recovery gave up on contact ${contactId} after ${leadRecoveryAttempts} attempts`)
+    }
+  } catch {
+    console.error("[whatsapp] could not record a lead recovery failure")
+  }
 }
