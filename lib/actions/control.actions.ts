@@ -113,7 +113,10 @@ import {
   validarEmisionRecibo,
   type DatosRecibo,
 } from '@/lib/utils/control-recibo'
-import { resolverContraparteDeCliente } from '@/lib/utils/control-recibo-cliente'
+import {
+  resolverContraparteDeCliente,
+  type ContraparteDeRecibo,
+} from '@/lib/utils/control-recibo-cliente'
 import {
   ERROR_NO_AUTENTICADO,
   ERROR_RECIBO_NO_ENCONTRADO,
@@ -353,7 +356,7 @@ async function crearReciboEnTransaccion(
   tx: Prisma.TransactionClient,
   datos: {
     movimientoId: string
-    contraparte: { id: string; nombre: string; documento: string | null }
+    contraparte: ContraparteDeRecibo
     userId: string
   }
 ): Promise<{ id: string; numero: number }> {
@@ -381,6 +384,10 @@ async function crearReciboEnTransaccion(
       contraparteId: datos.contraparte.id,
       clienteNombre: datos.contraparte.nombre,
       clienteDocumento: datos.contraparte.documento,
+      clienteTipoDocumento: datos.contraparte.tipoDocumento,
+      clienteDireccion: datos.contraparte.direccion,
+      clienteCiudad: datos.contraparte.ciudad,
+      clienteTelefono: datos.contraparte.telefono,
       createdById: datos.userId,
     },
     select: { id: true, numero: true },
@@ -1357,6 +1364,11 @@ export async function getReciboParaPdf(
       numero: true,
       clienteNombre: true,
       clienteDocumento: true,
+      clienteTipoDocumento: true,
+      clienteDireccion: true,
+      clienteCiudad: true,
+      clienteTelefono: true,
+      createdBy: { select: { name: true, email: true } },
       movimiento: {
         select: {
           fecha: true,
@@ -1387,6 +1399,11 @@ export async function getReciboParaPdf(
         fecha: movimiento.fecha,
         clienteNombre: recibo.clienteNombre,
         clienteDocumento: recibo.clienteDocumento,
+        clienteTipoDocumento: recibo.clienteTipoDocumento,
+        clienteDireccion: recibo.clienteDireccion,
+        clienteCiudad: recibo.clienteCiudad,
+        clienteTelefono: recibo.clienteTelefono,
+        elaboradoPor: recibo.createdBy.name?.trim() || recibo.createdBy.email,
         lineas: movimiento.detalleServicios.map((d) => ({
           servicio: d.servicio.nombre,
           referencia: d.servicio.referencia,

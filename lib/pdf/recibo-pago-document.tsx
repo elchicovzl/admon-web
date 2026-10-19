@@ -1,6 +1,8 @@
 /**
  * PDF del recibo de pago. Server-only: se renderiza con `renderToBuffer`.
  *
+ * Layout mirrors the Alegra quote the firm already hands out (logo, centered
+ * issuer, grey client box, ruled item table, totals, "ELABORADO POR" line).
  * Copy is neutral Spanish because the document goes to the client. It uses the
  * built-in Helvetica font (WinAnsi), which covers every accent and "Ñ" used in
  * Spanish. The smoke test only checks that the render produces a PDF (with and
@@ -31,76 +33,150 @@ export interface ReciboPagoDocumentProps {
 }
 
 const COLOR_TEXTO = '#1f2937'
+const COLOR_GRIS = '#a8a8a8'
+const COLOR_LINEA = '#9ca3af'
 const COLOR_SUAVE = '#6b7280'
-const COLOR_LINEA = '#d1d5db'
+
+const MARGEN = 30
+// Width of each numeric column of the item table (Precio, Cantidad, Descuento, Total).
+const ANCHO_PRECIO = 80
+const ANCHO_CANTIDAD = 66
+const ANCHO_DESCUENTO = 66
+const ANCHO_TOTAL = 88
+const ANCHO_FECHAS = 150
+// The item area keeps this minimum height so a short receipt still looks like
+// the sample (ruled columns running down the page). Each line is budgeted at
+// ALTO_LINEA to size the empty filler that completes the area.
+const ALTO_AREA_ITEMS = 420
+const ALTO_LINEA = 24
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 40,
-    paddingHorizontal: 40,
-    paddingBottom: 60,
+    paddingTop: MARGEN,
+    paddingHorizontal: MARGEN,
+    paddingBottom: 50,
     fontFamily: 'Helvetica',
-    fontSize: 10,
+    fontSize: 9,
     color: COLOR_TEXTO,
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-  logo: { width: 140, objectFit: 'contain' },
-  emisor: { alignItems: 'flex-end', maxWidth: 260 },
-  emisorNombre: { fontFamily: 'Helvetica-Bold', fontSize: 12, marginBottom: 2 },
-  suave: { color: COLOR_SUAVE },
-  tituloBloque: {
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: COLOR_LINEA,
-    paddingVertical: 10,
-    marginBottom: 16,
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  logoCol: { width: 90 },
+  logo: { width: 80, objectFit: 'contain' },
+  emisor: { flexGrow: 1, flexShrink: 1, alignItems: 'center', textAlign: 'center' },
+  emisorNombre: { fontFamily: 'Helvetica-Bold', fontSize: 10 },
+  tituloCol: { width: 100, paddingLeft: 8 },
+  tituloTexto: { fontSize: 8 },
+  tituloNumero: { fontFamily: 'Helvetica-Bold', fontSize: 11 },
+
+  caja: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderWidth: 0.5,
+    borderColor: COLOR_LINEA,
+    borderRadius: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
   },
-  titulo: { fontFamily: 'Helvetica-Bold', fontSize: 18 },
-  numero: { fontFamily: 'Helvetica-Bold', fontSize: 14, textAlign: 'right' },
-  etiqueta: { fontSize: 8, color: COLOR_SUAVE, textTransform: 'uppercase', marginBottom: 2 },
-  cliente: { marginBottom: 18 },
-  clienteNombre: { fontFamily: 'Helvetica-Bold', fontSize: 12 },
+  cajaIzq: { flexGrow: 1, flexShrink: 1 },
+  cajaDer: { width: ANCHO_FECHAS, borderLeftWidth: 0.5, borderColor: COLOR_LINEA },
+  filaCaja: { flexDirection: 'row', height: 16, alignItems: 'center' },
+  filaConBorde: { borderBottomWidth: 0.5, borderColor: COLOR_LINEA },
+  etiqueta: {
+    width: 62,
+    height: '100%',
+    backgroundColor: COLOR_GRIS,
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
+    paddingHorizontal: 3,
+    paddingTop: 4,
+  },
+  valor: { flexGrow: 1, flexShrink: 1, paddingLeft: 4 },
+  tipoDoc: {
+    width: 70,
+    height: '100%',
+    backgroundColor: COLOR_GRIS,
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
+    textAlign: 'right',
+    paddingRight: 4,
+    paddingTop: 4,
+  },
+  numeroDoc: { width: 150, paddingLeft: 4 },
+  cabeceraDer: {
+    height: 16,
+    backgroundColor: COLOR_GRIS,
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7,
+    textAlign: 'center',
+    paddingTop: 5,
+  },
+  valorDer: {
+    height: 16,
+    fontSize: 8,
+    textAlign: 'center',
+    paddingTop: 4,
+    paddingHorizontal: 3,
+  },
+
   tablaCabecera: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderColor: COLOR_TEXTO,
-    paddingBottom: 4,
+    backgroundColor: COLOR_GRIS,
     fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
+    height: 16,
+    alignItems: 'center',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
   },
-  fila: {
-    flexDirection: 'row',
-    borderBottomWidth: 0.5,
+  areaItems: {
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderBottomWidth: 3,
+    borderColor: COLOR_GRIS,
+    minHeight: ALTO_AREA_ITEMS,
+  },
+  filaItem: { flexDirection: 'row' },
+  colItem: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingHorizontal: 5, paddingVertical: 3 },
+  colPrecio: { width: ANCHO_PRECIO },
+  colCantidad: { width: ANCHO_CANTIDAD },
+  colDescuento: { width: ANCHO_DESCUENTO },
+  colTotal: { width: ANCHO_TOTAL },
+  celdaNumero: {
+    borderLeftWidth: 0.5,
     borderColor: COLOR_LINEA,
-    paddingVertical: 5,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
   },
-  colServicio: { flexGrow: 1, paddingRight: 8 },
-  colValor: { width: 110, textAlign: 'right' },
-  totalFila: { flexDirection: 'row', paddingTop: 8 },
-  totalEtiqueta: { flexGrow: 1, fontFamily: 'Helvetica-Bold', textAlign: 'right', paddingRight: 8 },
-  totalValor: { width: 110, textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 12 },
-  enLetras: { marginTop: 10 },
-  detalle: { marginTop: 16 },
-  detalleFila: { flexDirection: 'row', marginBottom: 4 },
-  detalleEtiqueta: { width: 90, fontFamily: 'Helvetica-Bold' },
-  detalleValor: { flexGrow: 1, flexShrink: 1 },
+  alineadoDerecha: { textAlign: 'right' },
+  centrado: { textAlign: 'center' },
+  tablaPie: { height: 3 },
+
+  resumen: { flexDirection: 'row', marginTop: 10 },
+  resumenIzq: { flexGrow: 1, flexShrink: 1, paddingRight: 16 },
+  totales: { width: ANCHO_DESCUENTO + ANCHO_TOTAL + ANCHO_CANTIDAD },
+  totalFila: { flexDirection: 'row', height: 15, alignItems: 'center' },
+  totalFilaGris: { backgroundColor: COLOR_GRIS },
+  totalEtiqueta: { flexGrow: 1, textAlign: 'right', paddingRight: 10 },
+  totalValor: { width: ANCHO_TOTAL, textAlign: 'right', paddingRight: 3 },
+  enLetras: { marginBottom: 6 },
+  negrita: { fontFamily: 'Helvetica-Bold' },
+
+  firma: { position: 'absolute', left: MARGEN, bottom: 80, width: 190 },
+  firmaNombre: { textAlign: 'center', marginBottom: 2, fontSize: 9 },
+  firmaLinea: { borderTopWidth: 0.5, borderColor: COLOR_TEXTO, paddingTop: 3 },
+  firmaEtiqueta: { textAlign: 'center', fontSize: 8 },
+
   pie: {
     position: 'absolute',
-    left: 40,
-    right: 40,
-    bottom: 30,
-    borderTopWidth: 0.5,
-    borderColor: COLOR_LINEA,
-    paddingTop: 8,
+    left: MARGEN,
+    right: MARGEN,
+    bottom: 28,
     textAlign: 'center',
-    fontSize: 9,
+    fontSize: 8,
     color: COLOR_SUAVE,
   },
   anuladoMarca: {
     position: 'absolute',
-    top: 300,
+    top: 330,
     left: 0,
     right: 0,
     textAlign: 'center',
@@ -122,7 +198,9 @@ const styles = StyleSheet.create({
 })
 
 export function ReciboPagoDocument({ datos, emisor, logoBuffer }: ReciboPagoDocumentProps) {
-  const ubicacion = [emisor.direccion, emisor.ciudad].filter(Boolean).join(', ')
+  const ubicacion = [emisor.direccion, emisor.ciudad].filter(Boolean).join(' - ')
+  const { cliente } = datos
+  const altoRelleno = Math.max(0, ALTO_AREA_ITEMS - datos.lineas.length * ALTO_LINEA)
 
   return (
     <Document title={`Recibo de pago ${datos.numeroFormateado}`} author={emisor.razonSocial}>
@@ -130,66 +208,115 @@ export function ReciboPagoDocument({ datos, emisor, logoBuffer }: ReciboPagoDocu
         {datos.anulado ? <Text style={styles.anuladoBanner}>ANULADO</Text> : null}
 
         <View style={styles.header}>
-          {logoBuffer ? (
-            <Image src={{ data: Buffer.from(logoBuffer), format: 'png' }} style={styles.logo} />
-          ) : (
-            <View />
-          )}
+          <View style={styles.logoCol}>
+            {logoBuffer ? (
+              <Image src={{ data: Buffer.from(logoBuffer), format: 'png' }} style={styles.logo} />
+            ) : null}
+          </View>
           <View style={styles.emisor}>
             <Text style={styles.emisorNombre}>{emisor.razonSocial}</Text>
             <Text>NIT {emisor.nit}</Text>
-            <Text style={styles.suave}>{ubicacion}</Text>
-            <Text style={styles.suave}>Tel. {emisor.telefono}</Text>
-            <Text style={styles.suave}>{emisor.email}</Text>
+            <Text>{ubicacion}</Text>
+            <Text>{emisor.telefono}</Text>
+            <Text>{emisor.email}</Text>
+          </View>
+          <View style={styles.tituloCol}>
+            <Text style={styles.tituloTexto}>Recibo de pago</Text>
+            <Text style={styles.tituloNumero}>No. {datos.numeroFormateado}</Text>
           </View>
         </View>
 
-        <View style={styles.tituloBloque}>
-          <Text style={styles.titulo}>RECIBO DE PAGO</Text>
-          <View>
-            <Text style={styles.numero}>{datos.numeroFormateado}</Text>
-            <Text style={[styles.suave, { textAlign: 'right' }]}>
-              Fecha: {formatearFecha(datos.fecha)}
-            </Text>
+        <View style={styles.caja}>
+          <View style={styles.cajaIzq}>
+            <View style={[styles.filaCaja, styles.filaConBorde]}>
+              <Text style={styles.etiqueta}>SEÑOR(ES)</Text>
+              <Text style={styles.valor}>{cliente.nombre}</Text>
+            </View>
+            <View style={[styles.filaCaja, styles.filaConBorde]}>
+              <Text style={styles.etiqueta}>DIRECCIÓN</Text>
+              <Text style={styles.valor}>{cliente.direccion}</Text>
+            </View>
+            <View style={[styles.filaCaja, styles.filaConBorde]}>
+              <Text style={styles.etiqueta}>CIUDAD</Text>
+              <Text style={styles.valor}>{cliente.ciudad}</Text>
+            </View>
+            <View style={styles.filaCaja}>
+              <Text style={styles.etiqueta}>TELÉFONO</Text>
+              <Text style={styles.valor}>{cliente.telefono}</Text>
+              <Text style={styles.tipoDoc}>{cliente.tipoDocumento}</Text>
+              <Text style={styles.numeroDoc}>{cliente.documento ?? ''}</Text>
+            </View>
           </View>
-        </View>
-
-        <View style={styles.cliente}>
-          <Text style={styles.etiqueta}>Cliente</Text>
-          <Text style={styles.clienteNombre}>{datos.cliente.nombre}</Text>
-          {datos.cliente.documento ? (
-            <Text style={styles.suave}>Documento: {datos.cliente.documento}</Text>
-          ) : null}
+          <View style={styles.cajaDer}>
+            <Text style={styles.cabeceraDer}>FECHA DE EXPEDICIÓN</Text>
+            <Text style={styles.valorDer}>{formatearFecha(datos.fecha)}</Text>
+            <Text style={styles.cabeceraDer}>MEDIO DE PAGO</Text>
+            <Text style={styles.valorDer}>{datos.medioDePago}</Text>
+          </View>
         </View>
 
         <View style={styles.tablaCabecera}>
-          <Text style={styles.colServicio}>Servicio</Text>
-          <Text style={styles.colValor}>Valor</Text>
+          <Text style={[styles.colItem, styles.centrado]}>Ítem</Text>
+          <Text style={[styles.colPrecio, styles.centrado]}>Precio</Text>
+          <Text style={[styles.colCantidad, styles.centrado]}>Cantidad</Text>
+          <Text style={[styles.colDescuento, styles.centrado]}>Descuento</Text>
+          <Text style={[styles.colTotal, styles.centrado]}>Total</Text>
         </View>
-        {datos.lineas.map((linea, indice) => (
-          <View key={indice} style={styles.fila} wrap={false}>
-            <Text style={styles.colServicio}>{linea.servicio}</Text>
-            <Text style={styles.colValor}>{formatearMonto(linea.monto)}</Text>
+        <View style={styles.areaItems}>
+          {datos.lineas.map((linea, indice) => (
+            <View key={indice} style={styles.filaItem} wrap={false}>
+              <Text style={styles.colItem}>{linea.servicio}</Text>
+              <View style={[styles.colPrecio, styles.celdaNumero]}>
+                <Text style={styles.alineadoDerecha}>{formatearMonto(linea.monto)}</Text>
+              </View>
+              <View style={[styles.colCantidad, styles.celdaNumero]}>
+                <Text style={styles.centrado}>1</Text>
+              </View>
+              <View style={[styles.colDescuento, styles.celdaNumero]}>
+                <Text style={styles.centrado}>0.00%</Text>
+              </View>
+              <View style={[styles.colTotal, styles.celdaNumero]}>
+                <Text style={styles.alineadoDerecha}>{formatearMonto(linea.monto)}</Text>
+              </View>
+            </View>
+          ))}
+          {/* Empty row that carries the column rules down to the bottom. */}
+          <View style={[styles.filaItem, { height: altoRelleno }]}>
+            <View style={[styles.colItem, { paddingVertical: 0 }]} />
+            <View style={[styles.colPrecio, styles.celdaNumero]} />
+            <View style={[styles.colCantidad, styles.celdaNumero]} />
+            <View style={[styles.colDescuento, styles.celdaNumero]} />
+            <View style={[styles.colTotal, styles.celdaNumero]} />
           </View>
-        ))}
-
-        <View style={styles.totalFila}>
-          <Text style={styles.totalEtiqueta}>TOTAL</Text>
-          <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
         </View>
-        <Text style={styles.enLetras}>
-          <Text style={{ fontFamily: 'Helvetica-Bold' }}>Son: </Text>
-          {datos.totalEnLetras}
-        </Text>
 
-        <View style={styles.detalle}>
-          <View style={styles.detalleFila}>
-            <Text style={styles.detalleEtiqueta}>Medio de pago</Text>
-            <Text style={styles.detalleValor}>{datos.medioDePago}</Text>
+        <View style={styles.resumen} wrap={false}>
+          <View style={styles.resumenIzq}>
+            <Text style={styles.enLetras}>
+              <Text style={styles.negrita}>Son: </Text>
+              {datos.totalEnLetras}
+            </Text>
+            <Text>
+              <Text style={styles.negrita}>Concepto: </Text>
+              {datos.concepto}
+            </Text>
           </View>
-          <View style={styles.detalleFila}>
-            <Text style={styles.detalleEtiqueta}>Concepto</Text>
-            <Text style={styles.detalleValor}>{datos.concepto}</Text>
+          <View style={styles.totales}>
+            <View style={styles.totalFila}>
+              <Text style={styles.totalEtiqueta}>Subtotal</Text>
+              <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
+            </View>
+            <View style={[styles.totalFila, styles.totalFilaGris]}>
+              <Text style={styles.totalEtiqueta}>Total</Text>
+              <Text style={styles.totalValor}>{formatearMonto(datos.total)}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.firma}>
+          <Text style={styles.firmaNombre}>{datos.elaboradoPor}</Text>
+          <View style={styles.firmaLinea}>
+            <Text style={styles.firmaEtiqueta}>ELABORADO POR</Text>
           </View>
         </View>
 

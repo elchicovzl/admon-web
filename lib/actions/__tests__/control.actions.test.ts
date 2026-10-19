@@ -3217,7 +3217,10 @@ describe('recibo de pago', () => {
     prismaMock.client.findFirst.mockResolvedValue({
       id: CLIENT_ID,
       fullName: 'Ana Pérez',
+      identificationType: 'CEDULA',
       identificationNumber: '1020304050',
+      phone: '3015106144',
+      address: { direccion: 'Cra 74 # 89-95', ciudad: null, municipio: 'Medellín' },
     })
     // Already linked: the resolver finds it by `clientId`.
     prismaMock.contraparte.findUnique.mockResolvedValue(CLIENTE)
@@ -3283,6 +3286,10 @@ describe('recibo de pago', () => {
           contraparteId: CLIENTE_ID,
           clienteNombre: 'Ana Pérez',
           clienteDocumento: '1020304050',
+          clienteTipoDocumento: 'CC',
+          clienteDireccion: 'Cra 74 # 89-95',
+          clienteCiudad: 'Medellín',
+          clienteTelefono: '3015106144',
           createdById: USER_ID,
         },
         select: { id: true, numero: true },
@@ -3600,6 +3607,11 @@ describe('recibo de pago', () => {
         numero: 12,
         clienteNombre: 'Ana Pérez',
         clienteDocumento: null,
+        clienteTipoDocumento: null,
+        clienteDireccion: null,
+        clienteCiudad: null,
+        clienteTelefono: null,
+        createdBy: { name: 'Luisa Gómez', email: 'luisa@example.com' },
         movimiento: {
           fecha: new Date('2026-10-04T00:00:00.000Z'),
           concepto: 'Pago de servicios',
@@ -3622,7 +3634,16 @@ describe('recibo de pago', () => {
       expect(res.success).toBe(true)
       expect(res.data).toMatchObject({
         numeroFormateado: 'RP-0012',
-        cliente: { nombre: 'Ana Pérez', documento: null },
+        // Receipts issued before the contact snapshot print blanks.
+        cliente: {
+          nombre: 'Ana Pérez',
+          documento: null,
+          tipoDocumento: '',
+          direccion: '',
+          ciudad: '',
+          telefono: '',
+        },
+        elaboradoPor: 'Luisa Gómez',
         total: 300000,
         medioDePago: 'Bancolombia',
         anulado: false,
@@ -3630,6 +3651,29 @@ describe('recibo de pago', () => {
           { servicio: 'Administración', referencia: '01', monto: 100000 },
           { servicio: 'Afiliación', referencia: null, monto: 200000 },
         ],
+      })
+    })
+
+    it('imprime la copia fija del contacto del cliente y el email si el usuario no tiene nombre', async () => {
+      prismaMock.reciboPago.findUnique.mockResolvedValue({
+        ...reciboConMovimiento(null),
+        clienteTipoDocumento: 'NIT',
+        clienteDireccion: 'Cra 43A # 34-95',
+        clienteCiudad: 'Medellín',
+        clienteTelefono: '3197941064',
+        createdBy: { name: null, email: 'luisa@example.com' },
+      })
+
+      const res = await getReciboParaPdf('crecibo000012')
+
+      expect(res.data).toMatchObject({
+        cliente: {
+          tipoDocumento: 'NIT',
+          direccion: 'Cra 43A # 34-95',
+          ciudad: 'Medellín',
+          telefono: '3197941064',
+        },
+        elaboradoPor: 'luisa@example.com',
       })
     })
 

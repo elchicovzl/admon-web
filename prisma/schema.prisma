@@ -1634,6 +1634,13 @@ model ReciboPago {
   clienteNombre    String
   clienteDocumento String?
 
+  // Contact snapshot taken at issue time (the receipt is a fixed copy). Null on
+  // receipts issued before these columns existed; the PDF prints blanks.
+  clienteTipoDocumento String?
+  clienteDireccion     String?
+  clienteCiudad        String?
+  clienteTelefono      String?
+
   createdAt   DateTime @default(now())
   createdById String
   createdBy   User     @relation("ReciboPagoCreatedBy", fields: [createdById], references: [id])

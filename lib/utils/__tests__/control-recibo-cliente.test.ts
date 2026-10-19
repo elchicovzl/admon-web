@@ -14,7 +14,21 @@ const txCliente = tx as unknown as Prisma.TransactionClient
 
 const CLIENT_ID = 'cclienteana001'
 const USER_ID = 'cuser0000001'
-const CLIENTE = { id: CLIENT_ID, fullName: 'Ana Pérez', identificationNumber: '1.020.304.050' }
+const CLIENTE = {
+  id: CLIENT_ID,
+  fullName: 'Ana Pérez',
+  identificationType: 'CEDULA',
+  identificationNumber: '1.020.304.050',
+  phone: '301 510 6144',
+  address: { direccion: 'Cra 74 # 89-95', ciudad: 'Envigado', municipio: 'Medellín' },
+}
+// Contact snapshot the resolver derives from CLIENTE.
+const CONTACTO = {
+  tipoDocumento: 'CC',
+  direccion: 'Cra 74 # 89-95',
+  ciudad: 'Envigado',
+  telefono: '301 510 6144',
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -42,7 +56,7 @@ describe('resolverContraparteDeCliente', () => {
 
     expect(res).toEqual({
       ok: true,
-      contraparte: { id: 'ccontra00001', nombre: 'Ana Pérez', documento: '1.020.304.050' },
+      contraparte: { id: 'ccontra00001', nombre: 'Ana Pérez', documento: '1.020.304.050', ...CONTACTO },
     })
     expect(tx.contraparte.create).not.toHaveBeenCalled()
     expect(tx.contraparte.update).not.toHaveBeenCalled()
@@ -62,7 +76,7 @@ describe('resolverContraparteDeCliente', () => {
 
     expect(res).toEqual({
       ok: true,
-      contraparte: { id: 'ccontra00002', nombre: 'Ana Pérez', documento: '1.020.304.050' },
+      contraparte: { id: 'ccontra00002', nombre: 'Ana Pérez', documento: '1.020.304.050', ...CONTACTO },
     })
     expect(tx.contraparte.update).toHaveBeenCalledWith({
       where: { id: 'ccontra00002' },
@@ -82,7 +96,7 @@ describe('resolverContraparteDeCliente', () => {
 
     expect(res).toEqual({
       ok: true,
-      contraparte: { id: 'ccontra00003', nombre: 'Ana Pérez', documento: '1.020.304.050' },
+      contraparte: { id: 'ccontra00003', nombre: 'Ana Pérez', documento: '1.020.304.050', ...CONTACTO },
     })
     expect(tx.contraparte.create).toHaveBeenCalledWith({
       data: {
@@ -134,11 +148,37 @@ describe('resolverContraparteDeCliente', () => {
 
     expect(res).toEqual({
       ok: true,
-      contraparte: { id: 'c5', nombre: 'Ana Pérez', documento: 'PA-12' },
+      contraparte: { id: 'c5', nombre: 'Ana Pérez', documento: 'PA-12', ...CONTACTO },
     })
     expect(tx.contraparte.findUnique).toHaveBeenCalledTimes(1)
     expect(tx.contraparte.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ documento: null }) })
     )
+  })
+
+  it('usa el municipio como ciudad si el cliente no tiene ciudad', async () => {
+    tx.client.findFirst.mockResolvedValue({
+      ...CLIENTE,
+      address: { direccion: 'Cra 1', ciudad: null, municipio: 'Bello' },
+    })
+    tx.contraparte.findUnique.mockResolvedValueOnce({ id: 'c6', nombre: 'x', documento: null })
+
+    const res = await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
+
+    expect(res.ok && res.contraparte).toMatchObject({ direccion: 'Cra 1', ciudad: 'Bello' })
+  })
+
+  it('devuelve null en el contacto que el CRM no tiene', async () => {
+    tx.client.findFirst.mockResolvedValue({ ...CLIENTE, phone: '  ', address: null })
+    tx.contraparte.findUnique.mockResolvedValueOnce({ id: 'c7', nombre: 'x', documento: null })
+
+    const res = await resolverContraparteDeCliente(txCliente, CLIENT_ID, USER_ID)
+
+    expect(res.ok && res.contraparte).toMatchObject({
+      tipoDocumento: 'CC',
+      direccion: null,
+      ciudad: null,
+      telefono: null,
+    })
   })
 })

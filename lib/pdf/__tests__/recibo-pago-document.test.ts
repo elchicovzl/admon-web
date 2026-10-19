@@ -9,7 +9,12 @@ const datos = armarDatosRecibo({
   numero: 1,
   fecha: new Date('2026-10-04T00:00:00.000Z'),
   clienteNombre: 'Ana Núñez Peña',
-  clienteDocumento: 'CC 1.020.304.050',
+  clienteDocumento: '1.020.304.050',
+  clienteTipoDocumento: 'CC',
+  clienteDireccion: 'Cra 74 # 89-95',
+  clienteCiudad: 'Medellín',
+  clienteTelefono: '301 510 6144',
+  elaboradoPor: 'Luisa Gómez',
   lineas: [
     { servicio: 'Administración', referencia: '01', monto: 150000 },
     { servicio: 'Afiliación', referencia: null, monto: 250000 },
@@ -51,6 +56,18 @@ describe('ReciboPagoDocument', () => {
     const pdf = await render({ logo: false })
     expect(pdf.subarray(0, 4).toString('latin1')).toBe('%PDF')
     expect(pdf.length).toBeGreaterThan(1000)
+  })
+
+  it('renderiza un recibo antiguo sin datos de contacto y sin firmante', async () => {
+    const pdf = await renderizarReciboPdf({
+      datos: {
+        ...datos,
+        cliente: { ...datos.cliente, tipoDocumento: '', direccion: '', ciudad: '', telefono: '' },
+        elaboradoPor: '',
+      },
+      emisor: EMISOR_PRUEBA,
+    })
+    expect(pdf.subarray(0, 4).toString('latin1')).toBe('%PDF')
   })
 
   // react-pdf compresses the content streams, so the text "ANULADO" cannot be

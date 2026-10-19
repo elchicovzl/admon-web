@@ -7,11 +7,17 @@
  */
 
 import { Prisma, TipoContraparte } from '@prisma/client'
+import { etiquetaTipoDocumento } from '@/lib/utils/control-recibo'
 
 export interface ContraparteDeRecibo {
   id: string
   nombre: string
   documento: string | null
+  /** Contact snapshot copied onto the receipt; null when the CRM has none. */
+  tipoDocumento: string | null
+  direccion: string | null
+  ciudad: string | null
+  telefono: string | null
 }
 
 export type ResolucionCliente =
@@ -19,6 +25,9 @@ export type ResolucionCliente =
   | { ok: false; error: string }
 
 const SELECT_CONTRAPARTE = { id: true, nombre: true, documento: true } as const
+
+const vacioANull = (valor: string | null | undefined): string | null =>
+  valor?.trim() || null
 
 /**
  * Same shape `createContraparteSchema` accepts: digits only, 5 to 15. Anything
@@ -38,7 +47,14 @@ export async function resolverContraparteDeCliente(
 ): Promise<ResolucionCliente> {
   const cliente = await tx.client.findFirst({
     where: { id: clientId, isActive: true },
-    select: { id: true, fullName: true, identificationNumber: true },
+    select: {
+      id: true,
+      fullName: true,
+      identificationType: true,
+      identificationNumber: true,
+      phone: true,
+      address: { select: { direccion: true, ciudad: true, municipio: true } },
+    },
   })
   if (!cliente) return { ok: false, error: 'Cliente no encontrado' }
 
@@ -50,6 +66,10 @@ export async function resolverContraparteDeCliente(
       id,
       nombre: cliente.fullName,
       documento: cliente.identificationNumber.trim() || null,
+      tipoDocumento: etiquetaTipoDocumento(cliente.identificationType) || null,
+      direccion: vacioANull(cliente.address?.direccion),
+      ciudad: vacioANull(cliente.address?.ciudad) ?? vacioANull(cliente.address?.municipio),
+      telefono: vacioANull(cliente.phone),
     },
   })
 

@@ -196,11 +196,41 @@ export function validarEmisionRecibo(
 // Modelo de vista del PDF
 // ---------------------------------------------------------------------------
 
+/**
+ * Short label of a document type as printed on the receipt ("CC", "NIT").
+ * Takes the `IdentificationType` enum value as a plain string so this module
+ * stays free of Prisma. An unknown or missing value prints blank rather than a
+ * made-up label.
+ */
+const ETIQUETAS_TIPO_DOCUMENTO: Record<string, string> = {
+  CEDULA: 'CC',
+  TARJETA_IDENTIDAD: 'TI',
+  REGISTRO_CIVIL: 'RC',
+  CEDULA_EXTRANJERIA: 'CE',
+  PASAPORTE: 'PA',
+  PPT: 'PPT',
+  PEP: 'PEP',
+  NUIP: 'NUIP',
+  SALVOCONDUCTO: 'SC',
+  NIT: 'NIT',
+}
+
+export function etiquetaTipoDocumento(tipo: string | null | undefined): string {
+  return (tipo && ETIQUETAS_TIPO_DOCUMENTO[tipo]) || ''
+}
+
 export interface EntradaArmarDatosRecibo {
   numero: number
   fecha: Date
   clienteNombre: string
   clienteDocumento: string | null
+  /** Contact snapshot; null on receipts issued before it was stored. */
+  clienteTipoDocumento?: string | null
+  clienteDireccion?: string | null
+  clienteCiudad?: string | null
+  clienteTelefono?: string | null
+  /** Name of the user who issued the receipt ("ELABORADO POR"). */
+  elaboradoPor?: string | null
   lineas: Array<{ servicio: string; referencia: string | null; monto: number }>
   /** Movement amount; must equal the sum of the lines. */
   monto: number
@@ -212,13 +242,22 @@ export interface EntradaArmarDatosRecibo {
 export interface DatosRecibo {
   numeroFormateado: string
   fecha: Date
-  cliente: { nombre: string; documento: string | null }
+  cliente: {
+    nombre: string
+    documento: string | null
+    /** Short label ("CC", "NIT"); empty when unknown. */
+    tipoDocumento: string
+    direccion: string
+    ciudad: string
+    telefono: string
+  }
   lineas: Array<{ servicio: string; referencia: string | null; monto: number }>
   total: number
   totalEnLetras: string
   medioDePago: string
   concepto: string
   anulado: boolean
+  elaboradoPor: string
 }
 
 /** Builds the plain view model the PDF renders. No Prisma types, no I/O. */
@@ -230,7 +269,14 @@ export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
   return {
     numeroFormateado: formatearNumeroRecibo(input.numero),
     fecha: input.fecha,
-    cliente: { nombre: input.clienteNombre, documento: input.clienteDocumento },
+    cliente: {
+      nombre: input.clienteNombre,
+      documento: input.clienteDocumento,
+      tipoDocumento: input.clienteTipoDocumento ?? '',
+      direccion: input.clienteDireccion ?? '',
+      ciudad: input.clienteCiudad ?? '',
+      telefono: input.clienteTelefono ?? '',
+    },
     lineas: input.lineas.map((l) => ({
       servicio: l.servicio,
       referencia: l.referencia,
@@ -241,6 +287,7 @@ export function armarDatosRecibo(input: EntradaArmarDatosRecibo): DatosRecibo {
     medioDePago: input.bolsilloNombre,
     concepto: input.concepto,
     anulado: input.anulado,
+    elaboradoPor: input.elaboradoPor ?? '',
   }
 }
 
