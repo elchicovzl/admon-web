@@ -35,6 +35,9 @@ import { AffiliationDocumentCategory } from '@prisma/client'
 import type { SafeAffiliationDocument } from '@/lib/types/affiliation.types'
 import { DocumentCategoryLabels } from '@/lib/types/affiliation.types'
 
+// Same limit the upload route enforces
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+
 interface SubProcessDocumentsSectionProps {
   subProcessId: string
   documents: SafeAffiliationDocument[]
@@ -54,13 +57,14 @@ export function SubProcessDocumentsSection({
 }: SubProcessDocumentsSectionProps) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // Progress of a multi-file upload: index of the file being sent and the total
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<AffiliationDocumentCategory>(AffiliationDocumentCategory.GENERAL)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFileUpload(file: File) {
-    setUploading(true)
+  async function uploadOne(file: File): Promise<boolean> {
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -75,43 +79,61 @@ export function SubProcessDocumentsSection({
       const result = await response.json()
 
       if (result.success && result.data) {
-        toast.success('Documento subido exitosamente')
         onDocumentUploaded?.(result.data)
-      } else {
-        toast.error(result.error || 'Error al subir documento')
+        return true
       }
+      toast.error(`${file.name}: ${result.error || 'Error al subir documento'}`)
+      return false
     } catch (error) {
-      console.error('Upload error:', error)
-      toast.error('Error al subir documento')
+      console.error('Upload error:', file.name, error)
+      toast.error(`${file.name}: Error al subir documento`)
+      return false
+    }
+  }
+
+  // Sequential on purpose: one request at a time keeps the upload route and
+  // storage from being hit with a burst, and errors are reported per file.
+  async function handleFilesUpload(fileList: FileList | null | undefined) {
+    const files = Array.from(fileList ?? [])
+    if (files.length === 0) return
+
+    const tooBig = files.filter((f) => f.size > MAX_FILE_SIZE)
+    for (const f of tooBig) {
+      toast.error(`${f.name} excede el límite de 10MB`)
+    }
+    const valid = files.filter((f) => f.size <= MAX_FILE_SIZE)
+    if (valid.length === 0) return
+
+    setUploading(true)
+    let ok = 0
+    try {
+      for (const [index, file] of valid.entries()) {
+        setUploadProgress({ current: index + 1, total: valid.length })
+        if (await uploadOne(file)) ok++
+      }
     } finally {
       setUploading(false)
+      setUploadProgress(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
     }
+
+    if (ok > 0) {
+      toast.success(
+        ok === 1 ? 'Documento subido exitosamente' : `${ok} documentos subidos exitosamente`
+      )
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (file.size > 10485760) {
-        toast.error('El archivo excede el límite de 10MB')
-        return
-      }
-      handleFileUpload(file)
-    }
+    handleFilesUpload(e.target.files)
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
-    const file = e.dataTransfer.files?.[0]
-    if (file) {
-      if (file.size > 10485760) {
-        toast.error('El archivo excede el límite de 10MB')
-        return
-      }
-      handleFileUpload(file)
-    }
+    if (uploading) return
+    handleFilesUpload(e.dataTransfer.files)
   }
 
   async function handleDeleteDocument() {
@@ -202,7 +224,11 @@ export function SubProcessDocumentsSection({
               {uploading ? (
                 <div className="flex flex-col items-center gap-2">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">Subiendo documento...</p>
+                  <p className="text-sm text-muted-foreground">
+                    {uploadProgress && uploadProgress.total > 1
+                      ? `Subiendo ${uploadProgress.current} de ${uploadProgress.total}...`
+                      : 'Subiendo documento...'}
+                  </p>
                 </div>
               ) : (
                 <>
@@ -210,12 +236,15 @@ export function SubProcessDocumentsSection({
                   <p className="text-sm text-muted-foreground mb-1">
                     Arrastra archivos aquí o haz clic para subir
                   </p>
-                  <p className="text-xs text-muted-foreground">Máximo 10MB por archivo</p>
+                  <p className="text-xs text-muted-foreground">
+                    Puedes seleccionar varios archivos · Máximo 10MB por archivo
+                  </p>
                 </>
               )}
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="hidden"
                 onChange={handleFileChange}
                 disabled={uploading}
