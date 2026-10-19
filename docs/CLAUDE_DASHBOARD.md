@@ -8,7 +8,7 @@
 
 - **Framework**: Next.js 15.2.4 (App Router, NO Pages Router)
 - **Auth**: NextAuth v5 (Auth.js) - Variables: AUTH_SECRET, AUTH_URL
-- **Database**: PostgreSQL + Prisma ORM 6.18.0
+- **Database**: PostgreSQL 18 (+ extensión pgvector) + Prisma ORM 6.18.0
 - **Forms**: React Hook Form 7.60 + Zod 3.25
 - **UI**: shadcn/ui (Radix UI + Tailwind CSS 4.1.9)
 - **State**: Zustand 5.0.8 (Context Provider pattern)
@@ -472,6 +472,19 @@ export async function action(input) {
   // 6. Return
 }
 ```
+
+---
+
+## Módulo WhatsApp AI (en construcción)
+
+Bandeja compartida de WhatsApp + asistente con IA + base de conocimiento. Solo
+MANAGER y SUPER_ADMIN. Se construye en PRs encadenados detrás de flags
+(`WHATSAPP_ENABLED`, `WHATSAPP_AI_ENABLED`, ambos `false` por defecto). Requiere
+Postgres con la extensión `vector` (imagen `pgvector/pgvector:0.8.7-pg18-trixie`;
+la migración `enable_pgvector` falla si la extensión no está disponible, así que
+en producción primero se cambia la imagen y recién después se hace `pnpm db:deploy`
+a mano). Tanto el webhook (`/api/whatsapp/webhook`) como el worker pg-boss se
+documentan en este archivo a medida que aterrizan sus PRs.
 
 ---
 

@@ -15,7 +15,14 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector sobre Postgres 18 (trixie): mismo mayor que producción y trae la
+    # extensión `vector` que usa la base de conocimiento del asistente de WhatsApp.
+    #
+    # OJO: el volumen viejo de Postgres 16 NO es compatible con esta imagen
+    # (cambia el formato de datos y el layout del directorio). Si ya tenías la base
+    # local levantada, corré `pnpm db:nuke` una sola vez y luego `pnpm db:up`,
+    # `pnpm db:migrate`, `pnpm db:seed`.
+    image: pgvector/pgvector:0.8.7-pg18-trixie
     container_name: admon-postgres
     restart: unless-stopped
     environment:
@@ -27,7 +34,9 @@ services:
     ports:
       - '55432:5432'
     volumes:
-      - admon_pgdata:/var/lib/postgresql/data
+      # Postgres 18+ guarda los datos en un subdirectorio versionado, así que el
+      # volumen se monta en /var/lib/postgresql (no en .../data).
+      - admon_pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d admon']
       interval: 5s
