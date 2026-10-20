@@ -659,6 +659,7 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   ventana de 24 h, previews, merges). Polling cada 4 s, solo con la pestaña visible.
 - Medios: solo por `getMediaUrl` (URL firmada de 10 min, pedida cuando el adjunto es visible);
   nunca se expone la clave de R2.
+- Datos de prueba locales: `pnpm seed:whatsapp-dev` (solo base local, ver el script).
 
 ---
 
