@@ -1,12 +1,12 @@
 "use client"
 
 import Image from "next/image"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { SectionLabel } from "@/components/ui/section-label"
-import { Heart, Shield, Handshake, Zap, Users2, Scale } from "lucide-react"
+import { Shield } from "lucide-react"
 import { useState, useEffect } from "react"
 import { MissionVision } from "@/components/sections/about/mission-vision"
+import { ValuesBento } from "@/components/sections/about/values-bento"
 import { useSmoothScroll } from "@/hooks/use-smooth-scroll"
 
 export function AboutSection() {
@@ -16,13 +16,6 @@ export function AboutSection() {
   useEffect(() => {
     setIsVisible(true)
   }, [])
-
-  const values = [
-    { name: "Confianza", description: "Base fundamental de nuestras relaciones comerciales", icon: Handshake },
-    { name: "Eficiencia", description: "Optimización de procesos para mejores resultados", icon: Zap },
-    { name: "Responsabilidad", description: "Compromiso total con nuestros clientes", icon: Users2 },
-    { name: "Integridad", description: "Transparencia en cada una de nuestras acciones", icon: Scale },
-  ]
 
   return (
     <section className="relative min-h-screen bg-surface-muted overflow-hidden" id="nosotros">
@@ -77,52 +70,8 @@ export function AboutSection() {
         {/* Mission & Vision */}
         <MissionVision />
 
-        {/* Values Section - Enhanced */}
-        <Card
-          className={`relative overflow-hidden border border-gray-200 bg-white shadow-sm ${isVisible ? "animate-fade-in-up" : "opacity-0"}`}
-          style={{ animationDelay: "0.7s" }}
-        >
-          <CardContent className="p-8 lg:p-12 relative z-10">
-            <div className="text-center mb-12">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <div className="p-3 bg-brand-gold-soft text-brand-navy rounded-2xl">
-                    <Heart className="w-7 h-7" />
-                  </div>
-                <h2 className="text-3xl lg:text-4xl font-figtree font-bold text-brand-navy">Valores</h2>
-              </div>
-              <p className="text-gray-700 max-w-2xl mx-auto leading-relaxed text-lg">
-                En ADMINISTRACIÓN SEGURA, entendemos que la confianza es la base de cada relación. Por eso, nuestros
-                procesos y la manera en que nos conectamos con nuestros clientes están guiados por una serie de valores
-                fundamentales que definen quiénes somos y cómo trabajamos.
-              </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {values.map((value, index) => (
-                <div
-                  key={value.name}
-                  className={`group relative ${isVisible ? "animate-fade-in-up" : "opacity-0"}`}
-                  style={{ animationDelay: `${0.8 + index * 0.1}s` }}
-                >
-                  <div className="relative h-full p-6 rounded-2xl bg-white border border-gray-200 hover:border-brand-gold/60 hover:shadow-md transition-all duration-500 hover:-translate-y-2">
-                    <div className="relative z-10">
-                      <div className="mb-4">
-                        <div className="w-14 h-14 bg-brand-gold-soft text-brand-navy rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                          <value.icon className="w-7 h-7" />
-                        </div>
-                        <h3 className="text-xl font-figtree font-bold text-brand-navy mb-2">{value.name}</h3>
-                      </div>
-                      <p className="text-sm text-gray-600 leading-relaxed">{value.description}</p>
-                    </div>
-
-                    {/* Bottom gradient line */}
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-brand-gold transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left rounded-b-2xl" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Values */}
+        <ValuesBento />
 
         {/* Call to Action */}
         <div
