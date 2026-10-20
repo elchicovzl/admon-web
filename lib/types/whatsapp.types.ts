@@ -85,3 +85,11 @@ export interface InboxUpdates {
   truncated: boolean
   cursor: string
 }
+
+/** One row of the "Vincular a cliente" picker. */
+export interface ClientLinkOption {
+  id: string
+  fullName: string
+  identificationNumber: string
+  phone: string
+}

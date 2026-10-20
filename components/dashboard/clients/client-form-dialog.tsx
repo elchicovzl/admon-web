@@ -53,6 +53,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { PhoneInput } from '@/components/ui/phone-input'
+import type { ClientDefaults } from '@/lib/whatsapp/leads'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Loader2, MapPin, Briefcase } from 'lucide-react'
@@ -73,6 +74,8 @@ interface ClientFormDialogProps {
   editAdditionalInfo?: ClientAdditionalInfo | null
   onContactInfoUpdated?: (data: ContactInfoUpdate) => void
   redirectOnCreate?: boolean
+  /** Create mode only: values the empty form starts with (e.g. a WhatsApp lead being converted). */
+  createDefaults?: ClientDefaults | null
 }
 
 function toDateInputValue(date?: Date | null): string {
@@ -151,6 +154,7 @@ export function ClientFormDialog({
   editAdditionalInfo,
   onContactInfoUpdated,
   redirectOnCreate = true,
+  createDefaults,
 }: ClientFormDialogProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -249,13 +253,16 @@ export function ClientFormDialog({
         },
       })
     } else {
+      const identificationType = createDefaults?.identificationType ?? IdentificationType.CEDULA
+      // Already the current type, so the "type changed" effect keeps the prefilled number.
+      prevIdTypeRef.current = identificationType
       form.reset({
-        fullName: '',
+        fullName: createDefaults?.fullName ?? '',
         clientTypes: [ClientType.EMPLEADO],
-        identificationType: IdentificationType.CEDULA,
-        identificationNumber: '',
-        email: '',
-        phone: '',
+        identificationType,
+        identificationNumber: createDefaults?.identificationNumber ?? '',
+        email: createDefaults?.email ?? '',
+        phone: createDefaults?.phone ?? '',
         legalRepresentative: undefined,
         address: {
           departamento: '',
@@ -271,7 +278,7 @@ export function ClientFormDialog({
         },
       })
     }
-  }, [editClient, editAddress, editAdditionalInfo, form])
+  }, [editClient, editAddress, editAdditionalInfo, createDefaults, form])
 
   async function onSubmit(data: ClientFormValues) {
     setIsLoading(true)

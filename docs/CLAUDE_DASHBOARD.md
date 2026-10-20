@@ -654,7 +654,7 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   si llega al tope devuelve `truncated` y el cliente recarga) y `markConversationRead`.
 - La selección vive en la URL (`?c=<id>`, el mismo enlace de la campana). Abrir un hilo llama a
   `markConversationNotificationsRead` y `markConversationRead` (único write de esta etapa:
-  solo `unreadCount`). Tomar/devolver/pausar y leads llegan en PR2.4. El historial usa un cursor
+  solo `unreadCount`). Tomar, devolver, pausar, cerrar y leads: ver «Atención y leads». El historial usa un cursor
   compuesto `(timestamp, id)` (`before: { timestamp, id }`) porque varios mensajes pueden
   compartir el mismo timestamp.
 - Lógica pura y probada en `lib/whatsapp/inbox.ts` (orden, marcadores, "Atender: lun 8:00",
@@ -710,6 +710,35 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 - Con `WHATSAPP_ENABLED` apagado enviar falla con un mensaje claro y no escribe nada (`getBoss()`
   lanza en ese caso).
 - El gancho `onSent` puede ejecutarse más de una vez para el mismo mensaje: debe ser idempotente.
+
+#### Atención y leads (PR2.4)
+
+- Acciones del encabezado (`requireWhatsAppAuth()` + Zod, todas devuelven el resumen fresco de la
+  conversación para mostrarlo sin esperar al polling): `takeConversation` ("Atender", desde AI o
+  ESCALATED), `returnToAi` (solo desde HUMAN; audita quién la devolvió y fija `aiCursorAt`),
+  `closeConversation` (motivo opcional, máx. 300), `reopenConversation({ target: 'AI' | 'HUMAN' })` y
+  `setConversationAiPaused` (no cambia el estado). Qué botones se muestran sale de
+  `lib/whatsapp/handoff.ts`, que replica la máquina de estados; el servidor decide igual.
+- Contacto: `linkContactToClient` (vínculo MANUAL y bloqueado, solo clientes activos no
+  eliminados; el lead pasa a CONVERTED), `unlinkContactFromClient` (UNMATCHED bloqueado; un lead
+  CONVERTED vuelve a NEW o se crea uno) y `confirmContactAsUnknown` (número AMBIGUOUS que no es de
+  nadie: crea el lead). Desvincular y confirmar levantan una eliminación previa del lead
+  (`leadSuppressed`). Como no tocan la fila de la conversación, la acción actualiza su `updatedAt`
+  para que los marcadores se refresquen en todos los navegadores. El buscador del diálogo
+  "Vincular" es `searchClientsForLink` (nombre sin acentos, documento o dígitos del teléfono; 10
+  resultados).
+- Leads (`/dashboard/whatsapp/leads`, misma protección que la bandeja; `lib/actions/lead.actions.ts`):
+  `listLeads` (filtro por estado y búsqueda), `updateLead` (nombre, documento, correo, notas),
+  `setLeadStatus` (NEW, CONTACTED, DISCARDED; nunca CONVERTED, y un lead convertido solo se revierte
+  desvinculando el contacto), `convertLead` y `deleteLead` (usa `removeLead`, así el lead no se
+  recrea aunque la persona vuelva a escribir).
+- Convertir: abre el formulario normal de cliente prellenado (`leadToClientDefaults`, teléfono en
+  formato `+57 3001234567`); al crear el cliente se llama `convertLead({ leadId, clientId })`, que
+  vincula el contacto y marca el lead CONVERTED.
+- Límites de cuerpo: el webhook y `POST /api/whatsapp/messages/media` leen el cuerpo con
+  `readCappedBody` (`lib/utils/read-capped-body.ts`), que corta también los envíos chunked sin
+  Content-Length. Cada firma inválida del webhook deja un `console.warn` con el motivo
+  (`missing header` / `mismatch`) y un contador por proceso, nunca el cuerpo ni la firma.
 
 ---
 
