@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import type { ConversationSummary, ThreadMessage } from '@/lib/types/whatsapp.types'
 import { composerMode, resendAction } from '@/lib/whatsapp/composer'
 import { MARKER_LABEL, STATUS_LABEL, attentionLabel } from '@/lib/whatsapp/inbox'
+import { ConversationAvatar } from './conversation-avatar'
 import { Composer, type ComposerHandlers } from './composer'
 import { MessageBubble } from './message-bubble'
 import { ThreadSkeleton } from './inbox-skeletons'
@@ -98,6 +99,7 @@ export function ThreadView({
         <Button type="button" size="icon" variant="ghost" className="md:hidden" onClick={onBack} aria-label="Volver a la lista">
           <ArrowLeft className="h-4 w-4" />
         </Button>
+        <ConversationAvatar name={conversation.displayName} seed={conversation.id} />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate text-base font-semibold">{conversation.displayName}</h2>
