@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Eye, TrendingUp } from 'lucide-react'
 import { Typewriter } from 'react-simple-typewriter'
-import Image from 'next/image'
+import { HeroDashboardMock } from '@/components/ui/hero-dashboard-mock'
 import { SectionLabel } from '@/components/ui/section-label'
 import Squares from '@/components/ui/squares-background'
 import { memo } from 'react'
@@ -74,20 +74,6 @@ const HeroContent = memo(({ isMobile }: { isMobile?: boolean }) => {
 
 HeroContent.displayName = 'HeroContent'
 
-function HeroImage({ className = '' }: { className?: string }) {
-  return (
-    <Image
-      src="/images/hero-team.webp"
-      alt="Equipo de Administración Segura: afiliaciones, ARL, incapacidades y pensión"
-      width={1448}
-      height={1086}
-      priority
-      sizes="(min-width: 1024px) 60vw, 100vw"
-      className={`w-full h-auto ${className}`}
-    />
-  )
-}
-
 export default function HeroSection() {
   return (
     <section className="relative py-20 overflow-hidden bg-gradient-to-br from-brand-navy to-brand-navy-deep">
@@ -117,17 +103,17 @@ export default function HeroSection() {
             <HeroContent />
           </div>
 
-          {/* Right side: team image */}
+          {/* Right side: dashboard mock */}
           <div className="relative z-10 pb-10">
-            <HeroImage className="lg:w-[120%] lg:max-w-none lg:-ml-[5%]" />
+            <HeroDashboardMock />
           </div>
         </div>
 
-        {/* Mobile Layout - copy with image below */}
+        {/* Mobile Layout - copy with mock below */}
         <div className="lg:hidden text-center relative z-10">
           <HeroContent isMobile />
-          <div className="mt-14 pb-6">
-            <HeroImage />
+          <div className="mt-14 pb-6 text-left">
+            <HeroDashboardMock />
           </div>
         </div>
       </div>
