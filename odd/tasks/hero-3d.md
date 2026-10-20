@@ -26,6 +26,8 @@ Mode: off (no project/session TDD config found). Runner available: vitest (`pnpm
 - [x] T1 — Install deps and build `components/three/hero-scene.tsx` (+ dynamic wrapper) and wire into hero (route: delegated direct — writer trigger: 2+ non-trivial files, new deps). Commit 5e59b68.
 - [ ] T2 — Verify: tsc (touched files clean — writer + parent spot check), `next build` passed (writer). `pnpm lint` UNAVAILABLE: repo has no ESLint config (interactive prompt). Pending: visual check in browser by user.
 
+- [x] T3 — Fix review findings (accepted by user): (a) mount a single scene instance instead of desktop+mobile duplicates; (b) error boundary + WebGL-unavailable detection falling back to the static shield; (c) no Canvas remount on 640px breakpoint, correct initial size on mobile (route: delegated direct — writer trigger: 2+ non-trivial files). Checks: tsc clean on touched files (writer + parent spot check), next build passed (writer). New: components/three/hero-scene-fallback.tsx, error boundary in lazy wrapper, WebGL probe + contextlost, SceneSync (camera/invalidate), single HeroSceneLazy mount.
+
 ## Acceptance criteria
 - Hero shows an animated 3D scene on desktop and mobile, no SSR errors, no hydration warnings.
 - Static fallback visible before the canvas loads; reduced-motion users get a still scene.

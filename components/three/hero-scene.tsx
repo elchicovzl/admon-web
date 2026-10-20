@@ -1,13 +1,17 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, Float, Html, Lightformer, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
+import { HeroSceneFallback } from './hero-scene-fallback'
 
 // Brand tokens (mirrors --brand-navy / --brand-gold in app/globals.css)
 const NAVY = '#012A61'
 const GOLD = '#E0A025'
+
+const CAMERA_Z_LARGE = 7.5
+const CAMERA_Z_SMALL = 9.5
 
 interface ServiceCard {
   title: string
@@ -172,8 +176,10 @@ function Rig({ pointer, reduced, cardCount, sparkleCount }: RigProps) {
   )
 }
 
+// This module is only loaded client-side (ssr:false), so reading `window` in lazy
+// initializers is safe and avoids a first render with the wrong variant.
 function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false)
+  const [reduced, setReduced] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
     setReduced(mq.matches)
@@ -184,11 +190,53 @@ function usePrefersReducedMotion() {
   return reduced
 }
 
+function hasWebGL() {
+  try {
+    const canvas = document.createElement('canvas')
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
+    gl?.getExtension('WEBGL_lose_context')?.loseContext()
+    return !!gl
+  } catch {
+    return false
+  }
+}
+
+interface SceneSyncProps {
+  small: boolean
+  visible: boolean
+  reduced: boolean
+  cardCount: number
+}
+
+/** Adapts the camera to the viewport and keeps the demand frameloop fresh. */
+function SceneSync({ small, visible, reduced, cardCount }: SceneSyncProps) {
+  const camera = useThree((s) => s.camera)
+  const invalidate = useThree((s) => s.invalidate)
+
+  useEffect(() => {
+    camera.position.z = small ? CAMERA_Z_SMALL : CAMERA_Z_LARGE
+    camera.updateProjectionMatrix()
+    invalidate()
+  }, [camera, small, invalidate])
+
+  // Re-render after visibility / motion / content changes. Extra delayed frames cover
+  // async work (environment map, Html mounting) when the frameloop is on demand.
+  useEffect(() => {
+    if (!visible) return
+    invalidate()
+    const timers = [100, 400, 1000].map((ms) => window.setTimeout(invalidate, ms))
+    return () => timers.forEach(window.clearTimeout)
+  }, [visible, reduced, cardCount, invalidate])
+
+  return null
+}
+
 export default function HeroScene() {
   const container = useRef<HTMLDivElement>(null)
   const pointer = useRef({ x: 0, y: 0 })
   const [visible, setVisible] = useState(true)
-  const [small, setSmall] = useState(false)
+  const [small, setSmall] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  const [failed, setFailed] = useState(() => !hasWebGL())
   const reduced = usePrefersReducedMotion()
 
   // Pause rendering while off-screen
@@ -220,17 +268,26 @@ export default function HeroScene() {
     return () => window.removeEventListener('pointermove', onMove)
   }, [reduced])
 
+  if (failed) return <HeroSceneFallback />
+
+  const cardCount = small ? 3 : SERVICE_CARDS.length
   const frameloop = !visible ? 'never' : reduced ? 'demand' : 'always'
 
   return (
     <div ref={container} className="relative h-full w-full overflow-hidden" aria-hidden="true">
       <Canvas
-        key={small ? 'small' : 'large'}
         frameloop={frameloop}
         dpr={[1, 1.75]}
-        camera={{ position: [0, 0, small ? 9.5 : 7.5], fov: 40 }}
+        camera={{ position: [0, 0, small ? CAMERA_Z_SMALL : CAMERA_Z_LARGE], fov: 40 }}
         gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault()
+            setFailed(true)
+          })
+        }}
       >
+        <SceneSync small={small} visible={visible} reduced={reduced} cardCount={cardCount} />
         <ambientLight intensity={0.5} />
         <directionalLight position={[3, 4, 5]} intensity={2} />
         <directionalLight position={[-4, -2, 3]} intensity={0.8} color={GOLD} />
@@ -242,7 +299,7 @@ export default function HeroScene() {
         <Rig
           pointer={pointer}
           reduced={reduced}
-          cardCount={small ? 3 : SERVICE_CARDS.length}
+          cardCount={cardCount}
           sparkleCount={small ? 20 : 45}
         />
       </Canvas>
