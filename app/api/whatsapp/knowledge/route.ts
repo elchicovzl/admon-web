@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAiConfig } from '@/lib/config/runtime-config'
-import { createKnowledgeDocument } from '@/lib/knowledge/documents'
+import { DOCUMENT_ERRORS, createKnowledgeDocument } from '@/lib/knowledge/documents'
 import { readCappedBody } from '@/lib/utils/read-capped-body'
 import { requireWhatsAppAuth, WHATSAPP_ERROR_NOT_AUTHENTICATED } from '@/lib/whatsapp/access'
 import { knowledgeUploadFieldsSchema } from '@/lib/validations/knowledge.schema'
@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
       title: fields.data.title,
       userId: authCheck.userId,
     })
-    if (!result.ok) return json({ success: false, error: result.error }, 400)
+    // A storage failure is the server's problem (503); everything else is about the file (400).
+    if (!result.ok) return json({ success: false, error: result.error }, result.error === DOCUMENT_ERRORS.STORAGE ? 503 : 400)
     return json({ success: true, data: { documentId: result.documentId, queued: result.queued } }, 201)
   } catch {
     console.error('[kb] upload failed')

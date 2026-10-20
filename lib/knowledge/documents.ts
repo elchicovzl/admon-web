@@ -2,8 +2,12 @@ import prisma from "@/lib/db/prisma"
 import { embeddingModelKey } from "@/lib/ai/providers"
 import { getAiConfig } from "@/lib/config/runtime-config"
 import { deleteObjects, putObject } from "@/lib/storage/r2"
+import { KNOWLEDGE_TITLE_MAX_LENGTH } from "@/lib/validations/knowledge.schema"
 import { resolveDocumentKind, type DocumentKind } from "./extract"
 import { enqueueKnowledgeIngest } from "./queue"
+import { REINDEX_STALE_MS } from "./status"
+
+export { REINDEX_STALE_MS }
 
 /**
  * Knowledge-base document service (KB-1, KB-2, KB-7, KB-11), shared by the upload route and the
@@ -18,14 +22,13 @@ export const DOCUMENT_ERRORS = {
   TOO_LARGE: "El archivo supera el tamaño máximo permitido.",
   EMPTY: "El archivo está vacío.",
   CONTENT_MISMATCH: "El contenido del archivo no corresponde a su tipo.",
+  TEXT_NOT_UTF8: "El archivo de texto debe estar guardado en UTF-8.",
+  TITLE_TOO_LONG: `El título no puede superar ${KNOWLEDGE_TITLE_MAX_LENGTH} caracteres`,
   STORAGE: "No se pudo guardar el archivo. Intente de nuevo.",
   NOT_QUEUED: "El documento se guardó, pero no se pudo programar la indexación. Use «Reindexar».",
   NOT_FOUND: "Documento no encontrado",
   ALREADY_INDEXING: "El documento ya se está indexando.",
 } as const
-
-/** A run that has not finished after this long is treated as lost and can be re-indexed. */
-export const REINDEX_STALE_MS = 15 * 60 * 1000
 
 const CANONICAL_MIME: Record<DocumentKind, string> = {
   pdf: "application/pdf",
@@ -38,7 +41,8 @@ const MAX_FILE_NAME_LENGTH = 120
 
 /** Base name only, with characters outside letters, digits, space, dot, dash and underscore replaced. */
 export function safeFileName(name: string): string {
-  const base = name.split(/[\\/]/).pop() ?? ""
+  // NFC first: macOS sends decomposed accents (i + combining acute), which would become "_".
+  const base = name.normalize("NFC").split(/[\\/]/).pop() ?? ""
   const cleaned = base.replace(/[^\p{L}\p{N} ._-]/gu, "_").trim().replace(/^\.+/, "")
   if (!cleaned) return "documento"
   if (cleaned.length <= MAX_FILE_NAME_LENGTH) return cleaned
@@ -48,15 +52,21 @@ export function safeFileName(name: string): string {
 }
 
 /** The first bytes must match the declared type, so a renamed file is caught before indexing. */
-function contentMatches(kind: DocumentKind, bytes: Uint8Array): boolean {
-  if (kind === "pdf") return new TextDecoder("latin1").decode(bytes.subarray(0, 1024)).includes("%PDF-")
-  if (kind === "docx") return bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
-  if (bytes.includes(0)) return false
+function contentError(kind: DocumentKind, bytes: Uint8Array): string | null {
+  if (kind === "pdf") {
+    return new TextDecoder("latin1").decode(bytes.subarray(0, 1024)).includes("%PDF-") ? null : DOCUMENT_ERRORS.CONTENT_MISMATCH
+  }
+  if (kind === "docx") {
+    const zip = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
+    return zip ? null : DOCUMENT_ERRORS.CONTENT_MISMATCH
+  }
+  // TXT/MD: UTF-8 only (UTF-16 has NUL bytes; Windows-1252 accents are invalid UTF-8).
+  if (bytes.includes(0)) return DOCUMENT_ERRORS.TEXT_NOT_UTF8
   try {
     new TextDecoder("utf-8", { fatal: true }).decode(bytes)
-    return true
+    return null
   } catch {
-    return false
+    return DOCUMENT_ERRORS.TEXT_NOT_UTF8
   }
 }
 
@@ -76,7 +86,11 @@ export async function createKnowledgeDocument(input: {
   if (!kind) return { ok: false, error: DOCUMENT_ERRORS.UNSUPPORTED }
   if (input.bytes.byteLength === 0) return { ok: false, error: DOCUMENT_ERRORS.EMPTY }
   if (input.bytes.byteLength > getAiConfig().kbUploadMaxBytes) return { ok: false, error: DOCUMENT_ERRORS.TOO_LARGE }
-  if (!contentMatches(kind, input.bytes)) return { ok: false, error: DOCUMENT_ERRORS.CONTENT_MISMATCH }
+  const mismatch = contentError(kind, input.bytes)
+  if (mismatch) return { ok: false, error: mismatch }
+  if ((input.title?.trim().length ?? 0) > KNOWLEDGE_TITLE_MAX_LENGTH) {
+    return { ok: false, error: DOCUMENT_ERRORS.TITLE_TOO_LONG }
+  }
 
   const mimeType = CANONICAL_MIME[kind]
   const document = await prisma.knowledgeDocument.create({
@@ -120,10 +134,16 @@ export async function deleteKnowledgeDocument(documentId: string): Promise<{ ok:
   const document = await prisma.knowledgeDocument.findUnique({ where: { id: documentId }, select: { id: true, s3Key: true } })
   if (!document) return { ok: false, error: DOCUMENT_ERRORS.NOT_FOUND }
 
-  await prisma.$transaction([
-    prisma.knowledgeChunk.deleteMany({ where: { documentId } }),
-    prisma.knowledgeDocument.delete({ where: { id: documentId } }),
-  ])
+  try {
+    await prisma.$transaction([
+      prisma.knowledgeChunk.deleteMany({ where: { documentId } }),
+      prisma.knowledgeDocument.delete({ where: { id: documentId } }),
+    ])
+  } catch (error) {
+    // P2025: someone else deleted it between the read and the delete.
+    if ((error as { code?: string }).code === "P2025") return { ok: false, error: DOCUMENT_ERRORS.NOT_FOUND }
+    throw error
+  }
   if (document.s3Key) {
     try {
       await deleteObjects([document.s3Key])
@@ -183,10 +203,14 @@ export interface KnowledgeHealth {
 export async function getKnowledgeHealth(): Promise<KnowledgeHealth> {
   const config = getAiConfig()
   const current = { embeddingModel: embeddingModelKey(config), embeddingDimensions: config.embeddingDimensions }
-  const currentChunks = await prisma.knowledgeChunk.count({ where: current })
-  const staleChunks = await prisma.knowledgeChunk.count({ where: { NOT: current } })
+  // Only active documents count: the page lists only those, so the banner can always be cleared.
+  const active = { isActive: true }
+  const currentChunks = await prisma.knowledgeChunk.count({ where: { ...current, document: active } })
+  const staleChunks = await prisma.knowledgeChunk.count({ where: { NOT: current, document: active } })
   const staleDocuments =
-    staleChunks > 0 ? await prisma.knowledgeDocument.count({ where: { chunks: { some: { NOT: current } } } }) : 0
+    staleChunks > 0
+      ? await prisma.knowledgeDocument.count({ where: { ...active, chunks: { some: { NOT: current } } } })
+      : 0
 
   const status =
     staleChunks > 0 ? (currentChunks > 0 ? "PARTIAL" : "REINDEX_REQUIRED") : currentChunks > 0 ? "OK" : "EMPTY"

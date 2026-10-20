@@ -71,6 +71,10 @@ describe("safeFileName", () => {
     expect(safeFileName("a<b>:c?.md")).toBe("a_b__c_.md")
     expect(safeFileName("   ")).toBe("documento")
   })
+
+  it("keeps accents sent in decomposed (NFD) form, as macOS does", () => {
+    expect(safeFileName("Pol\u0069\u0301tica.md")).toBe("Política.md")
+  })
 })
 
 describe("createKnowledgeDocument (KB-2, KB-11)", () => {
@@ -137,7 +141,23 @@ describe("createKnowledgeDocument (KB-2, KB-11)", () => {
       bytes: new Uint8Array([0xff, 0xfe, 0x00, 0x81]),
     })
 
-    for (const r of [fakePdf, fakeDocx, binaryText]) expect(r).toEqual({ ok: false, error: DOCUMENT_ERRORS.CONTENT_MISMATCH })
+    for (const r of [fakePdf, fakeDocx]) expect(r).toEqual({ ok: false, error: DOCUMENT_ERRORS.CONTENT_MISMATCH })
+    expect(binaryText).toEqual({ ok: false, error: DOCUMENT_ERRORS.TEXT_NOT_UTF8 })
+    expect(m.create).not.toHaveBeenCalled()
+  })
+
+  it("tells the user a TXT/MD must be UTF-8 (Windows-1252 or UTF-16 files)", async () => {
+    const latin1 = await createKnowledgeDocument({ ...input, fileName: "a.txt", mimeType: "text/plain", bytes: new Uint8Array([0x50, 0x6f, 0x6c, 0xed]) })
+
+    expect(latin1).toEqual({ ok: false, error: DOCUMENT_ERRORS.TEXT_NOT_UTF8 })
+    expect(DOCUMENT_ERRORS.TEXT_NOT_UTF8).toBe("El archivo de texto debe estar guardado en UTF-8.")
+  })
+
+  it("rejects a title over the limit even when called without the route", async () => {
+    expect(await createKnowledgeDocument({ ...input, title: "x".repeat(201) })).toEqual({
+      ok: false,
+      error: DOCUMENT_ERRORS.TITLE_TOO_LONG,
+    })
     expect(m.create).not.toHaveBeenCalled()
   })
 
@@ -200,6 +220,14 @@ describe("deleteKnowledgeDocument (KB-7, S-KB-5)", () => {
     expect(await deleteKnowledgeDocument("doc-1")).toEqual({ ok: false, error: DOCUMENT_ERRORS.NOT_FOUND })
     expect(m.transaction).not.toHaveBeenCalled()
   })
+
+  it("reports NOT_FOUND when another user deleted it a moment earlier", async () => {
+    m.findUnique.mockResolvedValue({ id: "doc-1", s3Key: "knowledge/doc-1/guia.pdf" })
+    m.transaction.mockRejectedValue(Object.assign(new Error("Record to delete does not exist."), { code: "P2025" }))
+
+    expect(await deleteKnowledgeDocument("doc-1")).toEqual({ ok: false, error: DOCUMENT_ERRORS.NOT_FOUND })
+    expect(m.deleteObjects).not.toHaveBeenCalled()
+  })
 })
 
 describe("reindexKnowledgeDocument (one run per document)", () => {
@@ -248,11 +276,21 @@ describe("getKnowledgeHealth (S-KB-8)", () => {
     const r = await getKnowledgeHealth()
 
     expect(r).toEqual({ status: "REINDEX_REQUIRED", currentChunks: 0, staleChunks: 12, staleDocuments: 2 })
+    // Only active documents count: the page lists only those, so the banner can always clear.
     expect(m.chunkCount).toHaveBeenNthCalledWith(1, {
-      where: { embeddingModel: "openai/text-embedding-3-small", embeddingDimensions: 1536 },
+      where: { embeddingModel: "openai/text-embedding-3-small", embeddingDimensions: 1536, document: { isActive: true } },
     })
     expect(m.chunkCount).toHaveBeenNthCalledWith(2, {
-      where: { NOT: { embeddingModel: "openai/text-embedding-3-small", embeddingDimensions: 1536 } },
+      where: {
+        NOT: { embeddingModel: "openai/text-embedding-3-small", embeddingDimensions: 1536 },
+        document: { isActive: true },
+      },
+    })
+    expect(m.documentCount).toHaveBeenCalledWith({
+      where: {
+        isActive: true,
+        chunks: { some: { NOT: { embeddingModel: "openai/text-embedding-3-small", embeddingDimensions: 1536 } } },
+      },
     })
   })
 

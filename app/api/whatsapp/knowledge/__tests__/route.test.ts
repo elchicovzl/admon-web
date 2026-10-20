@@ -7,7 +7,10 @@ vi.mock('@/lib/whatsapp/access', () => ({
   requireWhatsAppAuth: m.requireAuth,
   WHATSAPP_ERROR_NOT_AUTHENTICATED: 'No autenticado',
 }))
-vi.mock('@/lib/knowledge/documents', () => ({ createKnowledgeDocument: m.create }))
+vi.mock('@/lib/knowledge/documents', () => ({
+  createKnowledgeDocument: m.create,
+  DOCUMENT_ERRORS: { STORAGE: 'No se pudo guardar el archivo. Intente de nuevo.' },
+}))
 vi.mock('@/lib/config/runtime-config', () => ({ getAiConfig: m.getAiConfig }))
 
 import { POST, dynamic, runtime } from '../route'
@@ -66,6 +69,12 @@ describe('POST /api/whatsapp/knowledge', () => {
 
     expect(response.status).toBe(400)
     expect((await response.json()).error).toBe('Tipo de archivo no soportado. Use PDF, DOCX, TXT o MD.')
+  })
+
+  it('answers 503 when the file could not be stored (a server problem, not a bad file)', async () => {
+    m.create.mockResolvedValue({ ok: false, error: 'No se pudo guardar el archivo. Intente de nuevo.' })
+
+    expect((await POST(request({ file: pdf() }))).status).toBe(503)
   })
 
   it('rejects a request without a file and an oversized title', async () => {

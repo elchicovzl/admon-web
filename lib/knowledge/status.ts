@@ -10,8 +10,19 @@ export const KNOWLEDGE_STATUS_LABEL: Record<KnowledgeDocumentStatus, string> = {
   FAILED: "Falló",
 }
 
+/** A run that has not finished after this long is treated as lost and can be re-indexed. */
+export const REINDEX_STALE_MS = 15 * 60 * 1000
+
 export function isIndexing(status: KnowledgeDocumentStatus): boolean {
   return status === "PENDING" || status === "PROCESSING"
+}
+
+/**
+ * Whether "Reindexar" is offered: always for a finished document, and for one still marked as
+ * indexing once it has not changed for REINDEX_STALE_MS (a lost job). Same rule as the server claim.
+ */
+export function canReindex(document: { status: KnowledgeDocumentStatus; updatedAt: string }, now: Date): boolean {
+  return !isIndexing(document.status) || now.getTime() - new Date(document.updatedAt).getTime() > REINDEX_STALE_MS
 }
 
 /** The page polls only while a document is queued or being indexed. */

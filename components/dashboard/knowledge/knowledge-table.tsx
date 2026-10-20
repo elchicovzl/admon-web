@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { KnowledgeDocumentItem } from '@/lib/types/knowledge.types'
-import { KNOWLEDGE_STATUS_LABEL, formatFileSize, isIndexing } from '@/lib/knowledge/status'
+import { KNOWLEDGE_STATUS_LABEL, canReindex, formatFileSize, isIndexing } from '@/lib/knowledge/status'
 
 const STATUS_VARIANT: Record<KnowledgeDocumentStatus, 'default' | 'secondary' | 'outline' | 'destructive'> = {
   PENDING: 'secondary',
@@ -45,6 +45,8 @@ export function KnowledgeTable({ items, pendingId, isStale, onReindex, onDelete 
       <TableBody>
         {items.map((item) => {
           const indexing = isIndexing(item.status)
+          // A lost job (indexing with no change for 15 min) can be restarted, like on the server.
+          const reindexable = canReindex(item, new Date())
           const busy = pendingId === item.id
           return (
             <TableRow key={item.id}>
@@ -75,9 +77,9 @@ export function KnowledgeTable({ items, pendingId, isStale, onReindex, onDelete 
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={busy || indexing}
+                    disabled={busy || !reindexable}
                     onClick={() => onReindex(item)}
-                    title={indexing ? 'Ya se está indexando' : 'Volver a indexar'}
+                    title={reindexable ? 'Volver a indexar' : 'Ya se está indexando'}
                   >
                     <RefreshCw className="h-4 w-4" />
                     <span className="hidden sm:inline">Reindexar</span>

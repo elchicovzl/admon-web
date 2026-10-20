@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { KNOWLEDGE_STATUS_LABEL, formatFileSize, healthBanner, isIndexing, shouldPollDocuments } from "../status"
+import {
+  KNOWLEDGE_STATUS_LABEL,
+  REINDEX_STALE_MS,
+  canReindex,
+  formatFileSize,
+  healthBanner,
+  isIndexing,
+  shouldPollDocuments,
+} from "../status"
 
 describe("knowledge page helpers", () => {
   it("labels every status in Spanish", () => {
@@ -18,6 +26,17 @@ describe("knowledge page helpers", () => {
     expect(shouldPollDocuments([{ status: "READY" }, { status: "PROCESSING" }])).toBe(true)
     expect(shouldPollDocuments([{ status: "READY" }, { status: "FAILED" }])).toBe(false)
     expect(shouldPollDocuments([])).toBe(false)
+  })
+
+  it("allows re-indexing a finished document, or one stuck indexing for 15 minutes", () => {
+    const now = new Date("2026-10-20T15:00:00Z")
+    const ago = (ms: number) => new Date(now.getTime() - ms).toISOString()
+
+    expect(canReindex({ status: "READY", updatedAt: ago(0) }, now)).toBe(true)
+    expect(canReindex({ status: "FAILED", updatedAt: ago(0) }, now)).toBe(true)
+    expect(canReindex({ status: "PROCESSING", updatedAt: ago(REINDEX_STALE_MS - 1000) }, now)).toBe(false)
+    expect(canReindex({ status: "PENDING", updatedAt: ago(REINDEX_STALE_MS + 1000) }, now)).toBe(true)
+    expect(REINDEX_STALE_MS).toBe(15 * 60 * 1000)
   })
 
   it("formats file sizes", () => {
