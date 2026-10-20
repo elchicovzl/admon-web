@@ -3,7 +3,7 @@ import { embedMany } from "ai"
 import prisma from "@/lib/db/prisma"
 import { embeddingModel, embeddingModelKey, embeddingProviderOptions } from "@/lib/ai/providers"
 import { getAiConfig } from "@/lib/config/runtime-config"
-import { getObjectBytes } from "@/lib/storage/r2"
+import { StoredObjectError, getObjectBytes } from "@/lib/storage/r2"
 import { chunkDocument, type Chunk } from "./chunk"
 import { extractDocumentText } from "./extract"
 import { setEmbeddingsSql } from "./vector"
@@ -15,8 +15,8 @@ import { setEmbeddingsSql } from "./vector"
  * - The old chunks are deleted and the new ones written in ONE transaction, after every
  *   embedding is ready. A re-index that fails at any point leaves the previous chunks in place,
  *   so the assistant keeps answering from them (S-KB-6, S-KB-9).
- * - Content problems (unsupported, scanned, empty) fail at once and are not retriable: running
- *   again would give the same result.
+ * - Content problems (unsupported, scanned, empty, a DOCX that inflates too much) and a missing or
+ *   oversized stored file fail at once and are not retriable: running again gives the same result.
  * - Outages (storage, embedding API, bad vectors, a failed replacement transaction) rethrow so
  *   pg-boss retries; on the last attempt the document is marked FAILED and retriable, so a
  *   manager can re-index later. A document never stays PROCESSING after its last attempt.
@@ -27,6 +27,8 @@ export const EMBED_BATCH_SIZE = 64
 export const INGEST_ERRORS = {
   NO_CHUNKS: "El documento no contiene texto para indexar.",
   TRANSIENT: "No se pudo indexar el documento por un error temporal. Puede reintentar la indexación.",
+  FILE_MISSING: "El archivo del documento ya no está en el almacenamiento. Súbalo de nuevo.",
+  FILE_TOO_LARGE: "El archivo almacenado supera el tamaño permitido. Súbalo de nuevo con un archivo más pequeño.",
 } as const
 
 export type IngestResult =
@@ -84,6 +86,10 @@ export async function ingestKnowledgeDocument(
 
     await replaceChunks(documentId, chunks, vectors, embeddingModelKey(config), config.embeddingDimensions)
   } catch (error) {
+    // A missing or oversized stored file is permanent: retrying cannot help.
+    if (error instanceof StoredObjectError) {
+      return fail(documentId, error.code === "MISSING" ? INGEST_ERRORS.FILE_MISSING : INGEST_ERRORS.FILE_TOO_LARGE, false)
+    }
     // Never log the error object: provider errors can echo request details.
     console.error(`[kb] ingest failed for document ${documentId}${options.isLastAttempt ? " (last attempt)" : ""}`)
     if (options.isLastAttempt) return fail(documentId, INGEST_ERRORS.TRANSIENT, true)

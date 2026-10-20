@@ -25,7 +25,10 @@ vi.mock("@/lib/db/prisma", () => ({
     $transaction: m.transaction,
   },
 }))
-vi.mock("@/lib/storage/r2", () => ({ getObjectBytes: m.getObjectBytes }))
+vi.mock("@/lib/storage/r2", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/storage/r2")>("@/lib/storage/r2")
+  return { getObjectBytes: m.getObjectBytes, StoredObjectError: actual.StoredObjectError }
+})
 vi.mock("../extract", () => ({ extractDocumentText: m.extractDocumentText }))
 vi.mock("../chunk", () => ({ chunkDocument: m.chunkDocument }))
 vi.mock("ai", () => ({ embedMany: m.embedMany }))
@@ -36,6 +39,7 @@ vi.mock("@/lib/ai/providers", () => ({
   embeddingModelKey: () => "openai/text-embedding-3-small",
 }))
 
+import { StoredObjectError } from "@/lib/storage/r2"
 import { INGEST_ERRORS, ingestKnowledgeDocument } from "../ingest"
 
 const DOC = {
@@ -221,6 +225,23 @@ describe("ingestKnowledgeDocument: failures", () => {
     m.getObjectBytes.mockRejectedValue(new Error("R2 down"))
 
     expect(await ingestKnowledgeDocument("doc-1", { isLastAttempt: true })).toEqual({ status: "FAILED", retriable: true })
+  })
+
+  it("fails a missing or oversized stored file at once, not retriable and without retrying", async () => {
+    m.getObjectBytes.mockRejectedValue(new StoredObjectError("MISSING", "Stored object does not exist"))
+    expect(await ingestKnowledgeDocument("doc-1", { isLastAttempt: false })).toEqual({ status: "FAILED", retriable: false })
+    expect(m.documentUpdate).toHaveBeenLastCalledWith({
+      where: { id: "doc-1" },
+      data: { status: "FAILED", error: INGEST_ERRORS.FILE_MISSING, retriable: false },
+    })
+
+    m.getObjectBytes.mockRejectedValue(new StoredObjectError("TOO_LARGE", "Stored object is larger than the allowed size"))
+    expect(await ingestKnowledgeDocument("doc-1", { isLastAttempt: false })).toEqual({ status: "FAILED", retriable: false })
+    expect(m.documentUpdate).toHaveBeenLastCalledWith({
+      where: { id: "doc-1" },
+      data: { status: "FAILED", error: INGEST_ERRORS.FILE_TOO_LARGE, retriable: false },
+    })
+    expect(m.embedMany).not.toHaveBeenCalled()
   })
 
   it("refuses vectors of the wrong size from the provider", async () => {

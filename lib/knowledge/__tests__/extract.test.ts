@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
-import { EXTRACT_ERRORS, extractDocumentText, resolveDocumentKind } from "../extract"
+import { DOCX_MAX_UNCOMPRESSED_BYTES, EXTRACT_ERRORS, docxUncompressedBytes, extractDocumentText, resolveDocumentKind } from "../extract"
 
 const fixture = (name: string) => new Uint8Array(readFileSync(join(__dirname, "fixtures", name)))
 const utf8 = (text: string) => new TextEncoder().encode(text)
@@ -97,5 +97,53 @@ describe("extractDocumentText", () => {
     const r = await extractDocumentText(utf8("  \n "), { fileName: "vacio.txt", mimeType: "text/plain" })
 
     expect(r).toEqual({ ok: false, error: EXTRACT_ERRORS.EMPTY })
+  })
+})
+
+/** A minimal zip whose central directory declares `entries` with the given uncompressed sizes. */
+function zipDeclaring(sizes: number[]): Uint8Array {
+  const central: number[] = []
+  sizes.forEach((size, i) => {
+    const name = new TextEncoder().encode(`f${i}.xml`)
+    const header = new Uint8Array(46 + name.length)
+    const view = new DataView(header.buffer)
+    view.setUint32(0, 0x02014b50, true)
+    view.setUint32(24, size, true)
+    view.setUint16(28, name.length, true)
+    header.set(name, 46)
+    central.push(...header)
+  })
+  const eocd = new Uint8Array(22)
+  const view = new DataView(eocd.buffer)
+  view.setUint32(0, 0x06054b50, true)
+  view.setUint16(10, sizes.length, true)
+  view.setUint32(12, central.length, true)
+  view.setUint32(16, 0, true)
+  return new Uint8Array([...central, ...eocd])
+}
+
+describe("DOCX decompression cap (zip bomb)", () => {
+  it("reads the declared uncompressed size of a real DOCX", () => {
+    const size = docxUncompressedBytes(fixture("headings.docx"))
+
+    expect(size).toBeGreaterThan(0)
+    expect(size).toBeLessThan(DOCX_MAX_UNCOMPRESSED_BYTES)
+  })
+
+  it("rejects a DOCX that would expand past the cap, without parsing it", async () => {
+    const bomb = zipDeclaring([DOCX_MAX_UNCOMPRESSED_BYTES, 1])
+
+    expect(docxUncompressedBytes(bomb)).toBe(DOCX_MAX_UNCOMPRESSED_BYTES + 1)
+    expect(
+      await extractDocumentText(bomb, {
+        fileName: "bomba.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      })
+    ).toEqual({ ok: false, error: EXTRACT_ERRORS.TOO_LARGE_UNCOMPRESSED })
+  })
+
+  it("treats ZIP64 sizes and a missing central directory as unreadable sizes", () => {
+    expect(docxUncompressedBytes(zipDeclaring([0xffffffff]))).toBe(Number.POSITIVE_INFINITY)
+    expect(docxUncompressedBytes(new Uint8Array([1, 2, 3]))).toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { Users } from 'lucide-react'
+import { BookOpen, Users } from 'lucide-react'
 
 import { InboxContainer } from '@/components/dashboard/whatsapp/inbox-container'
 import { InboxSkeleton } from '@/components/dashboard/whatsapp/inbox-skeletons'
@@ -38,12 +38,20 @@ export default function WhatsAppPage() {
             Bandeja compartida de conversaciones con clientes.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/dashboard/whatsapp/leads">
-            <Users className="h-4 w-4" />
-            Leads
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/whatsapp/knowledge">
+              <BookOpen className="h-4 w-4" />
+              Base de conocimiento
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/whatsapp/leads">
+              <Users className="h-4 w-4" />
+              Leads
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Suspense fallback={<InboxSkeleton />}>
