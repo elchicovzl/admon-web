@@ -1,9 +1,10 @@
-import { AlertCircle, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ThreadMessage } from '@/lib/types/whatsapp.types'
 import type { ResendAction } from '@/lib/whatsapp/composer'
-import { deliveryLabel, formatClock, messageTypeLabel, senderLabel } from '@/lib/whatsapp/inbox'
+import { formatClock, messageTypeLabel, senderLabel } from '@/lib/whatsapp/inbox'
+import { DeliveryTicks } from './delivery-ticks'
 import { MessageMedia } from './message-media'
 
 const SOURCE_STYLE: Record<ThreadMessage['source'], string> = {
@@ -44,10 +45,9 @@ export function MessageBubble({
           !message.media && <p className="italic opacity-70">{messageTypeLabel(message.type)}</p>
         )}
 
-        <p className="flex items-center justify-end gap-1 text-[11px] opacity-70">
-          {failed && <AlertCircle className="h-3 w-3" aria-hidden />}
-          <span>{formatClock(message.timestamp)}</span>
-          {outgoing && <span>· {deliveryLabel(message.status)}</span>}
+        <p className="flex items-center justify-end gap-1 text-[11px]">
+          <span className="opacity-70">{formatClock(message.timestamp)}</span>
+          {outgoing && <DeliveryTicks status={message.status} onPrimary={message.source === 'DASHBOARD'} />}
         </p>
         {failed && message.errorMessage && (
           <p className="text-[11px] font-medium">{message.errorMessage}</p>
