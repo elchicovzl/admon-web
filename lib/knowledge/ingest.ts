@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { embedMany } from "ai"
 import prisma from "@/lib/db/prisma"
 import { embeddingModel, embeddingModelKey, embeddingProviderOptions } from "@/lib/ai/providers"
@@ -16,8 +17,9 @@ import { setEmbeddingsSql } from "./vector"
  *   so the assistant keeps answering from them (S-KB-6, S-KB-9).
  * - Content problems (unsupported, scanned, empty) fail at once and are not retriable: running
  *   again would give the same result.
- * - Outages (storage, embedding API, bad vectors) rethrow so pg-boss retries; on the last attempt
- *   the document is marked FAILED and retriable, so a manager can re-index later.
+ * - Outages (storage, embedding API, bad vectors, a failed replacement transaction) rethrow so
+ *   pg-boss retries; on the last attempt the document is marked FAILED and retriable, so a
+ *   manager can re-index later. A document never stays PROCESSING after its last attempt.
  */
 
 export const EMBED_BATCH_SIZE = 64
@@ -75,19 +77,36 @@ export async function ingestKnowledgeDocument(
 
     vectors = await embed(chunks)
     // Checked before the transaction so a bad response never replaces good chunks.
-    if (vectors.length !== chunks.length || vectors.some((v) => v.length !== config.embeddingDimensions)) {
-      throw new Error("Embedding response does not match the chunks")
-    }
+    const valid =
+      vectors.length === chunks.length &&
+      vectors.every((v) => v.length === config.embeddingDimensions && v.every(Number.isFinite))
+    if (!valid) throw new Error("Embedding response does not match the chunks")
+
+    await replaceChunks(documentId, chunks, vectors, embeddingModelKey(config), config.embeddingDimensions)
   } catch (error) {
     // Never log the error object: provider errors can echo request details.
     console.error(`[kb] ingest failed for document ${documentId}${options.isLastAttempt ? " (last attempt)" : ""}`)
     if (options.isLastAttempt) return fail(documentId, INGEST_ERRORS.TRANSIENT, true)
     throw error
   }
+  return { status: "READY", chunkCount: chunks.length }
+}
 
-  const modelKey = embeddingModelKey(config)
+/**
+ * Deletes the document's chunks and writes the new ones in one transaction. The document row is
+ * locked first, so two ingests of the same document run one after the other instead of both
+ * deleting and then both inserting (which would leave duplicate chunks).
+ */
+async function replaceChunks(
+  documentId: string,
+  chunks: Chunk[],
+  vectors: number[][],
+  modelKey: string,
+  dimensions: number
+): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM knowledge_documents WHERE id = ${documentId} FOR UPDATE`)
       await tx.knowledgeChunk.deleteMany({ where: { documentId } })
       const created = await tx.knowledgeChunk.createManyAndReturn({
         data: chunks.map((chunk) => ({
@@ -97,7 +116,7 @@ export async function ingestKnowledgeDocument(
           content: chunk.content,
           tokenCount: chunk.tokenCount,
           embeddingModel: modelKey,
-          embeddingDimensions: config.embeddingDimensions,
+          embeddingDimensions: dimensions,
         })),
         select: { id: true, ordinal: true },
       })
@@ -107,7 +126,7 @@ export async function ingestKnowledgeDocument(
           id: idByOrdinal.get(chunk.ordinal)!,
           embedding: vectors[start + i],
         }))
-        await tx.$executeRaw(setEmbeddingsSql(rows, config.embeddingDimensions))
+        await tx.$executeRaw(setEmbeddingsSql(rows, dimensions))
       }
       await tx.knowledgeDocument.update({
         where: { id: documentId },
@@ -124,5 +143,4 @@ export async function ingestKnowledgeDocument(
     // Large documents write many rows; the default 5 s interactive timeout is too tight.
     { timeout: 60_000 }
   )
-  return { status: "READY", chunkCount: chunks.length }
 }

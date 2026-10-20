@@ -84,6 +84,14 @@ describe("chunkDocument (KB-4)", () => {
     for (const chunk of chunks) expect(chunk.tokenCount).toBeLessThanOrEqual(CHUNK_DEFAULTS.maxTokens)
   })
 
+  it("honours maxTokens when custom options leave little room for the overlap", () => {
+    const options = { targetTokens: 500, maxTokens: 300, overlapTokens: 50 }
+    const chunks = chunkDocument([paragraph(400, "a"), paragraph(400, "b"), paragraph(900, "c")].join("\n\n"), options)
+
+    expect(chunks.length).toBeGreaterThan(3)
+    for (const chunk of chunks) expect(chunk.tokenCount).toBeLessThanOrEqual(options.maxTokens)
+  })
+
   it("is deterministic", () => {
     const text = ["# A", paragraph(900, "a"), "## B", paragraph(700, "b")].join("\n\n")
 

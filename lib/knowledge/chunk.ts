@@ -107,8 +107,12 @@ function tail(text: string, tokens: number): string {
 }
 
 export function chunkDocument(text: string, options: ChunkOptions = CHUNK_DEFAULTS): Chunk[] {
-  const { targetTokens, overlapTokens } = options
-  const targetChars = targetTokens * CHARS_PER_TOKEN
+  const { targetTokens, maxTokens, overlapTokens } = options
+  // A chunk is at most one packed body plus the carried overlap, so the body leaves room for it.
+  const targetChars = Math.max(
+    1,
+    Math.min(targetTokens, maxTokens - overlapTokens) * CHARS_PER_TOKEN - PARAGRAPH_SEPARATOR.length
+  )
   const chunks: Chunk[] = []
 
   const emit = (heading: string | null, content: string) => {

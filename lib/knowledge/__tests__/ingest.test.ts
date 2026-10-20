@@ -5,6 +5,7 @@ const m = vi.hoisted(() => {
     knowledgeChunk: { deleteMany: vi.fn(), createManyAndReturn: vi.fn() },
     knowledgeDocument: { update: vi.fn() },
     $executeRaw: vi.fn(),
+    $queryRaw: vi.fn(),
   }
   return {
     tx,
@@ -75,6 +76,7 @@ beforeEach(() => {
     data.map((row) => ({ id: `chunk-${row.ordinal}`, ordinal: row.ordinal }))
   )
   m.tx.$executeRaw.mockResolvedValue(1)
+  m.tx.$queryRaw.mockResolvedValue([{ id: "doc-1" }])
   m.tx.knowledgeDocument.update.mockResolvedValue({})
 })
 
@@ -137,6 +139,17 @@ describe("ingestKnowledgeDocument: success (S-KB-2)", () => {
 
     expect(m.embedMany.mock.calls.map((call) => call[0].values.length)).toEqual([64, 64, 2])
     expect(m.tx.$executeRaw).toHaveBeenCalledTimes(3)
+  })
+
+  it("locks the document row before replacing chunks so two ingests of one document cannot duplicate them", async () => {
+    await ingestKnowledgeDocument("doc-1", { isLastAttempt: false })
+
+    const lock = m.tx.$queryRaw.mock.calls[0][0]
+    expect(lock.sql).toMatch(/FROM\s+knowledge_documents[\s\S]*FOR UPDATE/i)
+    expect(lock.values).toEqual(["doc-1"])
+    expect(m.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      m.tx.knowledgeChunk.deleteMany.mock.invocationCallOrder[0]
+    )
   })
 
   it("replaces the old chunks inside one transaction (KB-8, S-KB-6)", async () => {
@@ -215,6 +228,29 @@ describe("ingestKnowledgeDocument: failures", () => {
 
     expect(await ingestKnowledgeDocument("doc-1", { isLastAttempt: true })).toEqual({ status: "FAILED", retriable: true })
     expect(m.transaction).not.toHaveBeenCalled()
+  })
+
+  it("refuses non-finite vector values before replacing anything", async () => {
+    m.embedMany.mockResolvedValue({ embeddings: [vector(1), vector(Number.NaN), vector(3)] })
+
+    expect(await ingestKnowledgeDocument("doc-1", { isLastAttempt: true })).toEqual({ status: "FAILED", retriable: true })
+    expect(m.transaction).not.toHaveBeenCalled()
+  })
+
+  it("marks the document FAILED and retriable when the replacement transaction fails on the last attempt", async () => {
+    m.transaction.mockRejectedValue(new Error("Transaction already closed: timeout"))
+
+    expect(await ingestKnowledgeDocument("doc-1", { isLastAttempt: true })).toEqual({ status: "FAILED", retriable: true })
+    expect(m.documentUpdate).toHaveBeenLastCalledWith({
+      where: { id: "doc-1" },
+      data: { status: "FAILED", error: INGEST_ERRORS.TRANSIENT, retriable: true },
+    })
+  })
+
+  it("rethrows a failed replacement transaction before the last attempt so the job retries", async () => {
+    m.transaction.mockRejectedValue(new Error("deadlock"))
+
+    await expect(ingestKnowledgeDocument("doc-1", { isLastAttempt: false })).rejects.toThrow("deadlock")
   })
 
   it("skips a missing or deactivated document without touching it", async () => {
