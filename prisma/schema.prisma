@@ -2068,6 +2068,7 @@ model Notification {
 
   @@unique([userId, dedupKey])
   @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
   @@index([conversationId])
   @@map("notifications")
 }
