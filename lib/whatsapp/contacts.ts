@@ -161,6 +161,53 @@ export async function confirmContactAsUnknown(
   return createLeadOnce(contact, conversationId)
 }
 
+export type LinkContactOutcome = { ok: true } | { ok: false; code: "CLIENT_NOT_FOUND" }
+
+/**
+ * A manager links a contact to a Client by hand (LD-5): MANUAL and locked, so automatic
+ * matching never overrides it, and the contact's lead (if any) is converted to that Client.
+ * Only active, non-deleted Clients qualify, the same rule automatic matching uses.
+ */
+export async function linkContactToClient(contactId: string, clientId: string): Promise<LinkContactOutcome> {
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, isActive: true, status: { not: "ELIMINADO" } },
+    select: { id: true },
+  })
+  if (!client) return { ok: false, code: "CLIENT_NOT_FOUND" }
+
+  await prisma.$transaction([
+    prisma.whatsAppContact.update({
+      where: { id: contactId },
+      data: { clientId, matchStatus: "MANUAL", matchLocked: true },
+    }),
+    prisma.lead.updateMany({ where: { contactId }, data: { status: "CONVERTED", convertedClientId: clientId } }),
+  ])
+  return { ok: true }
+}
+
+/**
+ * A manager says the number does not belong to its linked Client. The contact is locked as
+ * UNMATCHED (automatic matching would relink it otherwise), a lead converted through that link
+ * goes back to NEW, and a contact without a lead gets one: an explicit decision, so it also
+ * lifts an earlier deliberate removal, like `confirmContactAsUnknown`. The three writes are not one
+ * transaction (lead creation notifies, and a notifier must never run inside one), but each is
+ * idempotent, so repeating the action after a partial failure converges to the same state.
+ */
+export async function unlinkContactFromClient(
+  contactId: string,
+  conversationId?: string | null
+): Promise<{ lead: Lead; created: boolean }> {
+  const contact = await prisma.whatsAppContact.update({
+    where: { id: contactId },
+    data: { clientId: null, matchStatus: "UNMATCHED", matchLocked: true, leadSuppressed: false },
+  })
+  await prisma.lead.updateMany({
+    where: { contactId, status: "CONVERTED" },
+    data: { status: "NEW", convertedClientId: null },
+  })
+  return createLeadOnce(contact, conversationId)
+}
+
 const LEAD_RECOVERY_BATCH = 50
 /** A contact that fails this many sweeps stops being retried (needs a person; see the warning). */
 export const LEAD_RECOVERY_MAX_ATTEMPTS = 5

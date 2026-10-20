@@ -139,6 +139,8 @@ describe('buildConversationSearchSql', () => {
     expect(name.sql).toContain('cl."fullName"')
     expect(name.sql).not.toContain('"waId"')
     expect(name.values).toContain(SEARCH_RESULT_CAP)
+    // The cap keeps the most recent conversations, not an arbitrary subset.
+    expect(name.sql).toMatch(/ORDER BY c\."lastMessageAt" DESC\s+LIMIT/)
 
     const phone = buildConversationSearchSql('300 111')!
     expect(phone.sql).toContain('w."waId"')

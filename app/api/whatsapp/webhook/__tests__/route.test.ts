@@ -96,6 +96,25 @@ describe("POST signature (S-WC-2, S-WC-3)", () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it("logs each rejection with its reason and a running count, never the body or the header", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const forged = sign(body, "attacker-secret")
+
+    await post(body, {})
+    await post(body, { "x-hub-signature-256": forged })
+
+    expect(warn).toHaveBeenCalledTimes(2)
+    const [first, second] = warn.mock.calls.map((call) => call.join(" "))
+    expect(first).toMatch(/invalid signature \(missing header\)/)
+    expect(second).toMatch(/invalid signature \(mismatch\)/)
+    const count = (line: string) => Number(/rejected so far: (\d+)/.exec(line)?.[1])
+    expect(count(second)).toBe(count(first) + 1)
+    for (const line of [first, second]) {
+      expect(line).not.toContain(forged)
+      expect(line).not.toContain("Hola")
+    }
+  })
+
   it("rejects a valid signature of a different body (tampered payload)", async () => {
     const res = await post(`${body} `, { "x-hub-signature-256": sign(body) })
     expect(res.status).toBe(401)

@@ -9,6 +9,8 @@ const m = vi.hoisted(() => ({
   leadCreate: vi.fn(),
   contactFindMany: vi.fn(),
   leadDeleteMany: vi.fn(),
+  leadUpdateMany: vi.fn(),
+  clientFindFirst: vi.fn(),
   transaction: vi.fn(),
   notify: vi.fn(),
 }))
@@ -16,7 +18,13 @@ vi.mock("@/lib/db/prisma", () => ({
   default: {
     $queryRaw: m.queryRaw,
     whatsAppContact: { upsert: m.contactUpsert, update: m.contactUpdate, findMany: m.contactFindMany },
-    lead: { findUnique: m.leadFindUnique, create: m.leadCreate, deleteMany: m.leadDeleteMany },
+    lead: {
+      findUnique: m.leadFindUnique,
+      create: m.leadCreate,
+      deleteMany: m.leadDeleteMany,
+      updateMany: m.leadUpdateMany,
+    },
+    client: { findFirst: m.clientFindFirst },
     $transaction: m.transaction,
   },
 }))
@@ -27,8 +35,10 @@ import {
   LEAD_RECOVERY_MAX_ATTEMPTS,
   confirmContactAsUnknown,
   ensureLead,
+  linkContactToClient,
   recoverMissingLeads,
   removeLead,
+  unlinkContactFromClient,
   upsertAndMatchContact,
 } from "../contacts"
 
@@ -56,6 +66,8 @@ beforeEach(() => {
   m.leadCreate.mockImplementation(async ({ data }) => ({ id: "l1", ...data }))
   m.notify.mockResolvedValue(undefined)
   m.leadDeleteMany.mockResolvedValue({ count: 1 })
+  m.leadUpdateMany.mockResolvedValue({ count: 0 })
+  m.clientFindFirst.mockResolvedValue({ id: "client-1" })
   m.transaction.mockImplementation(async (ops: Promise<unknown>[]) => Promise.all(ops))
 })
 
@@ -379,5 +391,65 @@ describe("recoverMissingLeads", () => {
 
       expect(m.leadCreate.mock.calls.filter(([arg]) => arg.data.contactId === "bad-0")).toHaveLength(0)
     })
+  })
+})
+
+describe("linkContactToClient (manual link, LD-5)", () => {
+  it("links the contact as MANUAL, locks matching and converts its lead to that client", async () => {
+    const r = await linkContactToClient("c1", "client-1")
+
+    expect(r).toEqual({ ok: true })
+    expect(m.clientFindFirst).toHaveBeenCalledWith({
+      where: { id: "client-1", isActive: true, status: { not: "ELIMINADO" } },
+      select: { id: true },
+    })
+    expect(m.contactUpdate).toHaveBeenCalledWith({
+      where: { id: "c1" },
+      data: { clientId: "client-1", matchStatus: "MANUAL", matchLocked: true },
+    })
+    expect(m.leadUpdateMany).toHaveBeenCalledWith({
+      where: { contactId: "c1" },
+      data: { status: "CONVERTED", convertedClientId: "client-1" },
+    })
+    expect(m.transaction).toHaveBeenCalledTimes(1)
+  })
+
+  it("refuses a missing, inactive or deleted client and changes nothing", async () => {
+    m.clientFindFirst.mockResolvedValue(null)
+
+    const r = await linkContactToClient("c1", "gone")
+
+    expect(r).toEqual({ ok: false, code: "CLIENT_NOT_FOUND" })
+    expect(m.contactUpdate).not.toHaveBeenCalled()
+    expect(m.leadUpdateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("unlinkContactFromClient (manual unlink)", () => {
+  it("clears the link, locks matching as UNMATCHED and reopens a converted lead to NEW", async () => {
+    m.leadFindUnique.mockResolvedValue({ id: "l1", contactId: "c1", status: "NEW" })
+
+    const r = await unlinkContactFromClient("c1", "conv-1")
+
+    expect(m.contactUpdate).toHaveBeenCalledWith({
+      where: { id: "c1" },
+      data: { clientId: null, matchStatus: "UNMATCHED", matchLocked: true, leadSuppressed: false },
+    })
+    expect(m.leadUpdateMany).toHaveBeenCalledWith({
+      where: { contactId: "c1", status: "CONVERTED" },
+      data: { status: "NEW", convertedClientId: null },
+    })
+    expect(m.leadCreate).not.toHaveBeenCalled()
+    expect(r.created).toBe(false)
+  })
+
+  it("creates the lead when the contact never had one, even if it was removed on purpose before", async () => {
+    const r = await unlinkContactFromClient("c1", "conv-1")
+
+    expect(m.leadCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ contactId: "c1", status: "NEW", conversationId: "conv-1" }),
+    })
+    expect(r.created).toBe(true)
+    expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({ type: "NEW_LEAD" }))
   })
 })

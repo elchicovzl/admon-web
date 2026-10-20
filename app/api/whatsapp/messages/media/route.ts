@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { readCappedBody } from '@/lib/utils/read-capped-body'
 import { MAX_DOCUMENT_BYTES } from '@/lib/whatsapp/attachments'
 import { requireWhatsAppAuth, WHATSAPP_ERROR_NOT_AUTHENTICATED } from '@/lib/whatsapp/access'
 import { sendMediaReply } from '@/lib/whatsapp/outbound'
@@ -35,15 +36,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Refuse before buffering anything when the declared size is already too large.
-    const declared = Number(request.headers.get('content-length'))
-    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    // Capped read: a declared size above the limit is refused up front, and a chunked body
+    // without Content-Length stops being read as soon as it passes the limit.
+    const body = await readCappedBody(request, MAX_BODY_BYTES)
+    if (body === null) {
       return json({ success: false, error: 'El archivo es demasiado grande' }, 413)
     }
 
     let form: FormData
     try {
-      form = await request.formData()
+      form = await new Response(body, {
+        headers: { 'content-type': request.headers.get('content-type') ?? '' },
+      }).formData()
     } catch {
       return json({ success: false, error: 'Solicitud inválida' }, 400)
     }
