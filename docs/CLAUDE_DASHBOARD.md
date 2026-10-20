@@ -732,6 +732,12 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   `setLeadStatus` (NEW, CONTACTED, DISCARDED; nunca CONVERTED, y un lead convertido solo se revierte
   desvinculando el contacto), `convertLead` y `deleteLead` (usa `removeLead`, así el lead no se
   recrea aunque la persona vuelva a escribir).
+- Vinculación automática (PR1.6): `createClient` (también al crear empleados) y `updateClient`
+  cuando cambia el teléfono llaman a `autoLinkContactsForClient` (`lib/whatsapp/contacts.ts`). Busca
+  contactos sin cliente y no bloqueados cuyo `waId` sea ese teléfono (con o sin el 57) y les aplica
+  `matchClient`, la misma regla del inbound: un solo cliente vincula como MATCHED y convierte el lead;
+  varios clientes marcan AMBIGUOUS. Es de mejor esfuerzo: un fallo se registra y nunca rompe la
+  acción del cliente. Reactivar un cliente no lo dispara.
 - Convertir: abre el formulario normal de cliente prellenado (`leadToClientDefaults`, teléfono en
   formato `+57 3001234567`); al crear el cliente se llama `convertLead({ leadId, clientId })`, que
   vincula el contacto y marca el lead CONVERTED.

@@ -1,7 +1,7 @@
 import { Prisma, type Lead, type WhatsAppContact } from "@prisma/client"
 import prisma from "@/lib/db/prisma"
 import { getNotifyPort } from "@/lib/notifications/port"
-import { normalizeWaId, waIdMatchCandidates, waIdToE164 } from "@/lib/utils/phone"
+import { DEFAULT_PHONE_COUNTRY, normalizeWaId, waIdMatchCandidates, waIdToE164 } from "@/lib/utils/phone"
 import { isUniqueViolation } from "./utils"
 
 export type ContactMatch =
@@ -206,6 +206,77 @@ export async function unlinkContactFromClient(
     data: { status: "NEW", convertedClientId: null },
   })
   return createLeadOnce(contact, conversationId)
+}
+
+export interface AutoLinkResult {
+  linked: number
+  ambiguous: number
+}
+
+/**
+ * wa_ids a free-form `Client.phone` may belong to: its digits, plus the default country code when
+ * the phone was stored without one (the reverse of `waIdMatchCandidates`).
+ */
+function waIdsForClientPhone(phone: string): string[] {
+  const digits = normalizeWaId(phone)
+  if (!digits) return []
+  const { dialCode } = DEFAULT_PHONE_COUNTRY
+  if (digits.startsWith(dialCode)) return [digits]
+  const withCode = normalizeWaId(`${dialCode}${digits}`)
+  return withCode ? [digits, withCode] : [digits]
+}
+
+/**
+ * Best-effort hook after a client is created or its phone changes (LD-5, PR1.6): WhatsApp
+ * contacts already waiting under that number get linked. Each contact goes through
+ * `matchClient`, the same rule inbound uses, so a number shared by several clients is flagged
+ * AMBIGUOUS instead of linked. Manual decisions (`matchLocked`) and existing links are never
+ * touched. Never throws: a failure here must not fail the client action that called it.
+ */
+export async function autoLinkContactsForClient(clientId: string): Promise<AutoLinkResult> {
+  const result: AutoLinkResult = { linked: 0, ambiguous: 0 }
+  try {
+    const client = await prisma.client.findFirst({
+      where: { id: clientId, isActive: true, status: { not: "ELIMINADO" } },
+      select: { id: true, phone: true },
+    })
+    const waIds = client ? waIdsForClientPhone(client.phone) : []
+    if (waIds.length === 0) return result
+
+    const contacts = await prisma.whatsAppContact.findMany({
+      where: { waId: { in: waIds }, matchLocked: false, clientId: null },
+      select: { id: true, waId: true, matchStatus: true },
+    })
+
+    for (const contact of contacts) {
+      try {
+        const match = await matchClient(contact.waId)
+        if (match.status === "MATCHED" && match.clientId === clientId) {
+          await prisma.$transaction([
+            prisma.whatsAppContact.update({
+              where: { id: contact.id },
+              data: { clientId, matchStatus: "MATCHED" },
+            }),
+            prisma.lead.updateMany({
+              where: { contactId: contact.id },
+              data: { status: "CONVERTED", convertedClientId: clientId },
+            }),
+            // Pollers merge by updatedAt; the inbox markers must refresh.
+            prisma.conversation.updateMany({ where: { contactId: contact.id }, data: { updatedAt: new Date() } }),
+          ])
+          result.linked++
+        } else if (match.status === "AMBIGUOUS" && contact.matchStatus !== "AMBIGUOUS") {
+          await prisma.whatsAppContact.update({ where: { id: contact.id }, data: { matchStatus: "AMBIGUOUS" } })
+          result.ambiguous++
+        }
+      } catch {
+        console.error("[whatsapp] auto-link failed for one contact; it stays as it was")
+      }
+    }
+  } catch {
+    console.error("[whatsapp] auto-link failed; contacts stay as they were")
+  }
+  return result
 }
 
 const LEAD_RECOVERY_BATCH = 50

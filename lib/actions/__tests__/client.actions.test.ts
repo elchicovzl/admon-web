@@ -19,27 +19,30 @@ const ID = {
   MANAGER: 'cmanagerxx0001',
 } as const
 
-const { prismaMock, authMock } = vi.hoisted(() => {
+const { prismaMock, authMock, autoLinkMock } = vi.hoisted(() => {
   const clientMock = {
     findUnique: vi.fn(),
     findMany: vi.fn(),
     update: vi.fn(),
+    create: vi.fn(),
     count: vi.fn(),
   }
   return {
     prismaMock: { client: clientMock },
     authMock: vi.fn(),
+    autoLinkMock: vi.fn(),
   }
 })
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
 vi.mock('@/lib/auth/auth', () => ({ auth: authMock }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
+vi.mock('@/lib/whatsapp/contacts', () => ({ autoLinkContactsForClient: autoLinkMock }))
 vi.mock('react', () => ({
   cache: <T extends (...args: unknown[]) => unknown>(fn: T): T => fn,
 }))
 
-import { updateClient } from '../client.actions'
+import { createClient, updateClient } from '../client.actions'
 
 const MANAGER_SESSION = {
   user: {
@@ -77,6 +80,7 @@ beforeEach(() => {
   prismaMock.client.update.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
     Promise.resolve({ ...existingClientRow(), ...data })
   )
+  autoLinkMock.mockResolvedValue({ linked: 0, ambiguous: 0 })
 })
 
 describe('updateClient — employeeType/workDaysRange preservation (REQ client-multi-type)', () => {
@@ -113,5 +117,58 @@ describe('updateClient — employeeType/workDaysRange preservation (REQ client-m
     const updateCall = prismaMock.client.update.mock.calls[0]?.[0]
     expect(updateCall.data.employeeType).toBeUndefined()
     expect(updateCall.data.workDaysRange).toBeUndefined()
+  })
+})
+
+describe('WhatsApp auto-link hook (PR1.6, LD-5)', () => {
+  const newClient = {
+    fullName: 'Ana Pérez',
+    clientTypes: [ClientType.INDEPENDIENTE],
+    identificationType: IdentificationType.CEDULA,
+    identificationNumber: '1000000000',
+    email: 'ana@test.com',
+    phone: '+57 300 123 4567',
+  }
+
+  beforeEach(() => {
+    prismaMock.client.findUnique.mockResolvedValue(null)
+    prismaMock.client.create.mockResolvedValue({ ...existingClientRow(), id: ID.CLIENT_A, ...newClient })
+  })
+
+  it('createClient (also used for employees) links waiting contacts for the new client', async () => {
+    const result = await createClient(newClient)
+
+    expect(result.success).toBe(true)
+    expect(autoLinkMock).toHaveBeenCalledWith(ID.CLIENT_A)
+  })
+
+  it('createClient still succeeds when the hook fails', async () => {
+    autoLinkMock.mockRejectedValue(new Error('db down'))
+
+    const result = await createClient(newClient)
+
+    expect(result.success).toBe(true)
+  })
+
+  it('updateClient runs the hook only when the phone changed', async () => {
+    prismaMock.client.findUnique.mockResolvedValue(existingClientRow())
+
+    await updateClient(ID.CLIENT_A, { phone: '3001234567' })
+    expect(autoLinkMock).not.toHaveBeenCalled()
+
+    await updateClient(ID.CLIENT_A, { fullName: 'Client A Renamed' })
+    expect(autoLinkMock).not.toHaveBeenCalled()
+
+    await updateClient(ID.CLIENT_A, { phone: '+57 310 000 0000' })
+    expect(autoLinkMock).toHaveBeenCalledWith(ID.CLIENT_A)
+  })
+
+  it('updateClient still succeeds when the hook fails', async () => {
+    prismaMock.client.findUnique.mockResolvedValue(existingClientRow())
+    autoLinkMock.mockRejectedValue(new Error('db down'))
+
+    const result = await updateClient(ID.CLIENT_A, { phone: '+57 310 000 0000' })
+
+    expect(result.success).toBe(true)
   })
 })
