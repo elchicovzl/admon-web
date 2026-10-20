@@ -35,7 +35,7 @@ import {
   resolveDisplayName,
   sortConversations,
 } from '@/lib/whatsapp/inbox'
-import { buildConversationSearchWhere } from '@/lib/whatsapp/search'
+import { buildConversationSearchSql } from '@/lib/whatsapp/search'
 
 export interface MediaUrl {
   url: string
@@ -232,7 +232,10 @@ export async function listConversations(
     if (!parsed.success) return validationError(parsed.error.issues)
     const { state, limit, cursor, q } = parsed.data
     // Search narrows both queries (escalated and others) and combines with the state filter.
-    const search = buildConversationSearchWhere(q) ?? {}
+    const searchSql = buildConversationSearchSql(q)
+    const search: Prisma.ConversationWhereInput = searchSql
+      ? { id: { in: (await prisma.$queryRaw<{ id: string }[]>(searchSql)).map((row) => row.id) } }
+      : {}
 
     const cursorAt = new Date()
     const wantEscalated = !cursor && (!state || state === 'ESCALATED')

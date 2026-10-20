@@ -668,14 +668,17 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 
 #### Búsqueda, avatares y ticks (UX de la bandeja)
 
-- Búsqueda: `listConversations({ q })` filtra en el servidor por nombre del cliente, nombre de
-  perfil de WhatsApp y dígitos del teléfono (solo si el texto parece un teléfono), sin distinguir
-  mayúsculas (`mode: 'insensitive'`) y combinada con el filtro de estado. Cliente con debounce de
-  300 ms (`lib/whatsapp/search.ts` arma el filtro). Con búsqueda activa el polling solo actualiza
-  filas ya mostradas y relanza la consulta en silencio si aparece una conversación desconocida.
-- Límite de acentos: sin la extensión `unaccent` (no se añade extensión ni migración) cada nombre se
-  busca en la forma escrita y en su forma sin acentos. Escribir "José" encuentra "José" y "Jose";
-  escribir "jose" NO encuentra "José".
+- Búsqueda: `listConversations({ q })` resuelve los ids con una consulta SQL parametrizada
+  (`Prisma.sql`, `lib/whatsapp/search.ts`) sobre el nombre del cliente, el nombre de perfil de
+  WhatsApp y los dígitos del teléfono (solo si el texto parece un teléfono), y usa esos ids en las
+  consultas existentes junto con el filtro de estado. Cliente con debounce de 300 ms. Con búsqueda
+  activa el polling solo actualiza filas ya mostradas y relanza la consulta en silencio si aparece
+  una conversación desconocida.
+- Acentos y mayúsculas: sin extensión ni migración, con `lower(translate(col, ACCENT_FROM,
+  ACCENT_TO))` de Postgres; el texto buscado se normaliza igual en TS (`normalizeSearchText`) y un
+  test mantiene ambos mapas sincronizados. "jose" encuentra "José" y viceversa. Los `%`, `_` y `!`
+  del usuario se escapan (`LIKE ... ESCAPE '!'`) y el texto viaja solo como parámetro. Tope de 1000
+  ids por búsqueda. Letras fuera del mapa (p. ej. "ã") se comparan tal cual.
 - Avatar: sin foto (la Cloud API no la entrega), iniciales de hasta 2 palabras sobre un color
   determinista según el id de la conversación; sin letras en el nombre (solo teléfono) se muestra un
   icono genérico (`lib/whatsapp/avatar.ts`).

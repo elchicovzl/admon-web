@@ -1,32 +1,41 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 
 /**
- * Inbox search (PR2.2c). Pure: turns the text typed in the search box into a Prisma filter over
- * the contact's display names and phone digits. No I/O.
+ * Inbox search (PR2.2c). Turns the text typed in the search box into a parameterized SQL query
+ * that resolves matching conversation ids. Pure: building the query does no I/O.
  *
- * Case-insensitivity comes from Prisma `mode: 'insensitive'`. Accent-insensitivity cannot come
- * from the database without the `unaccent` extension (no extension or migration is allowed here),
- * so each name term is matched in two forms: the text as typed and its accent-stripped form.
- * Known limit: an accent-free query still cannot find an accented stored name ("jose" does not
- * match "José"); an accented query finds both accented and plain names ("josé" matches "Jose"
- * only through its stripped form, and "José" through the raw form).
+ * Accent- and case-insensitivity use Postgres built-ins only (no `unaccent` extension, no
+ * migration): both the stored text and the query go through `lower(translate(text, FROM, TO))`.
+ * `normalizeSearchText` applies the same character map in TypeScript, and a test keeps the two
+ * in sync. Characters outside the map (e.g. "ã") are compared as they are, on both sides.
  */
 
 export const SEARCH_MAX_LENGTH = 80
+/** Safety cap for the id list one search can return. */
+export const SEARCH_RESULT_CAP = 1000
 
-/** Lowercase, accent-free, single-spaced. Used for comparisons and as the second match form. */
+/** Accented characters folded by the SQL `translate`. Upper case is included so the fold does not depend on the database locale's `lower()`. */
+export const ACCENT_FROM = 'áàäâéèëêíìïîóòöôúùüûñçÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛÑÇ'
+export const ACCENT_TO = 'aaaaeeeeiiiioooouuuuncAAAAEEEEIIIIOOOOUUUUNC'
+
+/** Same fold as `lower(translate(value, ACCENT_FROM, ACCENT_TO))`, plus whitespace collapsing. */
 export function normalizeSearchText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim()
+  let out = ''
+  for (const char of value) {
+    const index = ACCENT_FROM.indexOf(char)
+    out += index === -1 ? char : ACCENT_TO[index]
+  }
+  return out.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/** Escapes LIKE wildcards (and the escape character itself) for `LIKE ... ESCAPE '!'`. */
+export function escapeLike(value: string): string {
+  return value.replace(/[!%_]/g, (char) => `!${char}`)
 }
 
 export interface SearchTerms {
-  /** Name forms to look for: the trimmed text as typed and, when different, its normalized form. */
-  names: string[]
+  /** Normalized text to look for in names. */
+  name: string
   /** Phone digits to look for, only when the query looks like a phone number; otherwise null. */
   digits: string | null
 }
@@ -42,23 +51,36 @@ function phoneDigits(query: string): string | null {
 export function parseSearchQuery(query: string | null | undefined): SearchTerms | null {
   const trimmed = (query ?? '').replace(/\s+/g, ' ').trim()
   if (!trimmed) return null
-  const normalized = normalizeSearchText(trimmed)
-  const names = [...new Set([trimmed, normalized].filter(Boolean))]
-  return { names, digits: phoneDigits(trimmed) }
+  return { name: normalizeSearchText(trimmed), digits: phoneDigits(trimmed) }
 }
 
-/** Conversation filter for the query, or null when there is no query. Combine it with the state filter. */
-export function buildConversationSearchWhere(
-  query: string | null | undefined
-): Prisma.ConversationWhereInput | null {
+/**
+ * Query that returns `{ id }` rows of the conversations whose contact matches: client name
+ * (what the inbox shows as the display name), WhatsApp profile name, or phone digits. User text
+ * only ever travels as a bound parameter, already LIKE-escaped. Null when there is no query.
+ */
+export function buildConversationSearchSql(query: string | null | undefined): Prisma.Sql | null {
   const terms = parseSearchQuery(query)
   if (!terms) return null
 
-  const or: Prisma.ConversationWhereInput[] = []
-  for (const name of terms.names) {
-    or.push({ contact: { profileName: { contains: name, mode: 'insensitive' } } })
-    or.push({ contact: { client: { is: { fullName: { contains: name, mode: 'insensitive' } } } } })
+  const namePattern = `%${escapeLike(terms.name)}%`
+  const fold = (column: Prisma.Sql) =>
+    Prisma.sql`lower(translate(${column}, ${ACCENT_FROM}::text, ${ACCENT_TO}::text))`
+
+  const conditions = [
+    Prisma.sql`${fold(Prisma.sql`w."profileName"`)} LIKE ${namePattern} ESCAPE '!'`,
+    Prisma.sql`${fold(Prisma.sql`cl."fullName"`)} LIKE ${namePattern} ESCAPE '!'`,
+  ]
+  if (terms.digits) {
+    conditions.push(Prisma.sql`w."waId" LIKE ${`%${escapeLike(terms.digits)}%`} ESCAPE '!'`)
   }
-  if (terms.digits) or.push({ contact: { waId: { contains: terms.digits } } })
-  return { OR: or }
+
+  return Prisma.sql`
+    SELECT c.id
+    FROM conversations c
+    JOIN whatsapp_contacts w ON w.id = c."contactId"
+    LEFT JOIN clients cl ON cl.id = w."clientId"
+    WHERE ${Prisma.join(conditions, ' OR ')}
+    LIMIT ${SEARCH_RESULT_CAP}
+  `
 }
