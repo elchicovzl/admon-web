@@ -231,6 +231,12 @@ export function mediaKind(type: MessageType, mimeType: string): MediaKind {
   return 'other'
 }
 
+/** Counter text for badges: exact up to 99, then "99+". Empty for zero or an unusable value. */
+export function formatBadgeCount(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return ''
+  return count > 99 ? '99+' : String(Math.floor(count))
+}
+
 // ---------------------------------------------------------------- 24 h window
 
 export interface WindowState {

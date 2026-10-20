@@ -7,6 +7,7 @@ import {
   MARKER_LABEL,
   STATUS_LABEL,
   attentionLabel,
+  formatBadgeCount,
   formatListTime,
   listPreview,
 } from '@/lib/whatsapp/inbox'
@@ -60,7 +61,7 @@ function ConversationRow({ item, selected, now, onSelect }: ConversationRowProps
               className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
               aria-label={`${item.unreadCount} sin leer`}
             >
-              {item.unreadCount > 99 ? '99+' : item.unreadCount}
+              {formatBadgeCount(item.unreadCount)}
             </span>
           )}
         </span>

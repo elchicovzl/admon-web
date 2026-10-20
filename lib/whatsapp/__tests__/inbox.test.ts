@@ -6,6 +6,7 @@ import {
   conversationMarkers,
   deliveryLabel,
   formatAttentionSlot,
+  formatBadgeCount,
   formatListTime,
   formatRemaining,
   hasNewInbound,
@@ -242,5 +243,19 @@ describe('history cursor', () => {
     expect(olderThanCursor({ timestamp: at.toISOString(), id: 'cm3' })).toEqual({
       OR: [{ timestamp: { lt: at } }, { timestamp: at, id: { lt: 'cm3' } }],
     })
+  })
+})
+
+describe('formatBadgeCount', () => {
+  it('shows exact counts up to 99 and 99+ above', () => {
+    expect(formatBadgeCount(1)).toBe('1')
+    expect(formatBadgeCount(99)).toBe('99')
+    expect(formatBadgeCount(100)).toBe('99+')
+  })
+
+  it('is empty for zero, negatives and non-finite values', () => {
+    for (const value of [0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(formatBadgeCount(value)).toBe('')
+    }
   })
 })
