@@ -21,10 +21,23 @@ import {
 import type { SafeClient, ClientWithRelations, ClientNote, LegalRepresentative, CompanyEmployee } from '@/lib/types/client.types'
 import type { ActionResponse } from '@/lib/types/auth.types'
 import { revalidatePath } from 'next/cache'
+import { autoLinkContactsForClient } from '@/lib/whatsapp/contacts'
 
 /**
  * Check if user has SUPER_ADMIN or MANAGER role
  */
+/**
+ * Links WhatsApp contacts already waiting under the client's phone (PR1.6). Best effort: a
+ * failure is logged and never fails the client action.
+ */
+async function linkWhatsAppContacts(clientId: string): Promise<void> {
+  try {
+    await autoLinkContactsForClient(clientId)
+  } catch {
+    console.error('[whatsapp] auto-link after a client change failed')
+  }
+}
+
 async function requireManagerOrAdmin() {
   const session = await auth()
 
@@ -404,6 +417,7 @@ export async function createClient(
       },
     })
 
+    await linkWhatsAppContacts(client.id)
     revalidatePath('/dashboard/clients')
 
     return {
@@ -500,6 +514,9 @@ export async function updateClient(
       },
     })
 
+    if (updateData.phone !== undefined && updateData.phone !== existingClient.phone) {
+      await linkWhatsAppContacts(id)
+    }
     revalidatePath('/dashboard/clients')
     revalidatePath(`/dashboard/clients/${id}`)
 
