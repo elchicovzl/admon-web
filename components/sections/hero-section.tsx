@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Eye, TrendingUp } from 'lucide-react'
 import { Typewriter } from 'react-simple-typewriter'
-import { HeroDashboardMock } from '@/components/ui/hero-dashboard-mock'
+import { HeroSceneLazy } from '@/components/three/hero-scene-lazy'
 import { SectionLabel } from '@/components/ui/section-label'
 import Squares from '@/components/ui/squares-background'
 import { memo } from 'react'
@@ -103,17 +103,17 @@ export default function HeroSection() {
             <HeroContent />
           </div>
 
-          {/* Right side: dashboard mock */}
+          {/* Right side: 3D scene */}
           <div className="relative z-10 pb-10">
-            <HeroDashboardMock />
+            <HeroSceneLazy />
           </div>
         </div>
 
-        {/* Mobile Layout - copy with mock below */}
+        {/* Mobile Layout - copy with 3D scene below */}
         <div className="lg:hidden text-center relative z-10">
           <HeroContent isMobile />
           <div className="mt-14 pb-6 text-left">
-            <HeroDashboardMock />
+            <HeroSceneLazy />
           </div>
         </div>
       </div>
