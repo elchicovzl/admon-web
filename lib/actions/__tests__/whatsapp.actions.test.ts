@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UserRole } from '@prisma/client'
 
-const { prismaMock, authMock, hasWhatsAppAccessMock, presignGetMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, hasWhatsAppAccessMock, presignGetMock, outboundMock } = vi.hoisted(() => ({
   prismaMock: {
     whatsAppMedia: { findUnique: vi.fn() },
     conversation: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
@@ -10,12 +10,14 @@ const { prismaMock, authMock, hasWhatsAppAccessMock, presignGetMock } = vi.hoist
   authMock: vi.fn(),
   hasWhatsAppAccessMock: vi.fn(),
   presignGetMock: vi.fn(),
+  outboundMock: { sendReplyMessage: vi.fn(), sendTemplateMessage: vi.fn(), resendMessage: vi.fn() },
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
 vi.mock('@/lib/auth/auth', () => ({ auth: authMock }))
 vi.mock('@/lib/auth/rbac', () => ({ hasWhatsAppAccess: hasWhatsAppAccessMock }))
 vi.mock('@/lib/storage/r2', () => ({ presignGet: presignGetMock }))
+vi.mock('@/lib/whatsapp/outbound', () => outboundMock)
 
 import {
   getConversationThread,
@@ -23,6 +25,9 @@ import {
   getUpdates,
   listConversations,
   markConversationRead,
+  resendFailedMessage,
+  sendReply,
+  sendTemplate,
 } from '../whatsapp.actions'
 
 const MESSAGE_ID = 'cjld2cjxh0000qzrmn831i7rn'
@@ -493,5 +498,116 @@ describe('markConversationRead', () => {
   it('rejects a bad id', async () => {
     expect((await markConversationRead({ conversationId: 'x' })).success).toBe(false)
     expect(prismaMock.conversation.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('sending actions (PR2.3)', () => {
+  const SENT = { success: true, data: { messageId: 'msg-1' } }
+
+  beforeEach(() => {
+    outboundMock.sendReplyMessage.mockResolvedValue(SENT)
+    outboundMock.sendTemplateMessage.mockResolvedValue(SENT)
+    outboundMock.resendMessage.mockResolvedValue(SENT)
+  })
+
+  const calls: [string, () => Promise<unknown>][] = [
+    ['sendReply', () => sendReply({ conversationId: CONV_ID, text: 'Hola' })],
+    ['sendTemplate', () => sendTemplate({ conversationId: CONV_ID, templateKey: 'RESUME', params: ['Ana'] })],
+    ['resendFailedMessage', () => resendFailedMessage({ messageId: MESSAGE_ID })],
+  ]
+
+  it.each(calls)('%s rejects unauthenticated callers before any work', async (_name, call) => {
+    authMock.mockResolvedValue(null)
+    expect(await call()).toEqual({ success: false, error: 'No autenticado' })
+    expect(outboundMock.sendReplyMessage).not.toHaveBeenCalled()
+    expect(outboundMock.sendTemplateMessage).not.toHaveBeenCalled()
+    expect(outboundMock.resendMessage).not.toHaveBeenCalled()
+  })
+
+  it.each(calls)('%s denies a MANAGER without WhatsApp access', async (_name, call) => {
+    hasWhatsAppAccessMock.mockResolvedValue(false)
+    expect(await call()).toEqual({ success: false, error: 'No tienes acceso al módulo de WhatsApp' })
+    expect(outboundMock.sendReplyMessage).not.toHaveBeenCalled()
+    expect(outboundMock.sendTemplateMessage).not.toHaveBeenCalled()
+    expect(outboundMock.resendMessage).not.toHaveBeenCalled()
+  })
+
+  describe('sendReply', () => {
+    it('passes the authenticated user, never one supplied by the caller', async () => {
+      const r = await sendReply({ conversationId: CONV_ID, text: '  Hola  ', userId: 'attacker' } as never)
+
+      expect(r).toEqual(SENT)
+      expect(outboundMock.sendReplyMessage).toHaveBeenCalledWith({ conversationId: CONV_ID, text: 'Hola', userId: 'u1' })
+    })
+
+    it.each([
+      [{ conversationId: CONV_ID, text: '   ' }, 'El mensaje es requerido'],
+      [{ conversationId: CONV_ID, text: 'a'.repeat(4097) }, 'El mensaje no puede superar 4096 caracteres'],
+      [{ conversationId: 'x', text: 'Hola' }, 'Conversación inválida'],
+      [{ text: 'Hola' }, 'La conversación es requerida'],
+    ])('rejects invalid input with Zod (%#)', async (input, error) => {
+      expect(await sendReply(input as never)).toEqual({ success: false, error })
+      expect(outboundMock.sendReplyMessage).not.toHaveBeenCalled()
+    })
+
+    it('returns the service error untouched (window closed, CLOSED, flag off...)', async () => {
+      outboundMock.sendReplyMessage.mockResolvedValue({ success: false, error: 'La conversación está cerrada. Reábrala antes de responder.' })
+      expect(await sendReply({ conversationId: CONV_ID, text: 'Hola' })).toEqual({
+        success: false,
+        error: 'La conversación está cerrada. Reábrala antes de responder.',
+      })
+    })
+
+    it('turns an unexpected throw into a generic Spanish error', async () => {
+      outboundMock.sendReplyMessage.mockRejectedValue(new Error('postgres://secret'))
+      expect(await sendReply({ conversationId: CONV_ID, text: 'Hola' })).toEqual({
+        success: false,
+        error: 'No se pudo completar la operación',
+      })
+    })
+  })
+
+  describe('sendTemplate', () => {
+    it('forwards only registry keys with their variables', async () => {
+      await sendTemplate({ conversationId: CONV_ID, templateKey: 'PROCESS_UPDATE', params: ['Ana', 'A-1'] })
+      expect(outboundMock.sendTemplateMessage).toHaveBeenCalledWith({
+        conversationId: CONV_ID,
+        templateKey: 'PROCESS_UPDATE',
+        params: ['Ana', 'A-1'],
+        userId: 'u1',
+      })
+    })
+
+    it.each([
+      [{ conversationId: CONV_ID, templateKey: 'resume_conversation', params: ['Ana'] }, 'Plantilla inválida'],
+      [{ conversationId: CONV_ID, templateKey: 'RESUME', params: 'Ana' }, 'Datos de plantilla inválidos'],
+      [{ conversationId: CONV_ID, templateKey: 'RESUME', params: [1] }, 'Datos de plantilla inválidos'],
+      [{ conversationId: CONV_ID, templateKey: 'RESUME' }, 'Los datos de la plantilla son requeridos'],
+    ])('rejects invalid input with Zod (%#)', async (input, error) => {
+      expect(await sendTemplate(input as never)).toEqual({ success: false, error })
+      expect(outboundMock.sendTemplateMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('resendFailedMessage', () => {
+    it('defaults the confirmation to false and passes the user', async () => {
+      await resendFailedMessage({ messageId: MESSAGE_ID })
+      expect(outboundMock.resendMessage).toHaveBeenCalledWith({
+        messageId: MESSAGE_ID,
+        confirmUnknownDelivery: false,
+        userId: 'u1',
+      })
+    })
+
+    it('forwards an explicit confirmation', async () => {
+      await resendFailedMessage({ messageId: MESSAGE_ID, confirmUnknownDelivery: true })
+      expect(outboundMock.resendMessage.mock.calls[0][0].confirmUnknownDelivery).toBe(true)
+    })
+
+    it('rejects malformed ids and non-boolean confirmations', async () => {
+      expect((await resendFailedMessage({ messageId: 'nope' })).success).toBe(false)
+      expect((await resendFailedMessage({ messageId: MESSAGE_ID, confirmUnknownDelivery: 'yes' as never })).success).toBe(false)
+      expect(outboundMock.resendMessage).not.toHaveBeenCalled()
+    })
   })
 })

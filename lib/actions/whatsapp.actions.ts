@@ -11,9 +11,15 @@ import {
   getUpdatesSchema,
   listConversationsSchema,
   markConversationReadInboxSchema,
+  resendFailedMessageSchema,
+  sendReplySchema,
+  sendTemplateSchema,
   type GetConversationThreadInput,
   type GetUpdatesInput,
   type ListConversationsInput,
+  type ResendFailedMessageInput,
+  type SendReplyInput,
+  type SendTemplateInput,
 } from '@/lib/validations/whatsapp.schema'
 import type {
   ConversationListPage,
@@ -22,6 +28,7 @@ import type {
   InboxUpdates,
   ThreadMessage,
 } from '@/lib/types/whatsapp.types'
+import { resendMessage, sendReplyMessage, sendTemplateMessage, type Sent } from '@/lib/whatsapp/outbound'
 import {
   conversationMarkers,
   olderThanCursor,
@@ -375,6 +382,60 @@ export async function markConversationRead(input: {
     return { success: true, data: { updated: count } }
   } catch {
     console.error('[whatsapp] markConversationRead failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+// ---------------------------------------------------------------- sending (PR2.3)
+
+/**
+ * Free-text reply. Allowed only while the 24 h window is open (WC-13) and the conversation is not
+ * CLOSED; it moves the conversation to HUMAN in the same transaction as the outbox insert (WI-7).
+ * Attachments go through POST /api/whatsapp/messages/media, which shares the same service.
+ */
+export async function sendReply(input: SendReplyInput): Promise<ActionResponse<Sent>> {
+  try {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+
+    const parsed = sendReplySchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    return await sendReplyMessage({ ...parsed.data, userId: authCheck.userId })
+  } catch {
+    console.error('[whatsapp] sendReply failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+/** Approved template (WI-10): the only thing that can be sent once the 24 h window is closed. */
+export async function sendTemplate(input: SendTemplateInput): Promise<ActionResponse<Sent>> {
+  try {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+
+    const parsed = sendTemplateSchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    return await sendTemplateMessage({ ...parsed.data, userId: authCheck.userId })
+  } catch {
+    console.error('[whatsapp] sendTemplate failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+/** Sends a FAILED dashboard message again (S-WI-9). AI and system messages are not resendable. */
+export async function resendFailedMessage(input: ResendFailedMessageInput): Promise<ActionResponse<Sent>> {
+  try {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+
+    const parsed = resendFailedMessageSchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    return await resendMessage({ ...parsed.data, userId: authCheck.userId })
+  } catch {
+    console.error('[whatsapp] resendFailedMessage failed')
     return { success: false, error: GENERIC_ERROR }
   }
 }
