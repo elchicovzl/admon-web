@@ -16,6 +16,7 @@ import {
   markConversationReadInboxSchema,
   reopenConversationSchema,
   resendFailedMessageSchema,
+  searchClientsForLinkSchema,
   sendReplySchema,
   sendTemplateSchema,
   setConversationAiPausedSchema,
@@ -27,11 +28,13 @@ import {
   type ListConversationsInput,
   type ReopenConversationInput,
   type ResendFailedMessageInput,
+  type SearchClientsForLinkInput,
   type SendReplyInput,
   type SendTemplateInput,
   type SetConversationAiPausedInput,
 } from '@/lib/validations/whatsapp.schema'
 import type {
+  ClientLinkOption,
   ConversationListPage,
   ConversationSummary,
   ConversationThread,
@@ -46,6 +49,7 @@ import {
   sortConversations,
 } from '@/lib/whatsapp/inbox'
 import { buildConversationSearchSql } from '@/lib/whatsapp/search'
+import { buildClientLinkSearchSql } from '@/lib/whatsapp/client-search'
 import {
   applyTransition,
   setConversationAiPaused as setAiPaused,
@@ -653,4 +657,32 @@ export async function confirmContactAsUnknown(
     await confirmUnknown(contact.contactId, conversationId)
     return touchAndSummarize(conversationId)
   })
+}
+
+/** Client picker for "Vincular a cliente": name, document or phone digits; active clients only. */
+export async function searchClientsForLink(
+  input: SearchClientsForLinkInput
+): Promise<ActionResponse<ClientLinkOption[]>> {
+  try {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+    const parsed = searchClientsForLinkSchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    const sql = buildClientLinkSearchSql(parsed.data.q)
+    if (!sql) return { success: true, data: [] }
+    const rows = await prisma.$queryRaw<ClientLinkOption[]>(sql)
+    return {
+      success: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        fullName: row.fullName,
+        identificationNumber: row.identificationNumber,
+        phone: row.phone,
+      })),
+    }
+  } catch {
+    console.error('[whatsapp] searchClientsForLink failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
 }

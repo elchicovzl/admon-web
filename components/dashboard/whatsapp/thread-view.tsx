@@ -9,6 +9,8 @@ import { composerMode, resendAction } from '@/lib/whatsapp/composer'
 import { MARKER_LABEL, STATUS_LABEL, attentionLabel } from '@/lib/whatsapp/inbox'
 import { ConversationAvatar } from './conversation-avatar'
 import { Composer, type ComposerHandlers } from './composer'
+import { HandoffActions } from './handoff-actions'
+import type { HandoffActions as HandoffActionHandlers } from './use-handoff-actions'
 import { MessageBubble } from './message-bubble'
 import { ThreadSkeleton } from './inbox-skeletons'
 import { WindowCountdown } from './window-countdown'
@@ -31,6 +33,7 @@ interface ThreadViewProps {
   onRetry: () => void
   composer: ComposerHandlers
   onResend: (message: ThreadMessage) => void
+  handoff: HandoffActionHandlers
 }
 
 /** Pixels from the bottom within which a new message keeps the view pinned to the end. */
@@ -46,6 +49,7 @@ export function ThreadView({
   onRetry,
   composer,
   onResend,
+  handoff,
 }: ThreadViewProps) {
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinned = useRef(true)
@@ -119,6 +123,7 @@ export function ThreadView({
             {attention && <span className="font-medium text-destructive"> · {attention}</span>}
           </p>
           <WindowCountdown now={now} lastInboundAt={conversation.lastInboundAt} />
+          <HandoffActions conversation={conversation} actions={handoff} />
         </div>
       </header>
 

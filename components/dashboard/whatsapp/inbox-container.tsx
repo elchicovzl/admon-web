@@ -25,6 +25,7 @@ import { ThreadView, type ThreadState } from './thread-view'
 import { useNow } from './use-now'
 import { useDebouncedValue } from './use-debounced-value'
 import { usePolling } from './use-polling'
+import { useHandoffActions } from './use-handoff-actions'
 import { useThreadActions } from './use-thread-actions'
 
 /** Same cadence as the notification bell. */
@@ -277,6 +278,15 @@ export function InboxContainer({
   usePolling(poll, INBOX_POLL_INTERVAL_MS)
 
   const actions = useThreadActions({ conversationId: selectedId, onChanged: poll })
+  /** A header action returns the fresh row: show it now instead of waiting for the next poll. */
+  const applyActionResult = useCallback(
+    (summary: ConversationSummary) => {
+      applyRows([summary])
+      setOpenSummary((current) => (current && current.id === summary.id ? summary : current))
+    },
+    [applyRows]
+  )
+  const handoff = useHandoffActions({ conversationId: selectedId, onUpdated: applyActionResult })
 
   const selected =
     conversations.find((item) => item.id === selectedId) ??
@@ -323,6 +333,7 @@ export function InboxContainer({
             onSendAttachment: actions.sendAttachment,
           }}
           onResend={actions.resend}
+          handoff={handoff}
         />
       </section>
       <ResendConfirmDialog

@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client'
 const { prismaMock, authMock, hasWhatsAppAccessMock, transitionsMock, contactsMock } = vi.hoisted(() => ({
   prismaMock: {
     conversation: { findUnique: vi.fn(), update: vi.fn() },
+    $queryRaw: vi.fn(),
   },
   authMock: vi.fn(),
   hasWhatsAppAccessMock: vi.fn(),
@@ -33,6 +34,7 @@ import {
   linkContactToClient,
   reopenConversation,
   returnToAi,
+  searchClientsForLink,
   setConversationAiPaused,
   takeConversation,
   unlinkContactFromClient,
@@ -101,6 +103,7 @@ const actions = {
   linkContactToClient: () => linkContactToClient({ conversationId: CONV, clientId: CLIENT }),
   unlinkContactFromClient: () => unlinkContactFromClient({ conversationId: CONV }),
   confirmContactAsUnknown: () => confirmContactAsUnknown({ conversationId: CONV }),
+  searchClientsForLink: () => searchClientsForLink({ q: 'Ana' }),
 }
 
 describe('handoff and contact actions: authorization (WI-9)', () => {
@@ -115,6 +118,7 @@ describe('handoff and contact actions: authorization (WI-9)', () => {
       expect(transitionsMock.setConversationAiPaused).not.toHaveBeenCalled()
       for (const fn of Object.values(contactsMock)) expect(fn).not.toHaveBeenCalled()
       expect(prismaMock.conversation.update).not.toHaveBeenCalled()
+      expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
     })
 
     it(`${name} returns the generic error instead of throwing when the access check fails`, async () => {
@@ -290,5 +294,26 @@ describe('contact actions (LD-3, LD-5, LD-8)', () => {
       success: false,
       error: 'Conversación no encontrada',
     })
+  })
+})
+
+describe('searchClientsForLink', () => {
+  it('returns the matching clients as picker options', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
+      { id: CLIENT, fullName: 'Ana Pérez', identificationNumber: '1000000000', phone: '300 123 4567' },
+    ])
+
+    const r = await searchClientsForLink({ q: 'ana' })
+
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1)
+    expect(r).toEqual({
+      success: true,
+      data: [{ id: CLIENT, fullName: 'Ana Pérez', identificationNumber: '1000000000', phone: '300 123 4567' }],
+    })
+  })
+
+  it('returns nothing for a blank query without querying', async () => {
+    expect(await searchClientsForLink({ q: '  ' })).toEqual({ success: true, data: [] })
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
   })
 })

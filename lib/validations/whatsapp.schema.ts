@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { CAPTION_MAX_LENGTH } from '@/lib/whatsapp/attachments'
 import { REPLY_TEXT_MAX_LENGTH } from '@/lib/whatsapp/composer'
+import { CLOSE_REASON_MAX_LENGTH } from '@/lib/whatsapp/handoff'
 import { SEARCH_MAX_LENGTH } from '@/lib/whatsapp/search'
 import { TEMPLATE_KEYS } from '@/lib/whatsapp/templates'
 
@@ -105,8 +106,6 @@ export const sendMediaFieldsSchema = z.object({
 
 // ---------------------------------------------------------------- handoff (PR2.4)
 
-export const CLOSE_REASON_MAX_LENGTH = 300
-
 export const conversationActionSchema = z.object({ conversationId })
 
 export const closeConversationSchema = z.object({
@@ -136,6 +135,11 @@ export const linkContactToClientSchema = z.object({
   clientId: z.string({ required_error: 'El cliente es requerido' }).cuid('Cliente inválido'),
 })
 
+export const searchClientsForLinkSchema = z.object({
+  q: z.string({ invalid_type_error: 'Búsqueda inválida' }).max(SEARCH_MAX_LENGTH, 'Búsqueda demasiado larga'),
+})
+
+export type SearchClientsForLinkInput = z.input<typeof searchClientsForLinkSchema>
 export type ConversationActionInput = z.input<typeof conversationActionSchema>
 export type CloseConversationInput = z.input<typeof closeConversationSchema>
 export type ReopenConversationInput = z.input<typeof reopenConversationSchema>
