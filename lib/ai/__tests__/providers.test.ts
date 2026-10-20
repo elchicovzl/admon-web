@@ -94,12 +94,11 @@ describe("AI providers (A11, D20)", () => {
     expect(() => embeddingModel()).toThrow("OPENAI_API_KEY")
     expect(() => transcriptionModel()).toThrow("OPENAI_API_KEY")
 
+    // The whole message is fixed text: no configured value (either key) can appear in it.
     m.getAiConfig.mockReturnValue(config({ anthropicApiKey: undefined }))
-    try {
-      chatModel()
-    } catch (error) {
-      expect(String(error)).not.toContain("sk-openai-test")
-    }
+    expect(() => chatModel()).toThrow(/^\[ai\] ANTHROPIC_API_KEY is not configured$/)
+    m.getAiConfig.mockReturnValue(config({ openaiApiKey: undefined }))
+    expect(() => embeddingModel()).toThrow(/^\[ai\] OPENAI_API_KEY is not configured$/)
   })
 
   it("refuses embedding dimensions the vector column cannot store (KB-6)", async () => {
