@@ -6,20 +6,30 @@ import type { ActionResponse } from '@/lib/types/auth.types'
 import { requireWhatsAppAuth } from '@/lib/whatsapp/access'
 import { presignGet } from '@/lib/storage/r2'
 import {
+  closeConversationSchema,
+  conversationActionSchema,
   getConversationThreadSchema,
   getMediaUrlSchema,
   getUpdatesSchema,
+  linkContactToClientSchema,
   listConversationsSchema,
   markConversationReadInboxSchema,
+  reopenConversationSchema,
   resendFailedMessageSchema,
   sendReplySchema,
   sendTemplateSchema,
+  setConversationAiPausedSchema,
+  type CloseConversationInput,
+  type ConversationActionInput,
   type GetConversationThreadInput,
   type GetUpdatesInput,
+  type LinkContactToClientInput,
   type ListConversationsInput,
+  type ReopenConversationInput,
   type ResendFailedMessageInput,
   type SendReplyInput,
   type SendTemplateInput,
+  type SetConversationAiPausedInput,
 } from '@/lib/validations/whatsapp.schema'
 import type {
   ConversationListPage,
@@ -36,6 +46,17 @@ import {
   sortConversations,
 } from '@/lib/whatsapp/inbox'
 import { buildConversationSearchSql } from '@/lib/whatsapp/search'
+import {
+  applyTransition,
+  setConversationAiPaused as setAiPaused,
+  type TransitionInput,
+  type TransitionOutcome,
+} from '@/lib/whatsapp/transitions'
+import {
+  confirmContactAsUnknown as confirmUnknown,
+  linkContactToClient as linkContact,
+  unlinkContactFromClient as unlinkContact,
+} from '@/lib/whatsapp/contacts'
 
 export interface MediaUrl {
   url: string
@@ -444,6 +465,202 @@ export async function resendFailedMessage(input: ResendFailedMessageInput): Prom
     return await resendMessage({ ...parsed.data, userId: authCheck.userId })
   } catch {
     console.error('[whatsapp] resendFailedMessage failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+// ---------------------------------------------------------------- handoff and contacts (PR2.4)
+
+const TRANSITION_ERRORS: Record<string, string> = {
+  NOT_FOUND: 'Conversación no encontrada',
+  CONFLICT: 'La conversación cambió mientras tanto. Intente de nuevo.',
+}
+const TRANSITION_REJECTED = 'Esta acción no está disponible en el estado actual de la conversación'
+
+/** The conversation as the inbox shows it, so the caller can merge it without waiting for a poll. */
+async function freshSummary(conversationId: string): Promise<ActionResponse<ConversationSummary>> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: conversationSelect,
+  })
+  if (!conversation) return { success: false, error: TRANSITION_ERRORS.NOT_FOUND }
+  return { success: true, data: toSummary(conversation) }
+}
+
+async function runTransition(
+  input: Omit<TransitionInput, 'actor'>,
+  name: string
+): Promise<ActionResponse<ConversationSummary>> {
+  try {
+    const outcome: TransitionOutcome = await applyTransition({ ...input, actor: 'USER' })
+    if (!outcome.ok) return { success: false, error: TRANSITION_ERRORS[outcome.code] ?? TRANSITION_REJECTED }
+    return await freshSummary(input.conversationId)
+  } catch {
+    console.error(`[whatsapp] ${name} failed`)
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+/** "Atender": a person takes the conversation from the AI or from an escalation (CH-2). */
+export async function takeConversation(input: ConversationActionInput): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = conversationActionSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+
+  return runTransition(
+    { conversationId: parsed.data.conversationId, event: 'TAKE', actorUserId: authCheck.userId },
+    'takeConversation'
+  )
+}
+
+/** Manual hand-back to the AI only (CH-6): the actor is audited and the backlog is skipped. */
+export async function returnToAi(input: ConversationActionInput): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = conversationActionSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+
+  return runTransition(
+    { conversationId: parsed.data.conversationId, event: 'RETURN_TO_AI', actorUserId: authCheck.userId },
+    'returnToAi'
+  )
+}
+
+export async function closeConversation(input: CloseConversationInput): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = closeConversationSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+  const { conversationId, reason } = parsed.data
+
+  return runTransition(
+    { conversationId, event: 'CLOSE', actorUserId: authCheck.userId, ...(reason ? { reason } : {}) },
+    'closeConversation'
+  )
+}
+
+/** A closed conversation reopens with the AI or with a person, as the user chooses (CH-2). */
+export async function reopenConversation(
+  input: ReopenConversationInput
+): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = reopenConversationSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+  const { conversationId, target } = parsed.data
+
+  return runTransition(
+    { conversationId, event: 'REOPEN', actorUserId: authCheck.userId, target },
+    'reopenConversation'
+  )
+}
+
+/** Per-conversation AI switch (WI-9). It never changes the state; see `setConversationAiPaused`. */
+export async function setConversationAiPaused(
+  input: SetConversationAiPausedInput
+): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = setConversationAiPausedSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+
+  try {
+    const outcome = await setAiPaused({ ...parsed.data, actorUserId: authCheck.userId })
+    if (!outcome.ok) return { success: false, error: TRANSITION_ERRORS.NOT_FOUND }
+    return await freshSummary(parsed.data.conversationId)
+  } catch {
+    console.error('[whatsapp] setConversationAiPaused failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+type ContactOfConversation = { contactId: string; clientId: string | null }
+
+async function contactOf(conversationId: string): Promise<ContactOfConversation | null> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { contactId: true, contact: { select: { clientId: true } } },
+  })
+  return conversation ? { contactId: conversation.contactId, clientId: conversation.contact.clientId } : null
+}
+
+/**
+ * Contact changes do not touch the conversation row, so it is bumped: pollers merge by
+ * `updatedAt`, and the list markers (Sin cliente / Lead / Ambiguo) must refresh for everyone.
+ */
+async function touchAndSummarize(conversationId: string): Promise<ActionResponse<ConversationSummary>> {
+  await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } })
+  return freshSummary(conversationId)
+}
+
+/** Manual link to a Client (LD-5): wins over automatic matching and converts the lead. */
+export async function linkContactToClient(
+  input: LinkContactToClientInput
+): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = linkContactToClientSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+  const { conversationId, clientId } = parsed.data
+
+  try {
+    const contact = await contactOf(conversationId)
+    if (!contact) return { success: false, error: TRANSITION_ERRORS.NOT_FOUND }
+
+    const outcome = await linkContact(contact.contactId, clientId)
+    if (!outcome.ok) return { success: false, error: 'Cliente no encontrado' }
+    return await touchAndSummarize(conversationId)
+  } catch {
+    console.error('[whatsapp] linkContactToClient failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+/** The number is not the linked Client's: unlink, lock, and keep it as a lead. */
+export async function unlinkContactFromClient(
+  input: ConversationActionInput
+): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = conversationActionSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+  const { conversationId } = parsed.data
+
+  try {
+    const contact = await contactOf(conversationId)
+    if (!contact) return { success: false, error: TRANSITION_ERRORS.NOT_FOUND }
+    if (!contact.clientId) return { success: false, error: 'La conversación no está vinculada a un cliente' }
+
+    await unlinkContact(contact.contactId, conversationId)
+    return await touchAndSummarize(conversationId)
+  } catch {
+    console.error('[whatsapp] unlinkContactFromClient failed')
+    return { success: false, error: GENERIC_ERROR }
+  }
+}
+
+/** An ambiguous (or unmatched) number belongs to nobody on file: lock it and create its lead (LD-8). */
+export async function confirmContactAsUnknown(
+  input: ConversationActionInput
+): Promise<ActionResponse<ConversationSummary>> {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return { success: false, error: authCheck.error }
+  const parsed = conversationActionSchema.safeParse(input)
+  if (!parsed.success) return validationError(parsed.error.issues)
+  const { conversationId } = parsed.data
+
+  try {
+    const contact = await contactOf(conversationId)
+    if (!contact) return { success: false, error: TRANSITION_ERRORS.NOT_FOUND }
+    if (contact.clientId) {
+      return { success: false, error: 'El contacto está vinculado a un cliente. Desvincúlelo primero.' }
+    }
+
+    await confirmUnknown(contact.contactId, conversationId)
+    return await touchAndSummarize(conversationId)
+  } catch {
+    console.error('[whatsapp] confirmContactAsUnknown failed')
     return { success: false, error: GENERIC_ERROR }
   }
 }

@@ -103,6 +103,45 @@ export const sendMediaFieldsSchema = z.object({
     .optional(),
 })
 
+// ---------------------------------------------------------------- handoff (PR2.4)
+
+export const CLOSE_REASON_MAX_LENGTH = 300
+
+export const conversationActionSchema = z.object({ conversationId })
+
+export const closeConversationSchema = z.object({
+  conversationId,
+  reason: z
+    .string({ invalid_type_error: 'Motivo inválido' })
+    .trim()
+    .max(CLOSE_REASON_MAX_LENGTH, `El motivo no puede superar ${CLOSE_REASON_MAX_LENGTH} caracteres`)
+    .optional(),
+})
+
+export const reopenConversationSchema = z.object({
+  conversationId,
+  target: z.enum(['AI', 'HUMAN'], {
+    required_error: 'Indique quién atiende la conversación',
+    invalid_type_error: 'Destino inválido',
+  }),
+})
+
+export const setConversationAiPausedSchema = z.object({
+  conversationId,
+  paused: z.boolean({ required_error: 'Valor requerido', invalid_type_error: 'Valor inválido' }),
+})
+
+export const linkContactToClientSchema = z.object({
+  conversationId,
+  clientId: z.string({ required_error: 'El cliente es requerido' }).cuid('Cliente inválido'),
+})
+
+export type ConversationActionInput = z.input<typeof conversationActionSchema>
+export type CloseConversationInput = z.input<typeof closeConversationSchema>
+export type ReopenConversationInput = z.input<typeof reopenConversationSchema>
+export type SetConversationAiPausedInput = z.input<typeof setConversationAiPausedSchema>
+export type LinkContactToClientInput = z.input<typeof linkContactToClientSchema>
+
 export type SendReplyInput = z.input<typeof sendReplySchema>
 export type SendTemplateInput = z.input<typeof sendTemplateSchema>
 export type ResendFailedMessageInput = z.input<typeof resendFailedMessageSchema>
