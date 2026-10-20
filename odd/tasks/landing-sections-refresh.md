@@ -25,7 +25,7 @@ Mode: off (no project/session config). Runner: vitest. Ordinary checks: tsc on t
 ## Tasks
 - [x] T1 — Mission & Vision redesign + parallax (branch feat/about-mission-vision-refresh; route: delegated direct — preparation/writer trigger). New components/sections/about/mission-vision.tsx; about-section.tsx renders it. Checks: tsc clean (writer + parent spot check), next build passed (writer). Visual check pending.
 - [x] T2 — Values bento + tilt (branch feat/about-values-bento; route: delegated direct). New components/sections/about/values-bento.tsx; outer card dropped. Checks: tsc clean (writer + parent spot check), next build passed (writer). T1 merged in PR #85.
-- [ ] T3 — Benefits sticky scroll story + parallax
+- [x] T3 — Benefits sticky scroll story + parallax (branch feat/benefits-scroll-story; route: delegated direct). New components/sections/benefits/{benefits-story,benefits-list,stat-card}.tsx; intro section lightly restyled. Checks: tsc clean (writer + parent spot check), next build passed (writer). T2 merged in PR #86.
 
 ## Acceptance criteria
 - Each section looks modern, consistent with the hero, works at 375px and desktop, respects reduced motion.
