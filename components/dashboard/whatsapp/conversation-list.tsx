@@ -7,6 +7,7 @@ import {
   MARKER_LABEL,
   STATUS_LABEL,
   attentionLabel,
+  formatBadgeCount,
   formatListTime,
   listPreview,
 } from '@/lib/whatsapp/inbox'
@@ -60,7 +61,7 @@ function ConversationRow({ item, selected, now, onSelect }: ConversationRowProps
               className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
               aria-label={`${item.unreadCount} sin leer`}
             >
-              {item.unreadCount > 99 ? '99+' : item.unreadCount}
+              {formatBadgeCount(item.unreadCount)}
             </span>
           )}
         </span>
@@ -113,12 +114,18 @@ export function ConversationList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap gap-1 border-b p-2" role="group" aria-label="Filtrar por estado">
+      {/* One row: compact chips that scroll sideways instead of wrapping when the pane is narrow. */}
+      <div
+        className="flex flex-nowrap gap-1 overflow-x-auto border-b p-2"
+        role="group"
+        aria-label="Filtrar por estado"
+      >
         {FILTERS.map(({ value, label }) => (
           <Button
             key={value}
             type="button"
             size="sm"
+            className="h-7 shrink-0 px-2 text-xs"
             variant={filter === value ? 'default' : 'outline'}
             aria-pressed={filter === value}
             onClick={() => onFilterChange(value)}

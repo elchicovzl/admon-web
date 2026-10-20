@@ -100,6 +100,7 @@ import {
 import { logout } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { WhatsAppSidebarBadge } from '@/components/dashboard/whatsapp/sidebar-badge'
 
 /**
  * A sub-item is either a link (`href` set, no children) or a pure grouping
@@ -601,6 +602,8 @@ export function AppSidebar({ user }: AppSidebarProps) {
                             {item.badge}
                           </span>
                         )}
+                        {/* Only rendered for users with module access (the item is filtered out otherwise). */}
+                        {item.requiresWhatsAppAccess && <WhatsAppSidebarBadge />}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

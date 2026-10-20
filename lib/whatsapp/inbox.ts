@@ -1,4 +1,4 @@
-import type { MessageStatus, MessageType } from '@prisma/client'
+import type { MessageStatus, MessageType, Prisma } from '@prisma/client'
 import type {
   ConversationMarker,
   ConversationSummary,
@@ -73,6 +73,31 @@ export function mergeMessages(current: ThreadMessage[], incoming: ThreadMessage[
 export function hasNewInbound(current: ThreadMessage[], incoming: ThreadMessage[]): boolean {
   const known = new Set(current.map((message) => message.id))
   return incoming.some((message) => message.direction === 'IN' && !known.has(message.id))
+}
+
+// ---------------------------------------------------------------- history cursor
+
+/** Position of a message in the thread order (timestamp, then id), used to page older history. */
+export interface ThreadCursorValue {
+  timestamp: string
+  id: string
+}
+
+export function threadCursorOf(message: Pick<ThreadMessage, 'timestamp' | 'id'>): ThreadCursorValue {
+  return { timestamp: message.timestamp, id: message.id }
+}
+
+/**
+ * Filter for "strictly older than the cursor" under the thread order `timestamp desc, id desc`.
+ * Messages that share the cursor's timestamp are split by id, so a page boundary that falls in
+ * the middle of a same-timestamp group neither skips nor repeats any of them. (Ids are cuids,
+ * lowercase alphanumerics, so database and JavaScript orderings agree.)
+ */
+export function olderThanCursor(before: ThreadCursorValue): Prisma.WhatsAppMessageWhereInput {
+  const timestamp = new Date(before.timestamp)
+  return {
+    OR: [{ timestamp: { lt: timestamp } }, { timestamp, id: { lt: before.id } }],
+  }
 }
 
 // ---------------------------------------------------------------- markers and labels
@@ -204,6 +229,12 @@ export function mediaKind(type: MessageType, mimeType: string): MediaKind {
   if (type === 'AUDIO') return 'audio'
   if (type === 'DOCUMENT') return 'document'
   return 'other'
+}
+
+/** Counter text for badges: exact up to 99, then "99+". Empty for zero or an unusable value. */
+export function formatBadgeCount(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return ''
+  return count > 99 ? '99+' : String(Math.floor(count))
 }
 
 // ---------------------------------------------------------------- 24 h window
