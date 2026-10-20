@@ -1,6 +1,7 @@
-import { Loader2 } from 'lucide-react'
+import { Loader2, Search, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { ConversationSummary } from '@/lib/types/whatsapp.types'
 import {
@@ -11,6 +12,8 @@ import {
   formatListTime,
   listPreview,
 } from '@/lib/whatsapp/inbox'
+import { SEARCH_MAX_LENGTH } from '@/lib/whatsapp/search'
+import { ConversationAvatar } from './conversation-avatar'
 import { ConversationListSkeleton } from './inbox-skeletons'
 
 export type InboxFilter = 'ALL' | ConversationSummary['status']
@@ -41,39 +44,42 @@ function ConversationRow({ item, selected, now, onSelect }: ConversationRowProps
         onClick={() => onSelect(item.id)}
         aria-current={selected ? 'true' : undefined}
         className={cn(
-          'flex w-full flex-col gap-1 border-l-4 border-transparent px-3 py-2.5 text-left transition-colors hover:bg-accent/60',
+          'flex w-full items-start gap-3 border-l-4 border-transparent px-3 py-2.5 text-left transition-colors hover:bg-accent/60',
           escalated && 'border-l-destructive bg-destructive/5',
           selected && 'bg-accent'
         )}
       >
-        <span className="flex items-center justify-between gap-2">
-          <span className={cn('truncate text-sm', item.unreadCount > 0 ? 'font-semibold' : 'font-medium')}>
-            {item.displayName}
-          </span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {now ? formatListTime(item.lastMessageAt, now) : ''}
-          </span>
-        </span>
-        <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-xs text-muted-foreground">{listPreview(item.preview)}</span>
-          {item.unreadCount > 0 && (
-            <span
-              className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
-              aria-label={`${item.unreadCount} sin leer`}
-            >
-              {formatBadgeCount(item.unreadCount)}
+        <ConversationAvatar name={item.displayName} seed={item.id} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex items-center justify-between gap-2">
+            <span className={cn('truncate text-sm', item.unreadCount > 0 ? 'font-semibold' : 'font-medium')}>
+              {item.displayName}
             </span>
-          )}
-        </span>
-        <span className="flex flex-wrap items-center gap-1">
-          <Badge variant={escalated ? 'destructive' : 'secondary'}>{STATUS_LABEL[item.status]}</Badge>
-          {item.aiPaused && <Badge variant="outline">IA pausada</Badge>}
-          {item.markers.map((marker) => (
-            <Badge key={marker} variant="outline">
-              {MARKER_LABEL[marker]}
-            </Badge>
-          ))}
-          {attention && <span className="text-xs font-medium text-destructive">{attention}</span>}
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {now ? formatListTime(item.lastMessageAt, now) : ''}
+            </span>
+          </span>
+          <span className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs text-muted-foreground">{listPreview(item.preview)}</span>
+            {item.unreadCount > 0 && (
+              <span
+                className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
+                aria-label={`${item.unreadCount} sin leer`}
+              >
+                {formatBadgeCount(item.unreadCount)}
+              </span>
+            )}
+          </span>
+          <span className="flex flex-wrap items-center gap-1">
+            <Badge variant={escalated ? 'destructive' : 'secondary'}>{STATUS_LABEL[item.status]}</Badge>
+            {item.aiPaused && <Badge variant="outline">IA pausada</Badge>}
+            {item.markers.map((marker) => (
+              <Badge key={marker} variant="outline">
+                {MARKER_LABEL[marker]}
+              </Badge>
+            ))}
+            {attention && <span className="text-xs font-medium text-destructive">{attention}</span>}
+          </span>
         </span>
       </button>
     </li>
@@ -84,6 +90,11 @@ interface ConversationListProps {
   items: ConversationSummary[]
   filter: InboxFilter
   onFilterChange: (filter: InboxFilter) => void
+  /** Text in the search box (immediate). */
+  search: string
+  onSearchChange: (value: string) => void
+  /** Query already applied to `items` (debounced), used for the empty state. */
+  query: string
   selectedId: string | null
   onSelect: (id: string) => void
   loading: boolean
@@ -99,6 +110,9 @@ export function ConversationList({
   items,
   filter,
   onFilterChange,
+  search,
+  onSearchChange,
+  query,
   selectedId,
   onSelect,
   loading,
@@ -114,6 +128,34 @@ export function ConversationList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative border-b p-2">
+        <Search
+          className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Buscar por nombre o teléfono"
+          aria-label="Buscar conversaciones"
+          autoComplete="off"
+          maxLength={SEARCH_MAX_LENGTH}
+          className="h-9 pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+        />
+        {search && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="absolute right-3 top-1/2 size-7 -translate-y-1/2"
+            aria-label="Limpiar búsqueda"
+            onClick={() => onSearchChange('')}
+          >
+            <X className="size-4" aria-hidden />
+          </Button>
+        )}
+      </div>
       {/* One row: compact chips that scroll sideways instead of wrapping when the pane is narrow. */}
       <div
         className="flex flex-nowrap gap-1 overflow-x-auto border-b p-2"
@@ -146,7 +188,9 @@ export function ConversationList({
             </Button>
           </div>
         ) : visible.length === 0 ? (
-          <p className="p-6 text-center text-sm text-muted-foreground">No hay conversaciones.</p>
+          <p className="p-6 text-center text-sm text-muted-foreground">
+            {query ? `Sin resultados para «${query}»` : 'No hay conversaciones.'}
+          </p>
         ) : (
           <>
             <ul className="divide-y">

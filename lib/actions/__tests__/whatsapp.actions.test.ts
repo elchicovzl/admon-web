@@ -5,6 +5,7 @@ const { prismaMock, authMock, hasWhatsAppAccessMock, presignGetMock, outboundMoc
   prismaMock: {
     whatsAppMedia: { findUnique: vi.fn() },
     conversation: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
+    $queryRaw: vi.fn(),
     whatsAppMessage: { findMany: vi.fn() },
   },
   authMock: vi.fn(),
@@ -325,12 +326,63 @@ describe('listConversations', () => {
     expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'CLOSED' })
   })
 
+  it('resolves ids with one parameterized raw query and feeds them to both queries', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([{ id: CONV_ID }, { id: CONV_ID_2 }])
+    await listConversations({ q: 'jose' })
+
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1)
+    const sql = prismaMock.$queryRaw.mock.calls[0][0]
+    expect(sql.values).toContain('%jose%')
+    expect(sql.sql).not.toContain('jose')
+
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(2)
+    for (const [args] of prismaMock.conversation.findMany.mock.calls) {
+      expect(args.where.id).toEqual({ in: [CONV_ID, CONV_ID_2] })
+    }
+    const statuses = prismaMock.conversation.findMany.mock.calls.map(([a]) => a.where.status)
+    expect(statuses).toEqual(['ESCALATED', { not: 'ESCALATED' }])
+  })
+
+  it('combines the search with the state filter and returns nothing when no id matches', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([])
+    await listConversations({ q: '300 111', state: 'CLOSED' })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(1)
+    const where = prismaMock.conversation.findMany.mock.calls[0][0].where
+    expect(where).toEqual({ status: 'CLOSED', id: { in: [] } })
+  })
+
+  it('never builds the query from hostile text', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([])
+    await listConversations({ q: "%' OR 1=1" })
+    const sql = prismaMock.$queryRaw.mock.calls[0][0]
+    expect(sql.sql).not.toContain('1=1')
+    expect(sql.values.some((v: unknown) => typeof v === 'string' && v.includes('1=1'))).toBe(true)
+  })
+
+  it('treats a blank search as no search', async () => {
+    await listConversations({ q: '   ' })
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
+    expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'ESCALATED' })
+    expect(prismaMock.conversation.findMany.mock.calls[1][0].where).toEqual({ status: { not: 'ESCALATED' } })
+  })
+
+  it('still requires WhatsApp access when searching', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u', role: UserRole.MANAGER } })
+    hasWhatsAppAccessMock.mockResolvedValue(false)
+    const r = await listConversations({ q: 'ana' })
+    expect(r.success).toBe(false)
+    expect(prismaMock.conversation.findMany).not.toHaveBeenCalled()
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
+  })
+
   it.each([
     [{ state: 'BOGUS' }],
     [{ limit: 0 }],
     [{ limit: 101 }],
     [{ limit: 1.5 }],
     [{ cursor: 'not-a-cuid' }],
+    [{ q: 'x'.repeat(81) }],
+    [{ q: 5 }],
   ])('rejects invalid input %j', async (input) => {
     const r = await listConversations(input as never)
     expect(r.success).toBe(false)

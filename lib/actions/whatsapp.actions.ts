@@ -35,6 +35,7 @@ import {
   resolveDisplayName,
   sortConversations,
 } from '@/lib/whatsapp/inbox'
+import { buildConversationSearchSql } from '@/lib/whatsapp/search'
 
 export interface MediaUrl {
   url: string
@@ -229,7 +230,12 @@ export async function listConversations(
 
     const parsed = listConversationsSchema.safeParse(input)
     if (!parsed.success) return validationError(parsed.error.issues)
-    const { state, limit, cursor } = parsed.data
+    const { state, limit, cursor, q } = parsed.data
+    // Search narrows both queries (escalated and others) and combines with the state filter.
+    const searchSql = buildConversationSearchSql(q)
+    const search: Prisma.ConversationWhereInput = searchSql
+      ? { id: { in: (await prisma.$queryRaw<{ id: string }[]>(searchSql)).map((row) => row.id) } }
+      : {}
 
     const cursorAt = new Date()
     const wantEscalated = !cursor && (!state || state === 'ESCALATED')
@@ -238,7 +244,7 @@ export async function listConversations(
     const [escalated, others] = await Promise.all([
       wantEscalated
         ? prisma.conversation.findMany({
-            where: { status: 'ESCALATED' },
+            where: { status: 'ESCALATED', ...search },
             orderBy: [{ attentionDueAt: 'asc' }, { lastMessageAt: 'desc' }],
             take: ESCALATED_CAP,
             select: conversationSelect,
@@ -246,7 +252,7 @@ export async function listConversations(
         : Promise.resolve([] as ConversationRow[]),
       wantOthers
         ? prisma.conversation.findMany({
-            where: state ? { status: state } : { status: { not: 'ESCALATED' } },
+            where: { ...(state ? { status: state } : { status: { not: 'ESCALATED' } }), ...search },
             orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
             take: limit + 1,
             ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
