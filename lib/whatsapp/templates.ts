@@ -119,3 +119,9 @@ export function validateTemplateParams(key: TemplateKey, params: readonly string
   }
   return { ok: true, params: cleaned }
 }
+
+/** First word of the display name to prefill the {{1}} variable; empty when only a phone is known. */
+export function suggestedFirstName(displayName: string | null | undefined): string {
+  const first = displayName?.trim().split(/\s+/)[0] ?? ""
+  return /^[\p{L}]/u.test(first) ? first : ""
+}

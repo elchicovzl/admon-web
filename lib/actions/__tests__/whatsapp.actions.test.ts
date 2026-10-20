@@ -215,6 +215,7 @@ function messageRow(overrides: Record<string, unknown> = {}) {
     text: 'hola',
     templateName: null,
     status: 'RECEIVED',
+    errorCode: null,
     errorMessage: null,
     timestamp: new Date('2026-10-19T12:00:00Z'),
     updatedAt: new Date('2026-10-19T12:00:00Z'),
@@ -376,6 +377,16 @@ describe('getConversationThread', () => {
       ],
     })
     expect(query.orderBy).toEqual([{ timestamp: 'desc' }, { id: 'desc' }])
+  })
+
+  it('exposes the failure code of a FAILED message so the UI can ask before resending', async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue(row())
+    prismaMock.whatsAppMessage.findMany.mockResolvedValue([
+      messageRow({ direction: 'OUT', status: 'FAILED', errorCode: 'UNKNOWN_DELIVERY', errorMessage: 'No se pudo confirmar' }),
+    ])
+    const r = await getConversationThread({ conversationId: CONV_ID })
+    expect(r.data?.messages[0]).toMatchObject({ errorCode: 'UNKNOWN_DELIVERY', status: 'FAILED' })
+    expect(prismaMock.whatsAppMessage.findMany.mock.calls[0][0].select.errorCode).toBe(true)
   })
 
   it('rejects a timestamp-only or malformed cursor before querying', async () => {

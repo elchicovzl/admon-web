@@ -52,6 +52,7 @@ function msg(overrides: Partial<ThreadMessage> & { id: string }): ThreadMessage 
     text: 'hola',
     templateName: null,
     status: 'RECEIVED',
+    errorCode: null,
     errorMessage: null,
     senderName: null,
     timestamp: '2026-10-19T12:00:00.000Z',
@@ -171,6 +172,8 @@ describe('previews and bubble labels', () => {
 
   it('labels every source', () => {
     expect(senderLabel({ source: 'CLIENT', senderName: null })).toBe('Cliente')
+    expect(senderLabel({ source: 'CLIENT', senderName: null }, 'Miguel')).toBe('Miguel')
+    expect(senderLabel({ source: 'CLIENT', senderName: null }, '  ')).toBe('Cliente')
     expect(senderLabel({ source: 'AI', senderName: null })).toBe('IA')
     expect(senderLabel({ source: 'DASHBOARD', senderName: 'Marta' })).toBe('Asesor (Marta)')
     expect(senderLabel({ source: 'DASHBOARD', senderName: null })).toBe('Asesor')

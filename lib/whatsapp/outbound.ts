@@ -8,7 +8,15 @@ import { ComposerError, evaluateResend, replyBlockedReason, resendNeedsConfirmat
 import { isWhatsAppEnabled } from "./ingest"
 import { messagePreview } from "./inbound"
 import { createOutboundMessage, enqueueOutboundSend, type OutboundFile, type OutboundInput } from "./send"
-import { isTemplateKey, renderTemplateBody, resolveTemplate, validateTemplateParams, type TemplateKey } from "./templates"
+import {
+  isTemplateKey,
+  listTemplateOptions,
+  renderTemplateBody,
+  resolveTemplate,
+  validateTemplateParams,
+  type TemplateKey,
+  type TemplateOption,
+} from "./templates"
 import { applyTransition } from "./transitions"
 
 /**
@@ -319,5 +327,14 @@ export async function resendMessage(input: {
     if (error instanceof Abort) return fail(error.userMessage)
     console.error("[whatsapp] resend failed")
     return fail(GENERIC)
+  }
+}
+
+/** Templates the composer may offer. A broken config must not break the inbox, so it offers none. */
+export function getTemplateOptions(): TemplateOption[] {
+  try {
+    return listTemplateOptions(getWhatsAppConfig().templates)
+  } catch {
+    return []
   }
 }

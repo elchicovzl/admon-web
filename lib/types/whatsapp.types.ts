@@ -51,6 +51,8 @@ export interface ThreadMessage {
   text: string | null
   templateName: string | null
   status: MessageStatus
+  /** Machine code of a FAILED send (Meta code or ours); lets the UI tell an unconfirmed delivery apart. */
+  errorCode: string | null
   errorMessage: string | null
   senderName: string | null
   /** ISO timestamp used for ordering. */
