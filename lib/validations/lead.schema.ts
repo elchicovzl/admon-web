@@ -1,9 +1,9 @@
 import { IdentificationType } from '@prisma/client'
 import { z } from 'zod'
+import { LEAD_NOTES_MAX_LENGTH } from '@/lib/whatsapp/leads'
 
 export const LEADS_PAGE_SIZE_DEFAULT = 50
 export const LEADS_PAGE_SIZE_MAX = 100
-export const LEAD_NOTES_MAX_LENGTH = 2000
 
 const leadId = z.string({ required_error: 'El lead es requerido' }).cuid('Lead inválido')
 
