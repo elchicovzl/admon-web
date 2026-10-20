@@ -8,6 +8,8 @@ const startWorkers = vi.fn(async () => 0)
 
 const registerWhatsAppWorkers = vi.fn()
 vi.mock("@/lib/whatsapp/event-worker", () => ({ registerWhatsAppWorkers }))
+const registerKnowledgeWorkers = vi.fn()
+vi.mock("@/lib/knowledge/worker", () => ({ registerKnowledgeWorkers }))
 vi.mock("../boss", () => ({ startBoss }))
 vi.mock("../queues", () => ({ ensureQueues }))
 vi.mock("../schedules", () => ({ ensureSchedules }))
@@ -53,6 +55,10 @@ describe("bootstrapRuntime", () => {
     expect(ensureSchedules).toHaveBeenCalledWith(boss)
     expect(startWorkers).toHaveBeenCalledWith(boss)
     expect(ensureQueues.mock.invocationCallOrder[0]).toBeLessThan(
+      startWorkers.mock.invocationCallOrder[0]
+    )
+    // Knowledge-base ingestion (kb.ingest) is attached before the workers start.
+    expect(registerKnowledgeWorkers.mock.invocationCallOrder[0]).toBeLessThan(
       startWorkers.mock.invocationCallOrder[0]
     )
   })

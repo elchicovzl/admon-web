@@ -10,11 +10,15 @@ Branch: `feat/whatsapp-m3-kb-ingest` (base master). Delivery: stacked-to-main. R
 - Acceptance: KB-2, KB-3, KB-4, KB-8, KB-9; S-KB-2/3/4/6/9.
 
 ## Tasks
-- [ ] T1 S1 chunker — inline
-- [ ] T2 S2 extraction + deps — inline
-- [ ] T3 S3-S4 ingest job, vector insert, worker registration, docs — inline
+- [x] T1 S1 chunker — inline (RED module missing → GREEN 10/10) — f05b43e
+- [x] T2 S2 extraction + deps — inline (RED module missing → GREEN 10/10; fixtures generated: text.pdf, image-only.pdf, headings.docx) — f05b43e
+- [x] T3 S3-S4 ingest job, vector insert, worker registration, docs — inline (RED modules missing → GREEN ingest 12, vector 4, worker 4, providers +1, bootstrap +1)
 
 ## Log
 - L1 (2026-10-20, user): "si vamos con PR3.2"
 - L2 Dependencies: `unpdf@1.8.1` (2026-08-13; 1.9.x is days old, skipped on purpose) and `mammoth@1.13.0` (2026-09-26). `@napi-rs/canvas` peer is optional (rendering only), not installed.
 - L3 Route: inline (one writer; units depend on each other).
+- L4 Deviation (S4 wording "`$executeRaw` insert with `::vector`"): chunks are inserted with `createManyAndReturn` (keeps Prisma cuid ids) and their vectors set with ONE raw `UPDATE ... FROM (VALUES ...)` per batch of 64 (`setEmbeddingsSql`), inside the same transaction. Same `::vector` raw path, fewer statements.
+- L5 Provider key: chunks store `embeddingModel = "openai/<AI_EMBEDDING_MODEL>"` (`embeddingModelKey`), so the provider is recorded (S3) and retrieval (PR3.4) must compare with the same key.
+- L6 Integration probe against local pgvector (script under node_modules/.cache, removed): createManyAndReturn + setEmbeddingsSql updated 3 rows; nearest-neighbour by `<=>` returned the right chunk (similarity 1); Spanish FTS matched "afiliaciones" against "afiliación" (stemming); delete cascaded to 0 chunks.
+- L7 Who enqueues `kb.ingest` (upload/reindex actions) is PR3.3. Risk: item 5 (new dependencies unpdf, mammoth).
