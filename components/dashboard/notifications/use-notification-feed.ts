@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   listNotifications,
@@ -10,6 +10,7 @@ import {
 import { browserNotificationSpec } from '@/lib/notifications/present'
 import { evaluatePoll, type BrowserPermission, type PollState } from '@/lib/notifications/poll-diff'
 import { readMuted, writeMuted } from '@/lib/notifications/preferences'
+import { createSerializedRunner } from '@/lib/utils/serialized-runner'
 import type { NotificationFeed } from '@/lib/types/notification.types'
 import {
   getBrowserPermission,
@@ -31,7 +32,8 @@ function storage(): Storage | null {
 /**
  * Polls the feed every ~4 s and reacts to what is new: chime and OS notifications fire only
  * when `evaluatePoll` says so (never on the first poll, never on every poll). The loop is
- * self-scheduling, so a slow response can never overlap the next request.
+ * self-scheduling, and every refresh (timer tick, markRead, markAllRead) goes through one
+ * serialized runner, so two refreshes never read or write the shared `pollState` concurrently.
  */
 export function useNotificationFeed(userId: string) {
   const router = useRouter()
@@ -66,7 +68,7 @@ export function useNotificationFeed(userId: string) {
     }
   }, [])
 
-  const refresh = useCallback(async () => {
+  const runRefresh = useCallback(async () => {
     const result = await listNotifications()
     if (!result.success || !result.data) return
 
@@ -84,6 +86,10 @@ export function useNotificationFeed(userId: string) {
       }
     }
   }, [])
+
+  // One refresh at a time: a call made while another is in flight joins a single follow-up run,
+  // which also guarantees that markRead/markAllRead re-read AFTER their write.
+  const refresh = useMemo(() => createSerializedRunner(runRefresh), [runRefresh])
 
   useEffect(() => {
     let cancelled = false

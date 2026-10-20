@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UserRole } from '@prisma/client'
 
 const { prismaMock, authMock, hasWhatsAppAccessMock, presignGetMock } = vi.hoisted(() => ({
-  prismaMock: { whatsAppMedia: { findUnique: vi.fn() } },
+  prismaMock: {
+    whatsAppMedia: { findUnique: vi.fn() },
+    conversation: { findMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
+    whatsAppMessage: { findMany: vi.fn() },
+  },
   authMock: vi.fn(),
   hasWhatsAppAccessMock: vi.fn(),
   presignGetMock: vi.fn(),
@@ -13,7 +17,13 @@ vi.mock('@/lib/auth/auth', () => ({ auth: authMock }))
 vi.mock('@/lib/auth/rbac', () => ({ hasWhatsAppAccess: hasWhatsAppAccessMock }))
 vi.mock('@/lib/storage/r2', () => ({ presignGet: presignGetMock }))
 
-import { getMediaUrl } from '../whatsapp.actions'
+import {
+  getConversationThread,
+  getMediaUrl,
+  getUpdates,
+  listConversations,
+  markConversationRead,
+} from '../whatsapp.actions'
 
 const MESSAGE_ID = 'cjld2cjxh0000qzrmn831i7rn'
 
@@ -157,5 +167,275 @@ describe('getMediaUrl: behavior', () => {
 
     expect(r).toEqual({ success: false, error: 'No se pudo obtener el archivo' })
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('acct-123')
+  })
+})
+
+
+// ---------------------------------------------------------------- inbox reads (PR2.2)
+
+const CONV_ID = 'cjld2cjxh0000qzrmn831i7rn'
+const CONV_ID_2 = 'cjld2cjxh0001qzrmn831i7rn'
+
+function row(overrides: Record<string, unknown> = {}) {
+  return {
+    id: CONV_ID,
+    status: 'HUMAN',
+    aiPaused: false,
+    unreadCount: 1,
+    lastMessagePreview: 'hola',
+    lastMessageAt: new Date('2026-10-19T12:00:00Z'),
+    lastInboundAt: new Date('2026-10-19T12:00:00Z'),
+    escalatedAt: null,
+    attentionDueAt: null,
+    escalatedOutOfHours: false,
+    updatedAt: new Date('2026-10-19T12:00:00Z'),
+    takenOverBy: null,
+    contact: {
+      waId: '573001112233',
+      profileName: 'Ana',
+      matchStatus: 'UNMATCHED',
+      client: null,
+      lead: { status: 'NEW' },
+    },
+    ...overrides,
+  }
+}
+
+function messageRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'm1',
+    direction: 'IN',
+    source: 'CLIENT',
+    type: 'TEXT',
+    text: 'hola',
+    templateName: null,
+    status: 'RECEIVED',
+    errorMessage: null,
+    timestamp: new Date('2026-10-19T12:00:00Z'),
+    updatedAt: new Date('2026-10-19T12:00:00Z'),
+    sentBy: null,
+    media: null,
+    ...overrides,
+  }
+}
+
+describe('inbox reads: authorization (WI-1, WI-11)', () => {
+  const calls: [string, () => Promise<unknown>][] = [
+    ['listConversations', () => listConversations({})],
+    ['getConversationThread', () => getConversationThread({ conversationId: CONV_ID })],
+    ['getUpdates', () => getUpdates({ updatedSince: '2026-10-19T12:00:00.000Z' })],
+    ['markConversationRead', () => markConversationRead({ conversationId: CONV_ID })],
+  ]
+
+  it.each(calls)('%s rejects unauthenticated callers before touching the DB', async (_name, call) => {
+    authMock.mockResolvedValue(null)
+    expect(await call()).toEqual({ success: false, error: 'No autenticado' })
+    expect(prismaMock.conversation.findMany).not.toHaveBeenCalled()
+    expect(prismaMock.conversation.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.conversation.updateMany).not.toHaveBeenCalled()
+    expect(prismaMock.whatsAppMessage.findMany).not.toHaveBeenCalled()
+  })
+
+  it.each(calls)('%s denies a MANAGER without WhatsApp access', async (_name, call) => {
+    hasWhatsAppAccessMock.mockResolvedValue(false)
+    expect(await call()).toEqual({ success: false, error: 'No tienes acceso al módulo de WhatsApp' })
+    expect(prismaMock.conversation.findMany).not.toHaveBeenCalled()
+    expect(prismaMock.conversation.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.conversation.updateMany).not.toHaveBeenCalled()
+    expect(prismaMock.whatsAppMessage.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('listConversations', () => {
+  beforeEach(() => {
+    prismaMock.conversation.findMany.mockResolvedValue([])
+  })
+
+  it('returns the same shared list to two different permitted users (WI-2)', async () => {
+    prismaMock.conversation.findMany.mockImplementation(async () => [row()])
+    authMock.mockResolvedValue({ user: { id: 'manager-a', role: UserRole.MANAGER } })
+    const a = await listConversations({})
+    authMock.mockResolvedValue({ user: { id: 'manager-b', role: UserRole.MANAGER } })
+    const b = await listConversations({})
+
+    expect(a.success && b.success).toBe(true)
+    expect(a.data?.items).toEqual(b.data?.items)
+    for (const [args] of prismaMock.conversation.findMany.mock.calls) {
+      expect(JSON.stringify(args.where)).not.toContain('manager-')
+    }
+  })
+
+  it('maps a row to a summary with markers and without internal fields', async () => {
+    prismaMock.conversation.findMany.mockImplementation(async (args: { where: { status: unknown } }) =>
+      args.where.status === 'ESCALATED' ? [] : [row()]
+    )
+    const r = await listConversations({})
+
+    expect(r.data?.items[0]).toMatchObject({
+      id: CONV_ID,
+      displayName: 'Ana',
+      phone: '+573001112233',
+      markers: ['NO_CLIENT', 'LEAD'],
+      lastMessageAt: '2026-10-19T12:00:00.000Z',
+    })
+  })
+
+  it('puts escalated rows first, by attention order (WI-12), and pages the rest', async () => {
+    prismaMock.conversation.findMany.mockImplementation(async (args: { where: { status: unknown } }) =>
+      args.where.status === 'ESCALATED'
+        ? [
+            row({ id: CONV_ID_2, status: 'ESCALATED', attentionDueAt: new Date('2026-10-20T13:00:00Z') }),
+          ]
+        : [
+            row({ id: 'c1', lastMessageAt: new Date('2026-10-19T14:00:00Z') }),
+            row({ id: 'c2', lastMessageAt: new Date('2026-10-19T13:00:00Z') }),
+            row({ id: 'c3', lastMessageAt: new Date('2026-10-19T12:00:00Z') }),
+          ]
+    )
+    const r = await listConversations({ limit: 2 })
+
+    expect(r.data?.items.map((i) => i.id)).toEqual([CONV_ID_2, 'c1', 'c2'])
+    expect(r.data?.nextCursor).toBe('c2')
+  })
+
+  it('a cursor page skips the escalated query; an ESCALATED filter skips the others', async () => {
+    await listConversations({ cursor: CONV_ID })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(1)
+    expect(prismaMock.conversation.findMany.mock.calls[0][0]).toMatchObject({
+      cursor: { id: CONV_ID },
+      skip: 1,
+      where: { status: { not: 'ESCALATED' } },
+    })
+
+    prismaMock.conversation.findMany.mockClear()
+    await listConversations({ state: 'ESCALATED' })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(1)
+    expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'ESCALATED' })
+  })
+
+  it('filters by state', async () => {
+    await listConversations({ state: 'CLOSED' })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(1)
+    expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'CLOSED' })
+  })
+
+  it.each([
+    [{ state: 'BOGUS' }],
+    [{ limit: 0 }],
+    [{ limit: 101 }],
+    [{ limit: 1.5 }],
+    [{ cursor: 'not-a-cuid' }],
+  ])('rejects invalid input %j', async (input) => {
+    const r = await listConversations(input as never)
+    expect(r.success).toBe(false)
+    expect(prismaMock.conversation.findMany).not.toHaveBeenCalled()
+  })
+
+  it('returns a generic error without leaking the cause', async () => {
+    prismaMock.conversation.findMany.mockRejectedValue(new Error('connection string postgres://secret'))
+    const r = await listConversations({})
+    expect(r).toEqual({ success: false, error: 'No se pudo completar la operación' })
+  })
+})
+
+describe('getConversationThread', () => {
+  it('returns messages oldest first, with hasMore, and never selects the storage key', async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue(row())
+    prismaMock.whatsAppMessage.findMany.mockResolvedValue([
+      messageRow({ id: 'm3', timestamp: new Date('2026-10-19T12:03:00Z') }),
+      messageRow({ id: 'm2', timestamp: new Date('2026-10-19T12:02:00Z') }),
+      messageRow({ id: 'm1', timestamp: new Date('2026-10-19T12:01:00Z') }),
+    ])
+    const r = await getConversationThread({ conversationId: CONV_ID, limit: 2 })
+
+    expect(r.data?.messages.map((m) => m.id)).toEqual(['m2', 'm3'])
+    expect(r.data?.hasMore).toBe(true)
+    const select = prismaMock.whatsAppMessage.findMany.mock.calls[0][0].select
+    expect(select.media.select).not.toHaveProperty('s3Key')
+    expect(JSON.stringify(r)).not.toContain('s3Key')
+  })
+
+  it('pages older history with before', async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue(row())
+    prismaMock.whatsAppMessage.findMany.mockResolvedValue([])
+    await getConversationThread({ conversationId: CONV_ID, before: '2026-10-19T12:00:00.000Z' })
+    expect(prismaMock.whatsAppMessage.findMany.mock.calls[0][0].where).toEqual({
+      conversationId: CONV_ID,
+      timestamp: { lt: new Date('2026-10-19T12:00:00.000Z') },
+    })
+  })
+
+  it('reports a missing conversation and rejects bad ids', async () => {
+    prismaMock.conversation.findUnique.mockResolvedValue(null)
+    prismaMock.whatsAppMessage.findMany.mockResolvedValue([])
+    expect(await getConversationThread({ conversationId: CONV_ID })).toEqual({
+      success: false,
+      error: 'Conversación no encontrada',
+    })
+    prismaMock.conversation.findUnique.mockClear()
+    expect((await getConversationThread({ conversationId: 'x' })).success).toBe(false)
+    expect(prismaMock.conversation.findUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('getUpdates (WI-5)', () => {
+  beforeEach(() => {
+    prismaMock.conversation.findMany.mockResolvedValue([row()])
+    prismaMock.whatsAppMessage.findMany.mockResolvedValue([messageRow()])
+  })
+
+  it('queries by updatedAt with a small overlap and returns a fresh server cursor', async () => {
+    const r = await getUpdates({ updatedSince: '2026-10-19T12:00:00.000Z', conversationId: CONV_ID })
+
+    expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({
+      updatedAt: { gt: new Date('2026-10-19T11:59:55.000Z') },
+    })
+    expect(prismaMock.whatsAppMessage.findMany.mock.calls[0][0].where).toEqual({
+      conversationId: CONV_ID,
+      updatedAt: { gt: new Date('2026-10-19T11:59:55.000Z') },
+    })
+    expect(r.data?.conversations).toHaveLength(1)
+    expect(r.data?.messages).toHaveLength(1)
+    expect(r.data?.truncated).toBe(false)
+    expect(Number.isNaN(Date.parse(r.data?.cursor ?? ''))).toBe(false)
+  })
+
+  it('skips the message query when no thread is open', async () => {
+    const r = await getUpdates({ updatedSince: '2026-10-19T12:00:00.000Z' })
+    expect(prismaMock.whatsAppMessage.findMany).not.toHaveBeenCalled()
+    expect(r.data?.messages).toEqual([])
+  })
+
+  it('flags truncation when the safety cap is hit', async () => {
+    prismaMock.conversation.findMany.mockResolvedValue(Array.from({ length: 201 }, (_, i) => row({ id: `c${i}` })))
+    const r = await getUpdates({ updatedSince: '2026-10-19T12:00:00.000Z' })
+    expect(r.data?.truncated).toBe(true)
+    expect(r.data?.conversations).toHaveLength(200)
+  })
+
+  it.each([[{ updatedSince: 'yesterday' }], [{ updatedSince: '2026-10-19T12:00:00.000Z', conversationId: 'x' }], [{}]])(
+    'rejects invalid input %j',
+    async (input) => {
+      expect((await getUpdates(input as never)).success).toBe(false)
+      expect(prismaMock.conversation.findMany).not.toHaveBeenCalled()
+    }
+  )
+})
+
+describe('markConversationRead', () => {
+  it('only clears unreadCount of that conversation', async () => {
+    prismaMock.conversation.updateMany.mockResolvedValue({ count: 1 })
+    const r = await markConversationRead({ conversationId: CONV_ID })
+
+    expect(r).toEqual({ success: true, data: { updated: 1 } })
+    expect(prismaMock.conversation.updateMany).toHaveBeenCalledWith({
+      where: { id: CONV_ID, unreadCount: { gt: 0 } },
+      data: { unreadCount: 0 },
+    })
+  })
+
+  it('rejects a bad id', async () => {
+    expect((await markConversationRead({ conversationId: 'x' })).success).toBe(false)
+    expect(prismaMock.conversation.updateMany).not.toHaveBeenCalled()
   })
 })
