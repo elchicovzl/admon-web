@@ -6,3 +6,45 @@ export const getMediaUrlSchema = z.object({
 })
 
 export type GetMediaUrlInput = z.infer<typeof getMediaUrlSchema>
+
+export const INBOX_PAGE_SIZE_DEFAULT = 50
+export const INBOX_PAGE_SIZE_MAX = 100
+
+const conversationId = z
+  .string({ required_error: 'La conversación es requerida' })
+  .cuid('Conversación inválida')
+
+export const listConversationsSchema = z.object({
+  state: z.enum(['AI', 'HUMAN', 'ESCALATED', 'CLOSED'], { invalid_type_error: 'Estado inválido' }).optional(),
+  limit: z
+    .number({ invalid_type_error: 'Límite inválido' })
+    .int('Límite inválido')
+    .min(1, 'Límite inválido')
+    .max(INBOX_PAGE_SIZE_MAX, 'Límite inválido')
+    .default(INBOX_PAGE_SIZE_DEFAULT),
+  cursor: z.string().cuid('Cursor inválido').optional(),
+})
+
+export const getConversationThreadSchema = z.object({
+  conversationId,
+  /** ISO timestamp: load messages older than this one (history pagination). */
+  before: z.string().datetime({ message: 'Cursor inválido' }).optional(),
+  limit: z
+    .number({ invalid_type_error: 'Límite inválido' })
+    .int('Límite inválido')
+    .min(1, 'Límite inválido')
+    .max(INBOX_PAGE_SIZE_MAX, 'Límite inválido')
+    .default(INBOX_PAGE_SIZE_DEFAULT),
+})
+
+export const getUpdatesSchema = z.object({
+  /** ISO timestamp returned by the previous list, thread or updates call. */
+  updatedSince: z.string({ required_error: 'El cursor es requerido' }).datetime({ message: 'Cursor inválido' }),
+  conversationId: conversationId.optional(),
+})
+
+export const markConversationReadInboxSchema = z.object({ conversationId })
+
+export type ListConversationsInput = z.input<typeof listConversationsSchema>
+export type GetConversationThreadInput = z.input<typeof getConversationThreadSchema>
+export type GetUpdatesInput = z.input<typeof getUpdatesSchema>

@@ -1,0 +1,85 @@
+import type {
+  ConversationStatus,
+  MediaStatus,
+  MessageDirection,
+  MessageSource,
+  MessageStatus,
+  MessageType,
+  TranscriptStatus,
+} from '@prisma/client'
+
+/** Inbox chips: why a conversation has no client behind it (WI-3). */
+export type ConversationMarker = 'NO_CLIENT' | 'LEAD' | 'AMBIGUOUS'
+
+/** One inbox row. Dates are ISO strings so the object crosses the server/client boundary. */
+export interface ConversationSummary {
+  id: string
+  /** Client name, else WhatsApp profile name, else the phone. */
+  displayName: string
+  /** `+<waId>`. Staff-only UI; never logged. */
+  phone: string
+  clientId: string | null
+  status: ConversationStatus
+  aiPaused: boolean
+  unreadCount: number
+  preview: string | null
+  lastMessageAt: string
+  lastInboundAt: string | null
+  escalatedAt: string | null
+  attentionDueAt: string | null
+  escalatedOutOfHours: boolean
+  takenOverByName: string | null
+  markers: ConversationMarker[]
+  updatedAt: string
+}
+
+export interface ThreadMedia {
+  status: MediaStatus
+  mimeType: string
+  fileName: string | null
+  transcript: string | null
+  transcriptStatus: TranscriptStatus | null
+  durationSec: number | null
+}
+
+/** One bubble. There is no storage key anywhere in here: files go through `getMediaUrl`. */
+export interface ThreadMessage {
+  id: string
+  direction: MessageDirection
+  source: MessageSource
+  type: MessageType
+  text: string | null
+  templateName: string | null
+  status: MessageStatus
+  errorMessage: string | null
+  senderName: string | null
+  /** ISO timestamp used for ordering. */
+  timestamp: string
+  updatedAt: string
+  media: ThreadMedia | null
+}
+
+export interface ConversationListPage {
+  items: ConversationSummary[]
+  /** Pass back as `cursor` for the next page of non-escalated rows; null when exhausted. */
+  nextCursor: string | null
+  /** Server time of this read; seed for `getUpdates`. */
+  cursor: string
+}
+
+export interface ConversationThread {
+  conversation: ConversationSummary
+  /** Oldest first. */
+  messages: ThreadMessage[]
+  hasMore: boolean
+  cursor: string
+}
+
+export interface InboxUpdates {
+  conversations: ConversationSummary[]
+  /** Only the open conversation's changed messages (new ones and status ticks). */
+  messages: ThreadMessage[]
+  /** True when a result hit the safety cap: the client should reload instead of trusting a merge. */
+  truncated: boolean
+  cursor: string
+}
