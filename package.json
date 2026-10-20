@@ -25,6 +25,8 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.84",
+    "@ai-sdk/openai": "4.0.98",
     "@auth/prisma-adapter": "^2.11.1",
     "@aws-sdk/client-s3": "^3.922.0",
     "@aws-sdk/s3-request-presigner": "^3.922.0",
@@ -77,6 +79,7 @@
     "@tiptap/pm": "^3.21.0",
     "@tiptap/react": "^3.21.0",
     "@tiptap/starter-kit": "^3.21.0",
+    "ai": "7.0.147",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
@@ -119,7 +122,7 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.186.1",
     "vaul": "^0.9.9",
-    "zod": "3.25.67",
+    "zod": "3.25.76",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
