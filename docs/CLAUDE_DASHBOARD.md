@@ -771,6 +771,27 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 - Los vectores se escriben con SQL crudo (`lib/knowledge/vector.ts`, `::vector`) porque Prisma no lee
   ni escribe columnas `vector`; todos los valores viajan como parámetros.
 
+#### Base de conocimiento: página y acciones (PR3.3)
+
+- Página `/dashboard/whatsapp/knowledge` (misma protección que la bandeja: SUPER_ADMIN o
+  `canAccessWhatsApp`), enlazada desde la cabecera de la bandeja. Lista, estado con polling cada 4 s
+  mientras algo está en cola o indexando, subir, reindexar, eliminar con confirmación y el aviso
+  «Re-indexación requerida» cuando hay chunks de otro modelo de embeddings.
+- Subida: `POST /api/whatsapp/knowledge` (multipart `file` + `title` opcional; ruta y no Server Action
+  por el límite de 1 MB de las Server Actions). El servicio (`lib/knowledge/documents.ts`) valida tipo
+  (extensión y MIME), tamaño (`KB_UPLOAD_MAX_BYTES`) y contenido (firma `%PDF-`, zip `PK` para DOCX,
+  UTF-8 sin NUL para TXT/MD), guarda en R2 `knowledge/{docId}/{nombre}` con quién y cuándo, y encola
+  `kb.ingest`. Si no se puede encolar, el documento queda FAILED y `retriable` («Reindexar»).
+- Acciones (`lib/actions/knowledge.actions.ts`, `requireWhatsAppAuth()` + Zod): `listKnowledgeDocuments`,
+  `deleteKnowledgeDocument` (borra chunks y documento en una transacción; el asistente deja de usarlo
+  al instante; luego el archivo de R2), `reindexKnowledgeDocument` y `getKnowledgeHealth`.
+- Una indexación a la vez por documento: la cola `kb.ingest` es `standard` (en producción ya existe y
+  pg-boss no deja cambiar la política), así que reindexar primero «reclama» el documento con un
+  `updateMany` condicionado (READY/FAILED, o PENDING/PROCESSING sin cambios hace 15 min) y solo
+  entonces encola. El bloqueo de fila de la ingesta evita chunks duplicados si dos corridas coinciden.
+- Límites: un DOCX que declara más de 50 MB descomprimido se rechaza sin abrirlo; un archivo de R2
+  faltante o demasiado grande falla al instante (no reintentable).
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)

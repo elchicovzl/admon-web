@@ -13,7 +13,9 @@ const nextConfig = {
   },
   // pg-boss is ESM-only and pulls in `pg`; keep it out of the server bundle so
   // it loads from node_modules (traced into the standalone output).
-  serverExternalPackages: ["pg-boss"],
+  // The knowledge-base parsers load from node_modules too: unpdf (bundled pdf.js) uses `import.meta`
+  // in a way webpack cannot bundle ("Critical dependency" warning); mammoth goes with it.
+  serverExternalPackages: ["pg-boss", "unpdf", "mammoth"],
   eslint: {
     ignoreDuringBuilds: true,
   },
