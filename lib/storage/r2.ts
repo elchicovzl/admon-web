@@ -64,6 +64,18 @@ export async function copyObject(sourceKey: string, destinationKey: string): Pro
   )
 }
 
+/** Reads an object into memory. Throws if it is missing or larger than `maxBytes`. */
+export async function getObjectBytes(key: string, maxBytes: number): Promise<Uint8Array> {
+  const response = await getClient().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }))
+  if (typeof response.ContentLength === "number" && response.ContentLength > maxBytes) {
+    throw new Error("Stored object is larger than the allowed size")
+  }
+  const bytes = await response.Body?.transformToByteArray()
+  if (!bytes) throw new Error("Stored object has no body")
+  if (bytes.byteLength > maxBytes) throw new Error("Stored object is larger than the allowed size")
+  return bytes
+}
+
 export interface DeleteObjectsResult {
   /** Keys that are gone: deleted now, or already missing (a missing key counts as success). */
   deleted: string[]

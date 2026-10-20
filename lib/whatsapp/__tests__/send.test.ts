@@ -8,6 +8,8 @@ const m = vi.hoisted(() => ({
   bossSend: vi.fn(),
   sendText: vi.fn(),
   sendTemplate: vi.fn(),
+  sendMedia: vi.fn(),
+  getObjectBytes: vi.fn(),
   applyStoredStatuses: vi.fn(),
   runTx: vi.fn(),
 }))
@@ -29,10 +31,11 @@ vi.mock("@/lib/config/runtime-config", async (importOriginal) => ({
     templates: { resume: "resume_conversation", processUpdate: "process_update", language: "es", approved: ["RESUME"] },
   }),
 }))
+vi.mock("@/lib/storage/r2", () => ({ getObjectBytes: m.getObjectBytes }))
 vi.mock("../statuses", () => ({ applyStoredStatuses: m.applyStoredStatuses }))
 vi.mock("../cloud-api", async () => {
   const actual = await vi.importActual<typeof import("../cloud-api")>("../cloud-api")
-  return { ...actual, sendText: m.sendText, sendTemplate: m.sendTemplate }
+  return { ...actual, sendText: m.sendText, sendTemplate: m.sendTemplate, sendMedia: m.sendMedia }
 })
 
 import { CloudApiError } from "../cloud-api"
@@ -87,6 +90,7 @@ beforeEach(() => {
   m.msgUpdateMany.mockResolvedValue({ count: 1 })
   m.sendText.mockResolvedValue({ wamid: "wamid.OUT1" })
   m.sendTemplate.mockResolvedValue({ wamid: "wamid.TPL1" })
+  m.sendMedia.mockResolvedValue({ wamid: "wamid.MEDIA1" })
   m.bossSend.mockResolvedValue("job")
   m.runTx.mockImplementation(async (fn: (client: typeof tx) => unknown) => fn(tx))
 })
@@ -144,8 +148,50 @@ describe("queueOutbound (outbox insert, WC-10)", () => {
       type: "TEMPLATE",
       templateName: "resume_conversation",
       templateParams: ["Ana"],
+      text: expect.stringContaining("Hola Ana, le escribimos"),
     })
     expect(m.bossSend).not.toHaveBeenCalled()
+  })
+
+  it("stores an attachment as an IMAGE/DOCUMENT row with its STORED media, caption as text", async () => {
+    await createOutboundMessage({
+      kind: "media",
+      conversationId: "conv-1",
+      source: "DASHBOARD",
+      mediaType: "DOCUMENT",
+      caption: "  Su carta  ",
+      file: { s3Key: "whatsapp/conv-1/out/abc.pdf", mimeType: "application/pdf", fileName: "carta.pdf", sizeBytes: 1234 },
+    })
+
+    expect(m.msgCreate.mock.calls[0][0].data).toMatchObject({
+      type: "DOCUMENT",
+      text: "Su carta",
+      status: "QUEUED",
+      media: {
+        create: {
+          metaMediaId: "outbound",
+          mimeType: "application/pdf",
+          sizeBytes: 1234,
+          fileName: "carta.pdf",
+          s3Key: "whatsapp/conv-1/out/abc.pdf",
+          status: "STORED",
+        },
+      },
+    })
+    expect(m.msgCreate.mock.calls[0][0].data).not.toHaveProperty("wamid")
+  })
+
+  it("refuses an attachment without a stored file", async () => {
+    await expect(
+      createOutboundMessage({
+        kind: "media",
+        conversationId: "conv-1",
+        source: "DASHBOARD",
+        mediaType: "IMAGE",
+        file: { s3Key: "", mimeType: "image/png", fileName: null, sizeBytes: 1 },
+      })
+    ).rejects.toThrow("stored file")
+    expect(m.msgCreate).not.toHaveBeenCalled()
   })
 
   it("rejects unapproved templates, wrong parameter counts and empty text (WI-10)", async () => {
@@ -510,5 +556,109 @@ describe("handleSendJobs", () => {
       handleSendJobs([{ id: "j", data: { messageId: "m1" }, retryCount: 4 } as never])
     ).resolves.toBeUndefined()
     expect(failedWith("RETRIES_EXHAUSTED")).toBeDefined()
+  })
+})
+
+describe("sendOutboundMessage: attachments (WC-10)", () => {
+  const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+
+  function mediaRow(overrides: Record<string, unknown> = {}) {
+    return row({
+      type: "IMAGE",
+      text: "Mire esto",
+      media: { status: "STORED", s3Key: "whatsapp/conv-1/out/a.png", mimeType: "image/png", fileName: "a.png" },
+      ...overrides,
+    })
+  }
+  function useRow(value: unknown) {
+    m.msgFindUnique.mockImplementation(async ({ select }) => ("conversationId" in select ? { conversationId: "conv-1" } : value))
+  }
+
+  beforeEach(() => {
+    m.getObjectBytes.mockResolvedValue(PNG)
+    useRow(mediaRow())
+  })
+
+  it("reads the file from R2 and sends it with its caption, then stores the wamid", async () => {
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.getObjectBytes).toHaveBeenCalledWith("whatsapp/conv-1/out/a.png", 10 * 1024 * 1024)
+    expect(m.sendMedia).toHaveBeenCalledWith(
+      "573001234567",
+      { kind: "image", bytes: PNG, mimeType: "image/png", fileName: "a.png", caption: "Mire esto" },
+      { contextWamid: null }
+    )
+    expect(m.sendText).not.toHaveBeenCalled()
+    expect(m.msgUpdateMany).toHaveBeenCalledWith({
+      where: { id: "m1", wamid: null, status: "QUEUED" },
+      data: expect.objectContaining({ wamid: "wamid.MEDIA1", status: "SENT" }),
+    })
+  })
+
+  it("sends a PDF as a document", async () => {
+    m.getObjectBytes.mockResolvedValue(new TextEncoder().encode("%PDF-1.4"))
+    useRow(mediaRow({ type: "DOCUMENT", media: { status: "STORED", s3Key: "k.pdf", mimeType: "application/pdf", fileName: "c.pdf" } }))
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(m.sendMedia.mock.calls[0][1]).toMatchObject({ kind: "document", mimeType: "application/pdf" })
+  })
+
+  it("enforces the 24h window for attachments without calling R2 or Meta", async () => {
+    useRow(
+      mediaRow({
+        conversation: { stateVersion: 3, lastInboundAt: new Date(NOW.getTime() - 25 * 3_600_000), contact: { waId: "573001234567" } },
+      })
+    )
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(failedWith("WINDOW_CLOSED")).toBeDefined()
+    expect(m.getObjectBytes).not.toHaveBeenCalled()
+    expect(m.sendMedia).not.toHaveBeenCalled()
+  })
+
+  it("reads the file BEFORE committing the attempt marker, so a storage failure is safe to retry", async () => {
+    m.getObjectBytes.mockRejectedValue(new Error("r2 down"))
+
+    await expect(sendOutboundMessage({ messageId: "m1" }, RETRYING)).rejects.toThrow("Could not read the attachment")
+
+    expect(m.msgUpdateMany).not.toHaveBeenCalled()
+    expect(m.sendMedia).not.toHaveBeenCalled()
+  })
+
+  it("fails visibly with MEDIA_UNAVAILABLE on the last attempt", async () => {
+    m.getObjectBytes.mockRejectedValue(new Error("r2 down"))
+
+    await sendOutboundMessage({ messageId: "m1" }, LAST_ATTEMPT)
+
+    expect(failedWith("MEDIA_UNAVAILABLE")).toBeDefined()
+    expect(m.sendMedia).not.toHaveBeenCalled()
+  })
+
+  it("refuses bytes that do not match the stored type", async () => {
+    m.getObjectBytes.mockResolvedValue(new TextEncoder().encode("<html></html>"))
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(failedWith("INVALID_MESSAGE")).toBeDefined()
+    expect(m.sendMedia).not.toHaveBeenCalled()
+  })
+
+  it("fails INVALID_MESSAGE when the media row is not STORED", async () => {
+    useRow(mediaRow({ media: { status: "PENDING", s3Key: null, mimeType: "image/png", fileName: null } }))
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(failedWith("INVALID_MESSAGE")).toBeDefined()
+    expect(m.getObjectBytes).not.toHaveBeenCalled()
+  })
+
+  it("treats an ambiguous Meta error as an unknown delivery and never resends", async () => {
+    m.sendMedia.mockRejectedValue(new CloudApiError("timeout", 408, null, true))
+
+    await sendOutboundMessage({ messageId: "m1" }, RETRYING)
+
+    expect(failedWith("UNKNOWN_DELIVERY")).toBeDefined()
   })
 })

@@ -9,6 +9,8 @@ export const SendErrorCode = {
   RETRIES_EXHAUSTED: "RETRIES_EXHAUSTED",
   QUEUE_UNAVAILABLE: "QUEUE_UNAVAILABLE",
   INVALID_MESSAGE: "INVALID_MESSAGE",
+  /** The stored attachment could not be read back from storage when it was time to send. */
+  MEDIA_UNAVAILABLE: "MEDIA_UNAVAILABLE",
   /** Meta may or may not have accepted the message; never resent automatically (at-most-once). */
   UNKNOWN_DELIVERY: "UNKNOWN_DELIVERY",
 } as const

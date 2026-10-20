@@ -4,11 +4,13 @@ import { getWhatsAppConfig } from "@/lib/config/runtime-config"
 import prisma from "@/lib/db/prisma"
 import { getBoss } from "@/lib/queue/boss"
 import { QUEUES, QUEUE_DEFINITIONS } from "@/lib/queue/queues"
-import { CloudApiError, sendTemplate, sendText } from "./cloud-api"
+import { getObjectBytes } from "@/lib/storage/r2"
+import { MAX_DOCUMENT_BYTES, bytesMatchMime } from "./attachments"
+import { CloudApiError, sendMedia, sendTemplate, sendText } from "./cloud-api"
 import { isWhatsAppEnabled } from "./ingest"
 import { SendErrorCode } from "./send-errors"
 import { applyStoredStatuses } from "./statuses"
-import { resolveTemplate } from "./templates"
+import { renderTemplateBody, resolveTemplate } from "./templates"
 import { isWindowOpen } from "./window"
 
 /**
@@ -58,9 +60,21 @@ interface OutboundBase {
   expectedStateVersion?: number
 }
 
+/** An attachment already stored in R2 (the composer uploads it before queueing the message). */
+export interface OutboundFile {
+  s3Key: string
+  mimeType: string
+  fileName: string | null
+  sizeBytes: number
+}
+
+/** `WhatsAppMedia.metaMediaId` is required; outbound files have no Meta id until they are uploaded at send time. */
+export const OUTBOUND_MEDIA_ID = "outbound"
+
 export type OutboundInput =
   | (OutboundBase & { kind: "text"; text: string })
   | (OutboundBase & { kind: "template"; templateKey: string; params: string[] })
+  | (OutboundBase & { kind: "media"; mediaType: "IMAGE" | "DOCUMENT"; caption?: string | null; file: OutboundFile })
 
 export interface SendJobData {
   messageId: string
@@ -107,6 +121,28 @@ export async function createOutboundMessage(input: OutboundInput, db: Db = prism
     return db.whatsAppMessage.create({ data: { ...base, type: "TEXT", text: input.text }, select: { id: true } })
   }
 
+  if (input.kind === "media") {
+    if (!input.file.s3Key) throw new Error("Outbound media needs a stored file")
+    return db.whatsAppMessage.create({
+      data: {
+        ...base,
+        type: input.mediaType,
+        text: input.caption?.trim() || null,
+        media: {
+          create: {
+            metaMediaId: OUTBOUND_MEDIA_ID,
+            mimeType: input.file.mimeType,
+            sizeBytes: input.file.sizeBytes,
+            fileName: input.file.fileName,
+            s3Key: input.file.s3Key,
+            status: "STORED",
+          },
+        },
+      },
+      select: { id: true },
+    })
+  }
+
   // Templates are validated here too, so an unapproved template never reaches the outbox (WI-10).
   const template = resolveTemplate(input.templateKey, getWhatsAppConfig().templates)
   if (!template) throw new TemplateNotApprovedError(input.templateKey)
@@ -114,7 +150,14 @@ export async function createOutboundMessage(input: OutboundInput, db: Db = prism
     throw new Error(`Template "${template.key}" expects ${template.paramCount} non-empty parameter(s)`)
   }
   return db.whatsAppMessage.create({
-    data: { ...base, type: "TEMPLATE", templateName: template.name, templateParams: input.params },
+    data: {
+      ...base,
+      type: "TEMPLATE",
+      templateName: template.name,
+      templateParams: input.params,
+      // What the customer reads, so the thread shows the message instead of a template name.
+      text: renderTemplateBody(template.key, input.params),
+    },
     select: { id: true },
   })
 }
@@ -220,6 +263,7 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
           templateParams: true,
           contextWamid: true,
           sendAttemptedAt: true,
+          media: { select: { status: true, s3Key: true, mimeType: true, fileName: true } },
           conversation: { select: { stateVersion: true, lastInboundAt: true, contact: { select: { waId: true } } } },
         },
       })
@@ -262,9 +306,32 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
 
       const isText = message.type === "TEXT" && Boolean(message.text?.trim())
       const isTemplate = message.type === "TEMPLATE" && Boolean(message.templateName)
-      if (!isText && !isTemplate) {
+      const stored = message.media
+      const isMedia =
+        (message.type === "IMAGE" || message.type === "DOCUMENT") &&
+        stored?.status === "STORED" &&
+        Boolean(stored.s3Key)
+      if (!isText && !isTemplate && !isMedia) {
         await markFailed(tx, message.id, SendErrorCode.INVALID_MESSAGE, "El mensaje no se puede enviar por este canal.")
         return { kind: "failed" }
+      }
+
+      // Read the attachment BEFORE the attempt marker: a storage failure sends nothing, so the
+      // job can safely retry (and fails visibly on its last attempt).
+      let file: { bytes: Uint8Array; mimeType: string; fileName: string | null } | null = null
+      if (isMedia && stored?.s3Key) {
+        try {
+          const bytes = await getObjectBytes(stored.s3Key, MAX_DOCUMENT_BYTES)
+          if (!bytesMatchMime(stored.mimeType, bytes)) {
+            await markFailed(tx, message.id, SendErrorCode.INVALID_MESSAGE, "El archivo adjunto no es válido.")
+            return { kind: "failed" }
+          }
+          file = { bytes, mimeType: stored.mimeType, fileName: stored.fileName }
+        } catch {
+          if (!context.isLastAttempt) throw new Error(`Could not read the attachment of message ${message.id}`)
+          await markFailed(tx, message.id, SendErrorCode.MEDIA_UNAVAILABLE, "No se pudo leer el archivo adjunto.")
+          return { kind: "failed" }
+        }
       }
 
       // Commit the attempt BEFORE Meta is called, on a separate connection: it must survive a
@@ -279,7 +346,21 @@ export async function sendOutboundMessage(data: SendJobData, context: SendContex
       const to = conversation.contact.waId
       try {
         let wamid: string
-        if (isText) {
+        if (file) {
+          wamid = (
+            await sendMedia(
+              to,
+              {
+                kind: message.type === "IMAGE" ? "image" : "document",
+                bytes: file.bytes,
+                mimeType: file.mimeType,
+                fileName: file.fileName,
+                caption: message.text,
+              },
+              { contextWamid: message.contextWamid }
+            )
+          ).wamid
+        } else if (isText) {
           wamid = (await sendText(to, message.text as string, { contextWamid: message.contextWamid })).wamid
         } else {
           const params = Array.isArray(message.templateParams)

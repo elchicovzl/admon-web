@@ -14,7 +14,7 @@ vi.mock("@aws-sdk/client-s3", async (importOriginal) => {
 })
 vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: m.getSignedUrl }))
 
-import { copyObject, deleteObjects, presignGet, putObject, resetR2Client } from "../r2"
+import { copyObject, deleteObjects, getObjectBytes, presignGet, putObject, resetR2Client } from "../r2"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -142,5 +142,29 @@ describe("presignGet", () => {
     await presignGet("k", { disposition: "attachment" })
 
     expect(m.getSignedUrl.mock.calls[0][1].input.ResponseContentDisposition).toBe("attachment")
+  })
+})
+
+describe("getObjectBytes", () => {
+  const body = (bytes: Uint8Array) => ({ transformToByteArray: async () => bytes })
+
+  it("reads the object into memory", async () => {
+    m.send.mockResolvedValue({ ContentLength: 3, Body: body(new Uint8Array([1, 2, 3])) })
+
+    await expect(getObjectBytes("a/b.pdf", 10)).resolves.toEqual(new Uint8Array([1, 2, 3]))
+    expect(m.send.mock.calls[0][0].input).toEqual({ Bucket: "bucket", Key: "a/b.pdf" })
+  })
+
+  it("refuses an object larger than the limit, by header or by size", async () => {
+    m.send.mockResolvedValue({ ContentLength: 11, Body: body(new Uint8Array(11)) })
+    await expect(getObjectBytes("a", 10)).rejects.toThrow("larger")
+
+    m.send.mockResolvedValue({ Body: body(new Uint8Array(11)) })
+    await expect(getObjectBytes("a", 10)).rejects.toThrow("larger")
+  })
+
+  it("fails when there is no body", async () => {
+    m.send.mockResolvedValue({})
+    await expect(getObjectBytes("a", 10)).rejects.toThrow("no body")
   })
 })
