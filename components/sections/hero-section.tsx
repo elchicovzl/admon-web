@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Eye, TrendingUp } from 'lucide-react'
 import { Typewriter } from 'react-simple-typewriter'
-import { HeroDashboardMock } from '@/components/ui/hero-dashboard-mock'
+import { HeroSceneLazy } from '@/components/three/hero-scene-lazy'
 import { SectionLabel } from '@/components/ui/section-label'
 import Squares from '@/components/ui/squares-background'
 import { memo } from 'react'
@@ -96,24 +96,21 @@ export default function HeroSection() {
       </div>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Desktop Layout */}
-        <div className="hidden lg:grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left Content */}
-          <div className="relative z-10 text-left">
-            <HeroContent />
+        {/* One grid for every breakpoint so the 3D scene mounts exactly once */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-y-14 lg:gap-12 items-center">
+          {/* Copy: desktop and mobile variants toggled with CSS (cheap DOM) */}
+          <div className="relative z-10">
+            <div className="hidden lg:block text-left">
+              <HeroContent />
+            </div>
+            <div className="lg:hidden text-center">
+              <HeroContent isMobile />
+            </div>
           </div>
 
-          {/* Right side: dashboard mock */}
-          <div className="relative z-10 pb-10">
-            <HeroDashboardMock />
-          </div>
-        </div>
-
-        {/* Mobile Layout - copy with mock below */}
-        <div className="lg:hidden text-center relative z-10">
-          <HeroContent isMobile />
-          <div className="mt-14 pb-6 text-left">
-            <HeroDashboardMock />
+          {/* 3D scene (single instance) */}
+          <div className="relative z-10 pb-6 lg:pb-10 text-left">
+            <HeroSceneLazy />
           </div>
         </div>
       </div>
