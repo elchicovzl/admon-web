@@ -10,6 +10,7 @@ import {
   markConversationRead,
 } from '@/lib/actions/whatsapp.actions'
 import type { ConversationListPage, ConversationSummary } from '@/lib/types/whatsapp.types'
+import type { TemplateOption } from '@/lib/whatsapp/templates'
 import {
   hasNewInbound,
   mergeConversations,
@@ -19,9 +20,11 @@ import {
   threadCursorOf,
 } from '@/lib/whatsapp/inbox'
 import { ConversationList, type InboxFilter } from './conversation-list'
+import { ResendConfirmDialog } from './resend-confirm-dialog'
 import { ThreadView, type ThreadState } from './thread-view'
 import { useNow } from './use-now'
 import { usePolling } from './use-polling'
+import { useThreadActions } from './use-thread-actions'
 
 /** Same cadence as the notification bell. */
 export const INBOX_POLL_INTERVAL_MS = 4000
@@ -42,7 +45,14 @@ function writeSelection(id: string | null) {
  * presentational (`ConversationList`, `ThreadView`). The selection lives in the URL (`?c=`),
  * which is also where the notification bell links to.
  */
-export function InboxContainer({ initial }: { initial: ConversationListPage }) {
+export function InboxContainer({
+  initial,
+  templates,
+}: {
+  initial: ConversationListPage
+  /** Approved templates the composer may offer when the 24 h window is closed. */
+  templates: TemplateOption[]
+}) {
   const searchParams = useSearchParams()
   const selectedId = parseConversationParam(searchParams.get('c'))
   const now = useNow()
@@ -205,6 +215,8 @@ export function InboxContainer({ initial }: { initial: ConversationListPage }) {
 
   usePolling(poll, INBOX_POLL_INTERVAL_MS)
 
+  const actions = useThreadActions({ conversationId: selectedId, onChanged: poll })
+
   const selected = conversations.find((item) => item.id === selectedId) ?? null
   const showThreadOnMobile = selectedId !== null
 
@@ -237,8 +249,21 @@ export function InboxContainer({ initial }: { initial: ConversationListPage }) {
           onBack={() => writeSelection(null)}
           onLoadOlder={() => void loadOlder()}
           onRetry={() => setThreadReload((value) => value + 1)}
+          composer={{
+            sending: actions.sending,
+            templates,
+            onSendText: actions.sendText,
+            onSendTemplate: actions.sendTemplate,
+            onSendAttachment: actions.sendAttachment,
+          }}
+          onResend={actions.resend}
         />
       </section>
+      <ResendConfirmDialog
+        open={actions.confirming !== null}
+        onConfirm={actions.confirmResend}
+        onCancel={actions.cancelResend}
+      />
     </div>
   )
 }

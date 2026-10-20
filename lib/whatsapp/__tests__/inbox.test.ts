@@ -52,6 +52,7 @@ function msg(overrides: Partial<ThreadMessage> & { id: string }): ThreadMessage 
     text: 'hola',
     templateName: null,
     status: 'RECEIVED',
+    errorCode: null,
     errorMessage: null,
     senderName: null,
     timestamp: '2026-10-19T12:00:00.000Z',

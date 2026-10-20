@@ -4,6 +4,7 @@ import {
   composerMode,
   evaluateResend,
   replyBlockedReason,
+  resendAction,
   resendNeedsConfirmation,
   type ResendCandidate,
 } from "../composer"
@@ -117,6 +118,49 @@ describe("evaluateResend (S-WI-9, D6)", () => {
     expect(evaluateResend({ ...base, conversationStatus: "CLOSED", message: failed({ type: "TEMPLATE" }) })).toEqual({
       ok: false,
       message: ComposerError.CLOSED_CONVERSATION,
+    })
+  })
+})
+
+describe("resendAction (what the FAILED bubble shows)", () => {
+  const failed = (overrides: Partial<ResendCandidate> = {}): ResendCandidate => ({
+    direction: "OUT",
+    source: "DASHBOARD",
+    status: "FAILED",
+    type: "TEXT",
+    errorCode: "131047",
+    ...overrides,
+  })
+  const base = { conversationStatus: "HUMAN" as const, lastInboundAt: hoursAgo(1), now: NOW }
+
+  it("shows an enabled button for a resendable message", () => {
+    expect(resendAction({ ...base, message: failed() })).toEqual({ show: true, enabled: true, needsConfirmation: false })
+  })
+
+  it("flags an unconfirmed delivery so the UI asks first", () => {
+    expect(resendAction({ ...base, message: failed({ errorCode: "UNKNOWN_DELIVERY" }) })).toMatchObject({
+      enabled: true,
+      needsConfirmation: true,
+    })
+  })
+
+  it("shows nothing for AI, system, inbound or non-failed messages", () => {
+    for (const message of [
+      failed({ source: "AI" }),
+      failed({ source: "SYSTEM" }),
+      failed({ direction: "IN", source: "CLIENT" }),
+      failed({ status: "SENT" }),
+    ]) {
+      expect(resendAction({ ...base, message })).toEqual({ show: false, enabled: false, needsConfirmation: false })
+    }
+  })
+
+  it("shows a disabled button with the reason when the window is closed", () => {
+    expect(resendAction({ ...base, lastInboundAt: hoursAgo(30), message: failed() })).toEqual({
+      show: true,
+      enabled: false,
+      reason: "La ventana de 24 horas está cerrada. Envíe una plantilla aprobada.",
+      needsConfirmation: false,
     })
   })
 })

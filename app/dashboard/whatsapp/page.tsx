@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { InboxContainer } from '@/components/dashboard/whatsapp/inbox-container'
 import { InboxSkeleton } from '@/components/dashboard/whatsapp/inbox-skeletons'
 import { listConversations } from '@/lib/actions/whatsapp.actions'
+import { getTemplateOptions } from '@/lib/whatsapp/outbound'
 
 export const metadata: Metadata = {
   title: 'WhatsApp | Dashboard',
@@ -21,7 +22,7 @@ async function Inbox() {
     )
   }
 
-  return <InboxContainer initial={result.data} />
+  return <InboxContainer initial={result.data} templates={getTemplateOptions()} />
 }
 
 export default function WhatsAppPage() {

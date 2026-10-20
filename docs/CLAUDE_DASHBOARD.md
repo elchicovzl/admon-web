@@ -642,7 +642,7 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   nunca al cargar). `tag` = conversación; al hacer clic se enfoca la pestaña y se abre el enlace.
   Con el navegador cerrado haría falta Web Push (service worker + VAPID): fuera de alcance.
 
-### Bandeja de WhatsApp (`/dashboard/whatsapp`, solo lectura)
+### Bandeja de WhatsApp (`/dashboard/whatsapp`)
 
 - Página server (`app/dashboard/whatsapp/page.tsx`) con Suspense + esqueleto; carga la primera
   página con `listConversations` y la pasa a `InboxContainer` (cliente, estado + polling). La
@@ -654,12 +654,42 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   si llega al tope devuelve `truncated` y el cliente recarga) y `markConversationRead`.
 - La selección vive en la URL (`?c=<id>`, el mismo enlace de la campana). Abrir un hilo llama a
   `markConversationNotificationsRead` y `markConversationRead` (único write de esta etapa:
-  solo `unreadCount`). El envío, tomar/devolver/pausar y leads llegan en PR2.3/PR2.4.
+  solo `unreadCount`). Tomar/devolver/pausar y leads llegan en PR2.4. El historial usa un cursor
+  compuesto `(timestamp, id)` (`before: { timestamp, id }`) porque varios mensajes pueden
+  compartir el mismo timestamp.
 - Lógica pura y probada en `lib/whatsapp/inbox.ts` (orden, marcadores, "Atender: lun 8:00",
   ventana de 24 h, previews, merges). Polling cada 4 s, solo con la pestaña visible.
 - Medios: solo por `getMediaUrl` (URL firmada de 10 min, pedida cuando el adjunto es visible);
   nunca se expone la clave de R2.
 - Datos de prueba locales: `pnpm seed:whatsapp-dev` (solo base local, ver el script).
+- Insignia en el menú lateral ("WhatsApp"): `WhatsAppSidebarBadge` reutiliza
+  `getUnreadNotificationCount` (cada 15 s, solo con la pestaña visible y solo si el usuario ve la
+  entrada).
+
+#### Responder (compositor)
+
+- Acciones (`requireWhatsAppAuth()` + Zod): `sendReply`, `sendTemplate`, `resendFailedMessage`.
+  Los adjuntos van por `POST /api/whatsapp/messages/media` (las Server Actions limitan el cuerpo a
+  1 MB); misma autorización y el mismo servicio (`lib/whatsapp/outbound.ts`).
+- Un envío desde el panel aplica `DASHBOARD_REPLY` (la conversación pasa a HUMAN) y crea la fila
+  del outbox en **una sola transacción**; el job se encola después del commit con el
+  `stateVersion` resultante (`expectedStateVersion`), así un cierre o una devolución a la IA
+  posterior cancela el mensaje en vez de entregarlo. Una conversación CLOSED rechaza la respuesta
+  ("Reábrala antes de responder").
+- Ventana de 24 h: con la ventana cerrada solo se envían plantillas aprobadas
+  (`WHATSAPP_APPROVED_TEMPLATES` + nombre configurado). Se valida en el servidor
+  (`lib/whatsapp/composer.ts`, las mismas funciones del compositor) y otra vez en el job.
+- Adjuntos: JPG/PNG (máx. 5 MB, el tope de Meta para imágenes) y PDF (máx. 10 MB), solo dentro de
+  la ventana. Se comprueba el tipo declarado, la firma del archivo y la misma lista de bloqueo
+  que los medios entrantes (`lib/whatsapp/mime.ts`). Se suben a R2 y el job los lee de R2 antes de
+  marcar `sendAttemptedAt`.
+- Reintento: solo mensajes FAILED enviados desde el panel (no IA ni sistema). Devuelve la misma
+  fila a QUEUED, limpia `sendAttemptedAt` y el wamid anterior y suma `resendCount`. Un mensaje
+  `UNKNOWN_DELIVERY` pudo haberse entregado: la UI pide confirmación y el servidor exige
+  `confirmUnknownDelivery`.
+- Con `WHATSAPP_ENABLED` apagado enviar falla con un mensaje claro y no escribe nada (`getBoss()`
+  lanza en ese caso).
+- El gancho `onSent` puede ejecutarse más de una vez para el mismo mensaje: debe ser idempotente.
 
 ---
 

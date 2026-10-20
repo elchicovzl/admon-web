@@ -47,7 +47,7 @@ vi.mock("../send", () => ({
   enqueueOutboundSend: m.enqueueOutboundSend,
 }))
 
-import { resendMessage, sendMediaReply, sendReplyMessage, sendTemplateMessage } from "../outbound"
+import { getTemplateOptions, resendMessage, sendMediaReply, sendReplyMessage, sendTemplateMessage } from "../outbound"
 
 const NOW = new Date("2026-10-19T12:00:00.000Z")
 const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000)
@@ -507,5 +507,11 @@ describe("resendMessage (S-WI-9, D6)", () => {
       success: false,
       error: "El canal de WhatsApp está desactivado. No se pueden enviar mensajes.",
     })
+  })
+})
+
+describe("getTemplateOptions", () => {
+  it("offers only approved and configured templates", () => {
+    expect(getTemplateOptions().map((option) => option.key)).toEqual(["RESUME"])
   })
 })

@@ -5,6 +5,7 @@ import {
   listTemplateOptions,
   renderTemplateBody,
   resolveTemplate,
+  suggestedFirstName,
   validateTemplateParams,
 } from "../templates"
 
@@ -93,5 +94,18 @@ describe("template copy and variables (S-WI-8)", () => {
     expect(validateTemplateParams("RESUME", ["Ana\nPérez"]).ok).toBe(false)
     expect(validateTemplateParams("RESUME", ["Ana\tPérez"]).ok).toBe(false)
     expect(validateTemplateParams("RESUME", ["Ana     Pérez"]).ok).toBe(false)
+  })
+})
+
+describe("suggestedFirstName", () => {
+  it("takes the first word of a name", () => {
+    expect(suggestedFirstName("Ana María Pérez")).toBe("Ana")
+    expect(suggestedFirstName("  Édgar  ")).toBe("Édgar")
+  })
+
+  it("is empty when only a phone or nothing is known", () => {
+    expect(suggestedFirstName("+573001112233")).toBe("")
+    expect(suggestedFirstName("")).toBe("")
+    expect(suggestedFirstName(null)).toBe("")
   })
 })

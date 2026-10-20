@@ -1,6 +1,8 @@
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, RotateCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ThreadMessage } from '@/lib/types/whatsapp.types'
+import type { ResendAction } from '@/lib/whatsapp/composer'
 import { deliveryLabel, formatClock, messageTypeLabel, senderLabel } from '@/lib/whatsapp/inbox'
 import { MessageMedia } from './message-media'
 
@@ -13,7 +15,16 @@ const SOURCE_STYLE: Record<ThreadMessage['source'], string> = {
 }
 
 /** One message: source label, body (text, media or type placeholder), time and delivery state. */
-export function MessageBubble({ message }: { message: ThreadMessage }) {
+export function MessageBubble({
+  message,
+  resend,
+  onResend,
+}: {
+  message: ThreadMessage
+  /** Retry state for a FAILED dashboard message; omit for messages that cannot be retried. */
+  resend?: ResendAction
+  onResend?: (message: ThreadMessage) => void
+}) {
   const outgoing = message.direction === 'OUT'
   const failed = message.status === 'FAILED'
   const body = message.text ?? (message.templateName ? `Plantilla: ${message.templateName}` : null)
@@ -37,6 +48,25 @@ export function MessageBubble({ message }: { message: ThreadMessage }) {
         </p>
         {failed && message.errorMessage && (
           <p className="text-[11px] font-medium">{message.errorMessage}</p>
+        )}
+        {failed && resend?.show && onResend && (
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-6 px-2 text-[11px]"
+              disabled={!resend.enabled}
+              title={resend.reason}
+              onClick={() => onResend(message)}
+            >
+              <RotateCcw className="h-3 w-3" aria-hidden />
+              Reintentar
+            </Button>
+          </div>
+        )}
+        {failed && resend?.show && !resend.enabled && resend.reason && (
+          <p className="text-right text-[11px] opacity-80">{resend.reason}</p>
         )}
       </div>
     </div>

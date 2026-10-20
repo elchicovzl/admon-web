@@ -111,3 +111,28 @@ export function evaluateResend(input: {
   }
   return { ok: true, needsConfirmation: resendNeedsConfirmation(message.errorCode), template }
 }
+
+export interface ResendAction {
+  /** False for messages that never get a retry button (not failed, not from the dashboard). */
+  show: boolean
+  enabled: boolean
+  /** Why the button is disabled (window closed, conversation closed...). */
+  reason?: string
+  needsConfirmation: boolean
+}
+
+const HIDDEN: ResendAction = { show: false, enabled: false, needsConfirmation: false }
+
+/** What the FAILED bubble offers: a retry button, a disabled one with the reason, or nothing. */
+export function resendAction(input: {
+  message: ResendCandidate
+  conversationStatus: ConversationStatus
+  lastInboundAt: Date | null
+  now: Date
+}): ResendAction {
+  const { message } = input
+  if (message.direction !== "OUT" || message.status !== "FAILED" || message.source !== "DASHBOARD") return HIDDEN
+  const decision = evaluateResend(input)
+  if (decision.ok) return { show: true, enabled: true, needsConfirmation: decision.needsConfirmation }
+  return { show: true, enabled: false, reason: decision.message, needsConfirmation: false }
+}
