@@ -75,6 +75,7 @@ model User {
 
   // WhatsApp in-app notifications addressed to this user
   notifications                  Notification[]           @relation("UserNotifications")
+  knowledgeDocuments             KnowledgeDocument[]      @relation("KnowledgeDocumentUploadedBy")
 
   // Blog relations
   blogPosts                      BlogPost[]               @relation("BlogPostAuthor")
@@ -2071,4 +2072,60 @@ model Notification {
   @@index([userId, createdAt(sort: Desc)])
   @@index([conversationId])
   @@map("notifications")
+}
+
+// ---------------------------------------------------------------- knowledge base (M3)
+
+enum KnowledgeDocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+/// A file the AI assistant answers from. Its text lives in KnowledgeChunk rows.
+model KnowledgeDocument {
+  id             String                  @id @default(cuid())
+  title          String
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  s3Key          String
+  status         KnowledgeDocumentStatus @default(PENDING)
+  error          String?
+  // A failed (re)index that can be retried; the previous chunks stay in place meanwhile.
+  retriable      Boolean                 @default(false)
+  embeddingModel String?
+  chunkCount     Int                     @default(0)
+  lastIndexedAt  DateTime?
+  isActive       Boolean                 @default(true)
+  uploadedById   String
+  uploadedBy     User                    @relation("KnowledgeDocumentUploadedBy", fields: [uploadedById], references: [id])
+  chunks         KnowledgeChunk[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([isActive, status])
+  @@map("knowledge_documents")
+}
+
+/// One retrievable piece of a document. Raw indexes (HNSW on embedding, Spanish GIN on content)
+/// live in the knowledge_base migration; lib/__tests__/migration-guard.test.ts keeps them.
+model KnowledgeChunk {
+  id                  String                       @id @default(cuid())
+  documentId          String
+  document            KnowledgeDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  ordinal             Int
+  heading             String?
+  content             String                       @db.Text
+  tokenCount          Int
+  // Retrieval only compares chunks embedded with the configured model and dimensions (KB-6).
+  embeddingModel      String
+  embeddingDimensions Int
+  embedding           Unsupported("vector(1536)")?
+  createdAt           DateTime                     @default(now())
+
+  @@index([documentId])
+  @@index([embeddingModel, embeddingDimensions])
+  @@map("knowledge_chunks")
 }
