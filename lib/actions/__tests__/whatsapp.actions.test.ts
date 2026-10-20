@@ -325,12 +325,46 @@ describe('listConversations', () => {
     expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'CLOSED' })
   })
 
+  it('applies the search to both queries and keeps the state filter', async () => {
+    await listConversations({ q: 'José' })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(2)
+    for (const [args] of prismaMock.conversation.findMany.mock.calls) {
+      expect(args.where.OR).toHaveLength(4)
+      expect(JSON.stringify(args.where.OR)).toContain('"mode":"insensitive"')
+    }
+    const statuses = prismaMock.conversation.findMany.mock.calls.map(([a]) => a.where.status)
+    expect(statuses).toEqual(['ESCALATED', { not: 'ESCALATED' }])
+
+    prismaMock.conversation.findMany.mockClear()
+    await listConversations({ q: '300 111', state: 'CLOSED' })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(1)
+    const where = prismaMock.conversation.findMany.mock.calls[0][0].where
+    expect(where.status).toBe('CLOSED')
+    expect(JSON.stringify(where.OR)).toContain('"waId":{"contains":"300111"}')
+  })
+
+  it('treats a blank search as no search', async () => {
+    await listConversations({ q: '   ' })
+    expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'ESCALATED' })
+    expect(prismaMock.conversation.findMany.mock.calls[1][0].where).toEqual({ status: { not: 'ESCALATED' } })
+  })
+
+  it('still requires WhatsApp access when searching', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u', role: UserRole.MANAGER } })
+    hasWhatsAppAccessMock.mockResolvedValue(false)
+    const r = await listConversations({ q: 'ana' })
+    expect(r.success).toBe(false)
+    expect(prismaMock.conversation.findMany).not.toHaveBeenCalled()
+  })
+
   it.each([
     [{ state: 'BOGUS' }],
     [{ limit: 0 }],
     [{ limit: 101 }],
     [{ limit: 1.5 }],
     [{ cursor: 'not-a-cuid' }],
+    [{ q: 'x'.repeat(81) }],
+    [{ q: 5 }],
   ])('rejects invalid input %j', async (input) => {
     const r = await listConversations(input as never)
     expect(r.success).toBe(false)
