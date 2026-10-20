@@ -6,6 +6,7 @@ import { getBoss } from "@/lib/queue/boss"
 import { QUEUES, QUEUE_DEFINITIONS } from "@/lib/queue/queues"
 import { CloudApiError, sendTemplate, sendText } from "./cloud-api"
 import { isWhatsAppEnabled } from "./ingest"
+import { SendErrorCode } from "./send-errors"
 import { applyStoredStatuses } from "./statuses"
 import { resolveTemplate } from "./templates"
 import { isWindowOpen } from "./window"
@@ -66,23 +67,14 @@ export interface SendJobData {
   expectedStateVersion?: number
 }
 
+export { SendErrorCode }
+
 export class TemplateNotApprovedError extends Error {
   readonly name = "TemplateNotApprovedError"
   constructor(key: string) {
     super(`Template "${key}" is not approved or not configured`)
   }
 }
-
-/** Error codes stored on FAILED outbound messages (alongside Meta's numeric codes). */
-export const SendErrorCode = {
-  WINDOW_CLOSED: "WINDOW_CLOSED",
-  STALE_STATE: "STALE_STATE",
-  RETRIES_EXHAUSTED: "RETRIES_EXHAUSTED",
-  QUEUE_UNAVAILABLE: "QUEUE_UNAVAILABLE",
-  INVALID_MESSAGE: "INVALID_MESSAGE",
-  /** Meta may or may not have accepted the message; never resent automatically (at-most-once). */
-  UNKNOWN_DELIVERY: "UNKNOWN_DELIVERY",
-} as const
 
 const MAX_ERROR_LENGTH = 300
 /** Holds the per-conversation lock across one Meta call; far above the client's 30 s timeout. */
