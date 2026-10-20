@@ -64,15 +64,42 @@ export async function copyObject(sourceKey: string, destinationKey: string): Pro
   )
 }
 
-/** Reads an object into memory. Throws if it is missing or larger than `maxBytes`. */
+/**
+ * A stored object that can never be read as requested: missing, or larger than allowed. Retrying
+ * cannot help, unlike an outage, so callers can tell the two apart.
+ */
+export class StoredObjectError extends Error {
+  constructor(
+    readonly code: "MISSING" | "TOO_LARGE",
+    message: string
+  ) {
+    super(message)
+    this.name = "StoredObjectError"
+  }
+}
+
+const TOO_LARGE_MESSAGE = "Stored object is larger than the allowed size"
+
+/**
+ * Reads an object into memory. A missing object or one larger than `maxBytes` throws a
+ * `StoredObjectError`; any other storage error (an outage) is rethrown unchanged.
+ */
 export async function getObjectBytes(key: string, maxBytes: number): Promise<Uint8Array> {
-  const response = await getClient().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }))
+  let response
+  try {
+    response = await getClient().send(new GetObjectCommand({ Bucket: getBucket(), Key: key }))
+  } catch (error) {
+    if (error instanceof Error && error.name === "NoSuchKey") {
+      throw new StoredObjectError("MISSING", "Stored object does not exist")
+    }
+    throw error
+  }
   if (typeof response.ContentLength === "number" && response.ContentLength > maxBytes) {
-    throw new Error("Stored object is larger than the allowed size")
+    throw new StoredObjectError("TOO_LARGE", TOO_LARGE_MESSAGE)
   }
   const bytes = await response.Body?.transformToByteArray()
   if (!bytes) throw new Error("Stored object has no body")
-  if (bytes.byteLength > maxBytes) throw new Error("Stored object is larger than the allowed size")
+  if (bytes.byteLength > maxBytes) throw new StoredObjectError("TOO_LARGE", TOO_LARGE_MESSAGE)
   return bytes
 }
 

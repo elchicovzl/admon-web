@@ -15,7 +15,49 @@ export const EXTRACT_ERRORS = {
   SCANNED_PDF: "El PDF no contiene texto extraíble (posiblemente escaneado). OCR no está soportado.",
   UNREADABLE: "No se pudo leer el archivo. Verifique que no esté dañado ni protegido con contraseña.",
   EMPTY: "El documento no contiene texto.",
+  TOO_LARGE_UNCOMPRESSED: "El DOCX es demasiado grande al descomprimirse (máximo 50 MB).",
 } as const
+
+/** A DOCX is a zip; refuse to inflate more than this (a small upload can expand enormously). */
+export const DOCX_MAX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
+
+const EOCD_SIGNATURE = 0x06054b50
+const CENTRAL_ENTRY_SIGNATURE = 0x02014b50
+const ZIP64_MARKER = 0xffffffff
+
+/**
+ * Total uncompressed size a zip declares in its central directory, read without inflating
+ * anything. `Infinity` for ZIP64 archives (sizes live elsewhere; a DOCX never needs them) and
+ * null when there is no readable central directory. The declared size can be forged, so this
+ * bounds honest-but-huge files and naive bombs; uploads are also limited to staff with access.
+ */
+export function docxUncompressedBytes(bytes: Uint8Array): number | null {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const lowest = Math.max(0, bytes.byteLength - 22 - 0xffff)
+  let eocd = -1
+  for (let i = bytes.byteLength - 22; i >= lowest; i--) {
+    if (view.getUint32(i, true) === EOCD_SIGNATURE) {
+      eocd = i
+      break
+    }
+  }
+  if (eocd < 0) return null
+
+  const entries = view.getUint16(eocd + 10, true)
+  const directoryOffset = view.getUint32(eocd + 16, true)
+  if (entries === 0xffff || directoryOffset === ZIP64_MARKER) return Number.POSITIVE_INFINITY
+
+  let total = 0
+  let position = directoryOffset
+  for (let entry = 0; entry < entries; entry++) {
+    if (position + 46 > bytes.byteLength || view.getUint32(position, true) !== CENTRAL_ENTRY_SIGNATURE) return null
+    const size = view.getUint32(position + 24, true)
+    if (size === ZIP64_MARKER) return Number.POSITIVE_INFINITY
+    total += size
+    position += 46 + view.getUint16(position + 28, true) + view.getUint16(position + 30, true) + view.getUint16(position + 32, true)
+  }
+  return total
+}
 
 export type ExtractResult = { ok: true; text: string } | { ok: false; error: string }
 
@@ -85,6 +127,9 @@ export async function extractDocumentText(
       // A PDF that parses but carries no letters or digits is an image (scanned) document.
       if (!/[\p{L}\p{N}]/u.test(text)) return { ok: false, error: EXTRACT_ERRORS.SCANNED_PDF }
     } else if (kind === "docx") {
+      const declared = docxUncompressedBytes(bytes)
+      if (declared === null) return { ok: false, error: EXTRACT_ERRORS.UNREADABLE }
+      if (declared > DOCX_MAX_UNCOMPRESSED_BYTES) return { ok: false, error: EXTRACT_ERRORS.TOO_LARGE_UNCOMPRESSED }
       const { value } = await mammoth.convertToHtml({ buffer: Buffer.from(bytes) })
       text = htmlToText(value)
     } else {

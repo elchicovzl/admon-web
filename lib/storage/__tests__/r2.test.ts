@@ -14,7 +14,7 @@ vi.mock("@aws-sdk/client-s3", async (importOriginal) => {
 })
 vi.mock("@aws-sdk/s3-request-presigner", () => ({ getSignedUrl: m.getSignedUrl }))
 
-import { copyObject, deleteObjects, getObjectBytes, presignGet, putObject, resetR2Client } from "../r2"
+import { StoredObjectError, copyObject, deleteObjects, getObjectBytes, presignGet, putObject, resetR2Client } from "../r2"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -166,5 +166,22 @@ describe("getObjectBytes", () => {
   it("fails when there is no body", async () => {
     m.send.mockResolvedValue({})
     await expect(getObjectBytes("a", 10)).rejects.toThrow("no body")
+  })
+
+  it("marks missing and oversized objects as permanent, typed errors", async () => {
+    m.send.mockResolvedValue({ ContentLength: 11, Body: body(new Uint8Array(11)) })
+    await expect(getObjectBytes("a", 10)).rejects.toMatchObject({ name: "StoredObjectError", code: "TOO_LARGE" })
+
+    m.send.mockRejectedValue(Object.assign(new Error("The specified key does not exist."), { name: "NoSuchKey" }))
+    const missing = await getObjectBytes("a", 10).catch((error: unknown) => error)
+    expect(missing).toBeInstanceOf(StoredObjectError)
+    expect(missing).toMatchObject({ code: "MISSING" })
+  })
+
+  it("lets other storage errors through unchanged (outages stay retryable)", async () => {
+    const outage = Object.assign(new Error("socket hang up"), { name: "TimeoutError" })
+    m.send.mockRejectedValue(outage)
+
+    await expect(getObjectBytes("a", 10)).rejects.toBe(outage)
   })
 })
