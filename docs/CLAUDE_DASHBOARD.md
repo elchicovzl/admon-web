@@ -642,6 +642,25 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   nunca al cargar). `tag` = conversación; al hacer clic se enfoca la pestaña y se abre el enlace.
   Con el navegador cerrado haría falta Web Push (service worker + VAPID): fuera de alcance.
 
+### Bandeja de WhatsApp (`/dashboard/whatsapp`, solo lectura)
+
+- Página server (`app/dashboard/whatsapp/page.tsx`) con Suspense + esqueleto; carga la primera
+  página con `listConversations` y la pasa a `InboxContainer` (cliente, estado + polling). La
+  lista, el hilo, las burbujas y el visor de medios son presentacionales.
+- Acciones (`lib/actions/whatsapp.actions.ts`, todas con `requireWhatsAppAuth()` y Zod):
+  `listConversations` (ESCALATED primero por `attentionDueAt` asc, luego `lastMessageAt` desc;
+  `cursor` pagina solo las no escaladas), `getConversationThread` (últimos N mensajes, `before`
+  para historial), `getUpdates` (cambios desde `updatedSince` por `updatedAt`, con 5 s de solape;
+  si llega al tope devuelve `truncated` y el cliente recarga) y `markConversationRead`.
+- La selección vive en la URL (`?c=<id>`, el mismo enlace de la campana). Abrir un hilo llama a
+  `markConversationNotificationsRead` y `markConversationRead` (único write de esta etapa:
+  solo `unreadCount`). El envío, tomar/devolver/pausar y leads llegan en PR2.3/PR2.4.
+- Lógica pura y probada en `lib/whatsapp/inbox.ts` (orden, marcadores, "Atender: lun 8:00",
+  ventana de 24 h, previews, merges). Polling cada 4 s, solo con la pestaña visible.
+- Medios: solo por `getMediaUrl` (URL firmada de 10 min, pedida cuando el adjunto es visible);
+  nunca se expone la clave de R2.
+- Datos de prueba locales: `pnpm seed:whatsapp-dev` (solo base local, ver el script).
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)
