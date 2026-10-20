@@ -11,9 +11,11 @@ Branches: `feat/whatsapp-m1-auto-link` (PR1.6), `feat/whatsapp-m2-client-tab` (P
 
 ## Tasks
 - [x] T1 S1-S2 auto-link hook — inline — PR1.6 (RED 7 + 2 failing → GREEN 34 + 7; suite 1917/1918, pre-existing send.test failure)
-- [ ] T2 S3 getClientConversations — inline — PR2.5
-- [ ] T3 S4-S5 client profile tabs + WhatsApp tab + docs — inline — PR2.5
+- [x] T2 S3 getClientConversations — inline — PR2.5 (RED 6 failing → GREEN 6/6)
+- [x] T3 S4-S5 client profile tabs + WhatsApp tab + docs — inline — PR2.5 (no component tests in repo; build OK; S5 manual regression PENDING-OPERATOR)
 
 ## Log
 - L1 (2026-10-20, user): "dale sigamos con PR2.5 y PR1.6"
 - L2 Route: inline (two small dependent-free units, each ~200 lines; below the writer threshold to pay off).
+- L3 PR1.6 commit 3b4ba4b on feat/whatsapp-m1-auto-link; assess medium, review not due. Reactivating a client does not trigger auto-link (not requested).
+- L4 PR2.5 on feat/whatsapp-m2-client-tab (stacked on PR1.6 to avoid a docs conflict). "Perfil" TabsContent is forceMount + hidden when inactive so section state survives tab switches. Suite 1923/1924 (pre-existing send.test failure); pnpm build OK.

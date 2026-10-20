@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter, useParams, useSearchParams } from 'next/navigation'
+import { useRouter, useParams, usePathname, useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { getClientById, getCompanyEmployees } from '@/lib/actions/client.actions'
 import type { ClientWithRelations, CompanyEmployee } from '@/lib/types/client.types'
 import { employeeCompanies } from '@/lib/utils/employment'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ArrowLeft, Building2 } from 'lucide-react'
 import { ClientNotesSection } from '@/components/dashboard/clients/client-notes-section'
 import { ClientDocumentsGallerySkeleton } from '@/components/dashboard/clients/client-documents-gallery-skeleton'
@@ -17,9 +19,10 @@ import { CompanyEmployeesSection } from '@/components/dashboard/clients/company-
 import { ClientBeneficiariesSection } from '@/components/dashboard/clients/client-beneficiaries-section'
 import { ClientInfoPanel } from '@/components/dashboard/clients/client-info-panel'
 import { ReturnToSubprocessBubble } from '@/components/dashboard/clients/return-to-subprocess-bubble'
+import { ClientWhatsAppTab } from '@/components/dashboard/clients/client-whatsapp-tab'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ClientType } from '@prisma/client'
+import { ClientType, UserRole } from '@prisma/client'
 import Link from 'next/link'
 
 const ClientDocumentsGallery = dynamic(
@@ -33,9 +36,24 @@ const ClientDocumentsGallery = dynamic(
 
 export default function ClientDetailPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const params = useParams()
   const searchParams = useSearchParams()
   const clientId = params.id as string
+  const { data: session } = useSession()
+  // UI hint only: getClientConversations checks the permission again against the database.
+  const canSeeWhatsApp =
+    session?.user?.role === UserRole.SUPER_ADMIN || session?.user?.canAccessWhatsApp === true
+  const activeTab = canSeeWhatsApp && searchParams.get('tab') === 'whatsapp' ? 'whatsapp' : 'perfil'
+
+  /** The tab lives in the URL (`?tab=whatsapp`) so it can be linked; other params are kept. */
+  const changeTab = (tab: string) => {
+    const next = new URLSearchParams(searchParams.toString())
+    if (tab === 'whatsapp') next.set('tab', 'whatsapp')
+    else next.delete('tab')
+    const query = next.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
 
   const returnTo = searchParams.get('returnTo')
   const returnSubProcessId = searchParams.get('subProcessId')
@@ -158,39 +176,57 @@ export default function ClientDetailPage() {
         </Badge>
       </div>
 
-      {/* Unified Info Panel */}
-      <ClientInfoPanel client={client} onClientUpdated={setClient} />
+      <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
+        {canSeeWhatsApp && (
+          <TabsList>
+            <TabsTrigger value="perfil">Perfil</TabsTrigger>
+            <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          </TabsList>
+        )}
 
-      {/* Beneficiaries Section (not for companies) */}
-      {!client.clientTypes.includes(ClientType.EMPRESA) && (
-        <ClientBeneficiariesSection
-          clientId={client.id}
-          initialBeneficiaries={client.beneficiaries || []}
-        />
-      )}
+        {/* Kept mounted: the sections hold local state (notes, documents) seeded from props. */}
+        <TabsContent value="perfil" forceMount className="space-y-6 data-[state=inactive]:hidden">
+          {/* Unified Info Panel */}
+          <ClientInfoPanel client={client} onClientUpdated={setClient} />
 
-      {/* Employees Section (only for companies) */}
-      {client.clientTypes.includes(ClientType.EMPRESA) && (
-        <CompanyEmployeesSection
-          companyId={client.id}
-          initialEmployees={companyEmployees}
-        />
-      )}
+          {/* Beneficiaries Section (not for companies) */}
+          {!client.clientTypes.includes(ClientType.EMPRESA) && (
+            <ClientBeneficiariesSection
+              clientId={client.id}
+              initialBeneficiaries={client.beneficiaries || []}
+            />
+          )}
 
-      {/* Credentials Section */}
-      <ClientCredentialsSection
-        clientId={client.id}
-        initialCredentials={client.credentials || []}
-      />
+          {/* Employees Section (only for companies) */}
+          {client.clientTypes.includes(ClientType.EMPRESA) && (
+            <CompanyEmployeesSection
+              companyId={client.id}
+              initialEmployees={companyEmployees}
+            />
+          )}
 
-      {/* Notes Section */}
-      <ClientNotesSection clientId={client.id} initialNotes={client.notes || []} />
+          {/* Credentials Section */}
+          <ClientCredentialsSection
+            clientId={client.id}
+            initialCredentials={client.credentials || []}
+          />
 
-      {/* Documents Gallery */}
-      <ClientDocumentsGallery
-        clientId={client.id}
-        initialDocuments={client.documents || []}
-      />
+          {/* Notes Section */}
+          <ClientNotesSection clientId={client.id} initialNotes={client.notes || []} />
+
+          {/* Documents Gallery */}
+          <ClientDocumentsGallery
+            clientId={client.id}
+            initialDocuments={client.documents || []}
+          />
+        </TabsContent>
+
+        {canSeeWhatsApp && (
+          <TabsContent value="whatsapp">
+            <ClientWhatsAppTab clientId={client.id} />
+          </TabsContent>
+        )}
+      </Tabs>
 
       {showReturnBubble && (
         <ReturnToSubprocessBubble

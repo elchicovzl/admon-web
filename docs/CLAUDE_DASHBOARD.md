@@ -741,6 +741,12 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 - Convertir: abre el formulario normal de cliente prellenado (`leadToClientDefaults`, teléfono en
   formato `+57 3001234567`); al crear el cliente se llama `convertLead({ leadId, clientId })`, que
   vincula el contacto y marca el lead CONVERTED.
+- Pestaña WhatsApp del perfil (PR2.5): `/dashboard/clients/[id]?tab=whatsapp`. El perfil queda en
+  la pestaña "Perfil" (mismas secciones, mismo orden, siempre montadas) y la pestaña "WhatsApp" solo
+  se muestra a SUPER_ADMIN o a quien tenga `canAccessWhatsApp` (la sesión decide si se ve; la acción
+  `getClientConversations` vuelve a verificar contra la base). Lista las conversaciones de los
+  números vinculados, de la más reciente a la más vieja, sin las pendientes de purga y sin datos de
+  consentimiento; cada una abre en la bandeja.
 - Límites de cuerpo: el webhook y `POST /api/whatsapp/messages/media` leen el cuerpo con
   `readCappedBody` (`lib/utils/read-capped-body.ts`), que corta también los envíos chunked sin
   Content-Length. Cada firma inválida del webhook deja un `console.warn` con el motivo
