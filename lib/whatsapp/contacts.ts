@@ -189,7 +189,9 @@ export async function linkContactToClient(contactId: string, clientId: string): 
  * A manager says the number does not belong to its linked Client. The contact is locked as
  * UNMATCHED (automatic matching would relink it otherwise), a lead converted through that link
  * goes back to NEW, and a contact without a lead gets one: an explicit decision, so it also
- * lifts an earlier deliberate removal, like `confirmContactAsUnknown`.
+ * lifts an earlier deliberate removal, like `confirmContactAsUnknown`. The three writes are not one
+ * transaction (lead creation notifies, and a notifier must never run inside one), but each is
+ * idempotent, so repeating the action after a partial failure converges to the same state.
  */
 export async function unlinkContactFromClient(
   contactId: string,

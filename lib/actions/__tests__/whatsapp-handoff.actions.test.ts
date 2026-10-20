@@ -117,6 +117,12 @@ describe('handoff and contact actions: authorization (WI-9)', () => {
       expect(prismaMock.conversation.update).not.toHaveBeenCalled()
     })
 
+    it(`${name} returns the generic error instead of throwing when the access check fails`, async () => {
+      hasWhatsAppAccessMock.mockRejectedValue(new Error('db down'))
+
+      expect(await run()).toEqual({ success: false, error: 'No se pudo completar la operación' })
+    })
+
     it(`${name} rejects unauthenticated callers`, async () => {
       authMock.mockResolvedValue(null)
 
