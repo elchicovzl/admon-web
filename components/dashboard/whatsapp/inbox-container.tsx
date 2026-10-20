@@ -23,11 +23,14 @@ import { ConversationList, type InboxFilter } from './conversation-list'
 import { ResendConfirmDialog } from './resend-confirm-dialog'
 import { ThreadView, type ThreadState } from './thread-view'
 import { useNow } from './use-now'
+import { useDebouncedValue } from './use-debounced-value'
 import { usePolling } from './use-polling'
 import { useThreadActions } from './use-thread-actions'
 
 /** Same cadence as the notification bell. */
 export const INBOX_POLL_INTERVAL_MS = 4000
+/** Wait for the user to stop typing before querying. */
+export const SEARCH_DEBOUNCE_MS = 300
 
 const LIST_ERROR = 'No se pudo cargar la lista de conversaciones'
 const THREAD_ERROR = 'No se pudo cargar la conversación'
@@ -62,9 +65,12 @@ export function InboxContainer({
   )
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor)
   const [filter, setFilter] = useState<InboxFilter>('ALL')
+  const [searchInput, setSearchInput] = useState('')
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  // The open conversation can fall out of a search; its header still needs a summary.
+  const [openSummary, setOpenSummary] = useState<ConversationSummary | null>(null)
   const [thread, setThread] = useState<ThreadState | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [threadReload, setThreadReload] = useState(0)
@@ -73,38 +79,67 @@ export function InboxContainer({
   const selectedRef = useRef(selectedId)
   const threadRef = useRef(thread)
   const filterRef = useRef(filter)
+  const conversationsRef = useRef(conversations)
   selectedRef.current = selectedId
   threadRef.current = thread
   filterRef.current = filter
+  conversationsRef.current = conversations
 
-  const reloadList = useCallback(async (next: InboxFilter) => {
-    setListLoading(true)
-    setListError(null)
-    const result = await listConversations(next === 'ALL' ? {} : { state: next })
-    // A newer filter choice wins over a slow answer.
-    if (filterRef.current !== next) return
+  // The query actually applied: trimmed and debounced. Polling and paging read it from the ref.
+  const query = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS).trim()
+  const queryRef = useRef('')
+
+  /** `silent` refreshes in place (polling): no skeleton and no error banner. */
+  const reloadList = useCallback(async (next: InboxFilter, text: string, silent = false) => {
+    if (!silent) {
+      setListLoading(true)
+      setListError(null)
+    }
+    const result = await listConversations({
+      ...(next === 'ALL' ? {} : { state: next }),
+      ...(text ? { q: text } : {}),
+    })
+    // A newer filter or query choice wins over a slow answer.
+    if (filterRef.current !== next || queryRef.current !== text) return
     if (result.success && result.data) {
       setConversations(sortConversations(result.data.items))
       setNextCursor(result.data.nextCursor)
       cursorRef.current = result.data.cursor
-    } else {
+    } else if (!silent) {
       setListError(result.error ?? LIST_ERROR)
     }
-    setListLoading(false)
+    if (!silent) setListLoading(false)
   }, [])
 
   const changeFilter = (next: InboxFilter) => {
     if (next === filter) return
     filterRef.current = next
     setFilter(next)
-    void reloadList(next)
+    void reloadList(next, queryRef.current)
   }
+
+  // A new (debounced) query reloads the list; the first render already has the unfiltered page.
+  useEffect(() => {
+    if (query === queryRef.current) return
+    queryRef.current = query
+    void reloadList(filterRef.current, query)
+  }, [query, reloadList])
 
   const loadMore = async () => {
     if (!nextCursor) return
     setLoadingMore(true)
     const state = filter === 'ALL' ? undefined : filter
-    const result = await listConversations({ cursor: nextCursor, ...(state ? { state } : {}) })
+    const text = queryRef.current
+    const result = await listConversations({
+      cursor: nextCursor,
+      ...(state ? { state } : {}),
+      ...(text ? { q: text } : {}),
+    })
+    // Ignore a page that belongs to a query the user already left.
+    if (queryRef.current !== text) {
+      setLoadingMore(false)
+      return
+    }
     if (result.success && result.data) {
       const page = result.data
       setConversations((current) => mergeConversations(current, page.items))
@@ -112,6 +147,21 @@ export function InboxContainer({
     }
     setLoadingMore(false)
   }
+
+  /**
+   * Applies fresh rows to the list. While a query is active only rows already shown are updated:
+   * rows the query did not return must not appear just because they changed.
+   */
+  const applyRows = useCallback((rows: ConversationSummary[]) => {
+    setConversations((current) => {
+      if (!queryRef.current) return mergeConversations(current, rows)
+      const shown = new Set(current.map((item) => item.id))
+      return mergeConversations(
+        current,
+        rows.filter((item) => shown.has(item.id))
+      )
+    })
+  }, [])
 
   /** Opening a thread (and new customer messages in an open one) clears the unread markers. */
   const markRead = useCallback((conversationId: string) => {
@@ -152,14 +202,15 @@ export function InboxContainer({
         status: 'ready',
         error: null,
       })
-      setConversations((current) => mergeConversations(current, [data.conversation]))
+      setOpenSummary(data.conversation)
+      applyRows([data.conversation])
       markRead(selectedId)
     })()
 
     return () => {
       cancelled = true
     }
-  }, [selectedId, threadReload, markRead])
+  }, [selectedId, threadReload, markRead, applyRows])
 
   const loadOlder = async () => {
     const current = threadRef.current
@@ -195,11 +246,21 @@ export function InboxContainer({
     if (openId && threadRef.current?.status !== 'ready') return
 
     if (data.truncated) {
-      await reloadList(filterRef.current)
+      await reloadList(filterRef.current, queryRef.current)
       return
     }
     cursorRef.current = data.cursor
-    setConversations((current) => mergeConversations(current, data.conversations))
+    applyRows(data.conversations)
+    const opened = openId ? data.conversations.find((item) => item.id === openId) : undefined
+    if (opened) setOpenSummary(opened)
+    if (queryRef.current) {
+      // An unknown conversation may be a new match: re-run the query quietly. The open one is
+      // excluded so an active chat that does not match cannot trigger a reload on every poll.
+      const shown = new Set(conversationsRef.current.map((item) => item.id))
+      if (data.conversations.some((item) => item.id !== openId && !shown.has(item.id))) {
+        void reloadList(filterRef.current, queryRef.current, true)
+      }
+    }
 
     const open = threadRef.current
     if (openId && open && open.conversationId === openId && data.messages.length > 0) {
@@ -211,13 +272,15 @@ export function InboxContainer({
       )
       if (arrived) markRead(openId)
     }
-  }, [reloadList, markRead])
+  }, [reloadList, markRead, applyRows])
 
   usePolling(poll, INBOX_POLL_INTERVAL_MS)
 
   const actions = useThreadActions({ conversationId: selectedId, onChanged: poll })
 
-  const selected = conversations.find((item) => item.id === selectedId) ?? null
+  const selected =
+    conversations.find((item) => item.id === selectedId) ??
+    (openSummary && openSummary.id === selectedId ? openSummary : null)
   const showThreadOnMobile = selectedId !== null
 
   return (
@@ -229,11 +292,14 @@ export function InboxContainer({
           items={conversations}
           filter={filter}
           onFilterChange={changeFilter}
+          search={searchInput}
+          onSearchChange={setSearchInput}
+          query={query}
           selectedId={selectedId}
           onSelect={writeSelection}
           loading={listLoading}
           error={listError}
-          onRetry={() => void reloadList(filter)}
+          onRetry={() => void reloadList(filter, queryRef.current)}
           canLoadMore={nextCursor !== null}
           loadingMore={loadingMore}
           onLoadMore={() => void loadMore()}
