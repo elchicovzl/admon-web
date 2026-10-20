@@ -25,10 +25,19 @@ export const listConversationsSchema = z.object({
   cursor: z.string().cuid('Cursor inválido').optional(),
 })
 
+export const threadCursor = z.object({
+  timestamp: z.string({ required_error: 'Cursor inválido' }).datetime({ message: 'Cursor inválido' }),
+  id: z.string({ required_error: 'Cursor inválido' }).cuid('Cursor inválido'),
+})
+
 export const getConversationThreadSchema = z.object({
   conversationId,
-  /** ISO timestamp: load messages older than this one (history pagination). */
-  before: z.string().datetime({ message: 'Cursor inválido' }).optional(),
+  /**
+   * History cursor: the oldest message already loaded. It is composite (timestamp, id) because
+   * several messages can share one timestamp (second-resolution webhooks, bursts), and a
+   * timestamp-only cursor would skip the ones left on the other side of a page boundary.
+   */
+  before: threadCursor.optional(),
   limit: z
     .number({ invalid_type_error: 'Límite inválido' })
     .int('Límite inválido')
@@ -46,5 +55,6 @@ export const getUpdatesSchema = z.object({
 export const markConversationReadInboxSchema = z.object({ conversationId })
 
 export type ListConversationsInput = z.input<typeof listConversationsSchema>
+export type ThreadCursor = z.infer<typeof threadCursor>
 export type GetConversationThreadInput = z.input<typeof getConversationThreadSchema>
 export type GetUpdatesInput = z.input<typeof getUpdatesSchema>

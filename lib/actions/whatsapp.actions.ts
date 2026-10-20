@@ -24,6 +24,7 @@ import type {
 } from '@/lib/types/whatsapp.types'
 import {
   conversationMarkers,
+  olderThanCursor,
   resolveDisplayName,
   sortConversations,
 } from '@/lib/whatsapp/inbox'
@@ -278,7 +279,7 @@ export async function getConversationThread(
     const [conversation, rows] = await Promise.all([
       prisma.conversation.findUnique({ where: { id: conversationId }, select: conversationSelect }),
       prisma.whatsAppMessage.findMany({
-        where: { conversationId, ...(before ? { timestamp: { lt: new Date(before) } } : {}) },
+        where: { conversationId, ...(before ? olderThanCursor(before) : {}) },
         orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
         take: limit + 1,
         select: messageSelect,

@@ -355,14 +355,70 @@ describe('getConversationThread', () => {
     expect(JSON.stringify(r)).not.toContain('s3Key')
   })
 
-  it('pages older history with before', async () => {
+  it('pages older history with a composite (timestamp, id) cursor', async () => {
     prismaMock.conversation.findUnique.mockResolvedValue(row())
     prismaMock.whatsAppMessage.findMany.mockResolvedValue([])
-    await getConversationThread({ conversationId: CONV_ID, before: '2026-10-19T12:00:00.000Z' })
-    expect(prismaMock.whatsAppMessage.findMany.mock.calls[0][0].where).toEqual({
+    await getConversationThread({
       conversationId: CONV_ID,
-      timestamp: { lt: new Date('2026-10-19T12:00:00.000Z') },
+      before: { timestamp: '2026-10-19T12:00:00.000Z', id: MESSAGE_ID },
     })
+    const query = prismaMock.whatsAppMessage.findMany.mock.calls[0][0]
+    expect(query.where).toEqual({
+      conversationId: CONV_ID,
+      OR: [
+        { timestamp: { lt: new Date('2026-10-19T12:00:00.000Z') } },
+        { timestamp: new Date('2026-10-19T12:00:00.000Z'), id: { lt: MESSAGE_ID } },
+      ],
+    })
+    expect(query.orderBy).toEqual([{ timestamp: 'desc' }, { id: 'desc' }])
+  })
+
+  it('rejects a timestamp-only or malformed cursor before querying', async () => {
+    const bad = [
+      '2026-10-19T12:00:00.000Z',
+      { timestamp: '2026-10-19T12:00:00.000Z' },
+      { timestamp: 'yesterday', id: MESSAGE_ID },
+      { timestamp: '2026-10-19T12:00:00.000Z', id: 'x' },
+    ]
+    for (const before of bad) {
+      const r = await getConversationThread({ conversationId: CONV_ID, before: before as never })
+      expect(r.success).toBe(false)
+    }
+    expect(prismaMock.conversation.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('does not skip same-timestamp messages that straddle a page boundary', async () => {
+    // Five messages share one timestamp: the case a timestamp-only cursor loses data in.
+    const sameSecond = new Date('2026-10-19T12:00:00.000Z')
+    const ids = ['cm00000000000000000000001', 'cm00000000000000000000002', 'cm00000000000000000000003', 'cm00000000000000000000004', 'cm00000000000000000000005']
+    const all = ids.map((id) => messageRow({ id, timestamp: sameSecond }))
+
+    prismaMock.conversation.findUnique.mockResolvedValue(row())
+    // Minimal in-memory evaluation of the cursor filter and the (timestamp desc, id desc) order.
+    prismaMock.whatsAppMessage.findMany.mockImplementation(async (args: { where: { OR?: Array<Record<string, unknown>> }; take: number }) => {
+      const clauses = args.where.OR
+      const visible = all.filter((m) => {
+        if (!clauses) return true
+        return clauses.some((clause) => {
+          const ts = clause.timestamp as Date | { lt: Date }
+          if (ts instanceof Date) return m.timestamp.getTime() === ts.getTime() && m.id < (clause.id as { lt: string }).lt
+          return m.timestamp.getTime() < ts.lt.getTime()
+        })
+      })
+      return visible.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime() || (a.id < b.id ? 1 : -1)).slice(0, args.take)
+    })
+
+    const seen: string[] = []
+    let before: { timestamp: string; id: string } | undefined
+    for (let page = 0; page < 5; page++) {
+      const r = await getConversationThread({ conversationId: CONV_ID, limit: 2, ...(before ? { before } : {}) })
+      const messages = r.data!.messages
+      seen.unshift(...messages.map((m) => m.id))
+      if (!r.data!.hasMore) break
+      before = { timestamp: messages[0].timestamp, id: messages[0].id }
+    }
+
+    expect(seen).toEqual(ids)
   })
 
   it('reports a missing conversation and rejects bad ids', async () => {

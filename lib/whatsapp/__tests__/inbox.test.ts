@@ -13,10 +13,12 @@ import {
   mediaKind,
   mergeConversations,
   mergeMessages,
+  olderThanCursor,
   parseConversationParam,
   resolveDisplayName,
   senderLabel,
   sortConversations,
+  threadCursorOf,
   windowState,
 } from '../inbox'
 
@@ -224,5 +226,21 @@ describe('times and deep link', () => {
     expect(parseConversationParam('../../etc')).toBeNull()
     expect(parseConversationParam('')).toBeNull()
     expect(parseConversationParam(undefined)).toBeNull()
+  })
+})
+
+describe('history cursor', () => {
+  it('builds the cursor from a message position', () => {
+    expect(threadCursorOf({ timestamp: '2026-10-19T12:00:00.000Z', id: 'cabc' })).toEqual({
+      timestamp: '2026-10-19T12:00:00.000Z',
+      id: 'cabc',
+    })
+  })
+
+  it('matches strictly older timestamps, or the same timestamp with a smaller id', () => {
+    const at = new Date('2026-10-19T12:00:00.000Z')
+    expect(olderThanCursor({ timestamp: at.toISOString(), id: 'cm3' })).toEqual({
+      OR: [{ timestamp: { lt: at } }, { timestamp: at, id: { lt: 'cm3' } }],
+    })
   })
 })

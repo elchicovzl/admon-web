@@ -16,6 +16,7 @@ import {
   mergeMessages,
   parseConversationParam,
   sortConversations,
+  threadCursorOf,
 } from '@/lib/whatsapp/inbox'
 import { ConversationList, type InboxFilter } from './conversation-list'
 import { ThreadView, type ThreadState } from './thread-view'
@@ -156,7 +157,7 @@ export function InboxContainer({ initial }: { initial: ConversationListPage }) {
     setLoadingOlder(true)
     const result = await getConversationThread({
       conversationId: current.conversationId,
-      before: current.messages[0].timestamp,
+      before: threadCursorOf(current.messages[0]),
     })
     if (result.success && result.data && selectedRef.current === current.conversationId) {
       const data = result.data
