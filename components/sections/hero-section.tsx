@@ -74,7 +74,7 @@ const HeroContent = memo(({ isMobile }: { isMobile?: boolean }) => {
 
 HeroContent.displayName = 'HeroContent'
 
-function HeroImage() {
+function HeroImage({ className = '' }: { className?: string }) {
   return (
     <Image
       src="/images/hero-team.webp"
@@ -82,8 +82,8 @@ function HeroImage() {
       width={1448}
       height={1086}
       priority
-      sizes="(min-width: 1024px) 50vw, 100vw"
-      className="w-full h-auto"
+      sizes="(min-width: 1024px) 60vw, 100vw"
+      className={`w-full h-auto ${className}`}
     />
   )
 }
@@ -119,7 +119,7 @@ export default function HeroSection() {
 
           {/* Right side: team image */}
           <div className="relative z-10 pb-10">
-            <HeroImage />
+            <HeroImage className="lg:w-[120%] lg:max-w-none lg:-ml-[5%]" />
           </div>
         </div>
 
