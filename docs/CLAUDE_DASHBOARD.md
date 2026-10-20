@@ -666,6 +666,23 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   `getUnreadNotificationCount` (cada 15 s, solo con la pestaña visible y solo si el usuario ve la
   entrada).
 
+#### Búsqueda, avatares y ticks (UX de la bandeja)
+
+- Búsqueda: `listConversations({ q })` filtra en el servidor por nombre del cliente, nombre de
+  perfil de WhatsApp y dígitos del teléfono (solo si el texto parece un teléfono), sin distinguir
+  mayúsculas (`mode: 'insensitive'`) y combinada con el filtro de estado. Cliente con debounce de
+  300 ms (`lib/whatsapp/search.ts` arma el filtro). Con búsqueda activa el polling solo actualiza
+  filas ya mostradas y relanza la consulta en silencio si aparece una conversación desconocida.
+- Límite de acentos: sin la extensión `unaccent` (no se añade extensión ni migración) cada nombre se
+  busca en la forma escrita y en su forma sin acentos. Escribir "José" encuentra "José" y "Jose";
+  escribir "jose" NO encuentra "José".
+- Avatar: sin foto (la Cloud API no la entrega), iniciales de hasta 2 palabras sobre un color
+  determinista según el id de la conversación; sin letras en el nombre (solo teléfono) se muestra un
+  icono genérico (`lib/whatsapp/avatar.ts`).
+- Ticks en burbujas salientes (`lib/whatsapp/delivery-ticks.ts`): QUEUED reloj, SENT un check gris,
+  DELIVERED doble check gris, READ doble check azul, FAILED alerta roja (con "Reintentar"); el texto
+  del estado queda como `aria-label` y `title`.
+
 #### Responder (compositor)
 
 - Acciones (`requireWhatsAppAuth()` + Zod): `sendReply`, `sendTemplate`, `resendFailedMessage`.
