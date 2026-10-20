@@ -42,6 +42,15 @@ export function embeddingModel(config: AiConfig = getAiConfig()) {
   return openai(config).embedding(config.embeddingModel)
 }
 
+/**
+ * Provider and model stored on every chunk (`knowledge_chunks.embeddingModel`). Retrieval only
+ * compares chunks whose key and dimensions match the configuration, so vectors from different
+ * models are never mixed (KB-6).
+ */
+export function embeddingModelKey(config: AiConfig = getAiConfig()): string {
+  return `openai/${config.embeddingModel}`
+}
+
 /** Pass with `embed`/`embedMany` so OpenAI returns vectors of the configured size. */
 export function embeddingProviderOptions(config: AiConfig = getAiConfig()) {
   return { openai: { dimensions: config.embeddingDimensions } }

@@ -752,6 +752,25 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   Content-Length. Cada firma inválida del webhook deja un `console.warn` con el motivo
   (`missing header` / `mismatch`) y un contador por proceso, nunca el cuerpo ni la firma.
 
+#### Base de conocimiento: ingesta (PR3.2)
+
+- Formatos (`lib/knowledge/extract.ts`): PDF con texto (`unpdf`), DOCX (`mammoth`, los títulos pasan a
+  líneas `#`), TXT y MD tal cual. Un PDF escaneado falla con «El PDF no contiene texto extraíble
+  (posiblemente escaneado). OCR no está soportado.» y cualquier otro tipo (p. ej. `.xlsx`) se rechaza.
+  La extensión y el MIME tienen que coincidir.
+- Chunking (`lib/knowledge/chunk.ts`): por sección (cada título abre una), ~600 tokens por chunk,
+  máximo 800, ~80 de solapamiento dentro de la misma sección; tokens ≈ caracteres / 4. Determinista.
+- Job `kb.ingest` (`lib/knowledge/ingest.ts`, reintentos 2): lee el archivo de R2, extrae, divide,
+  genera embeddings en lotes de 64 (el título va junto al texto) y reemplaza los chunks del documento
+  en **una sola transacción** (borra los viejos e inserta los nuevos). Cada chunk guarda
+  `embeddingModel` = `openai/<modelo>` y `embeddingDimensions`.
+- Fallos: un problema del contenido (no soportado, escaneado, vacío) deja el documento en FAILED, no
+  reintentable. Una caída (R2, API de embeddings, vectores de otro tamaño) reintenta; en el último
+  intento queda FAILED y `retriable`. En ningún caso se tocan los chunks anteriores: el asistente sigue
+  respondiendo con ellos.
+- Los vectores se escriben con SQL crudo (`lib/knowledge/vector.ts`, `::vector`) porque Prisma no lee
+  ni escribe columnas `vector`; todos los valores viajan como parámetros.
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)

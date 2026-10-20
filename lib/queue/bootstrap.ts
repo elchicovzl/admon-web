@@ -1,4 +1,5 @@
 import { loadRuntimeConfig } from "@/lib/config/runtime-config"
+import { registerKnowledgeWorkers } from "@/lib/knowledge/worker"
 import { registerWhatsAppWorkers } from "@/lib/whatsapp/event-worker"
 import { startBoss } from "./boss"
 import { ensureQueues } from "./queues"
@@ -46,6 +47,7 @@ export async function bootstrapRuntime(
   await ensureQueues(boss)
   await ensureSchedules(boss)
   registerWhatsAppWorkers()
+  registerKnowledgeWorkers()
   const workers = await startWorkers(boss)
   console.info(`[queue] started (${workers} workers registered)`)
 }

@@ -81,6 +81,12 @@ describe("AI providers (A11, D20)", () => {
     expect(embeddingProviderOptions()).toEqual({ openai: { dimensions: 1536 } })
   })
 
+  it("names the stored embedding model with its provider (KB-6)", async () => {
+    const { embeddingModelKey } = await import("../providers")
+
+    expect(embeddingModelKey()).toBe("openai/text-embedding-3-small")
+  })
+
   it("fails with a clear error naming the missing variable, never a value", async () => {
     const { chatModel, embeddingModel, transcriptionModel } = await import("../providers")
 
