@@ -93,3 +93,16 @@ export interface ClientLinkOption {
   identificationNumber: string
   phone: string
 }
+
+/** One conversation in the client profile's WhatsApp tab (CP-1). No consent data on purpose (CP-3). */
+export interface ClientConversationItem {
+  id: string
+  phone: string
+  profileName: string | null
+  status: ConversationSummary['status']
+  aiPaused: boolean
+  unreadCount: number
+  preview: string | null
+  lastMessageAt: string
+  takenOverByName: string | null
+}

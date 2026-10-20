@@ -8,6 +8,7 @@ import { presignGet } from '@/lib/storage/r2'
 import {
   closeConversationSchema,
   conversationActionSchema,
+  getClientConversationsSchema,
   getConversationThreadSchema,
   getMediaUrlSchema,
   getUpdatesSchema,
@@ -22,6 +23,7 @@ import {
   setConversationAiPausedSchema,
   type CloseConversationInput,
   type ConversationActionInput,
+  type GetClientConversationsInput,
   type GetConversationThreadInput,
   type GetUpdatesInput,
   type LinkContactToClientInput,
@@ -34,6 +36,7 @@ import {
   type SetConversationAiPausedInput,
 } from '@/lib/validations/whatsapp.schema'
 import type {
+  ClientConversationItem,
   ClientLinkOption,
   ConversationListPage,
   ConversationSummary,
@@ -685,4 +688,51 @@ export async function searchClientsForLink(
     console.error('[whatsapp] searchClientsForLink failed')
     return { success: false, error: GENERIC_ERROR }
   }
+}
+
+// ---------------------------------------------------------------- client profile tab (PR2.5)
+
+/**
+ * WhatsApp conversations of one client, newest first (CP-1). A client can have several numbers,
+ * so several conversations. Conversations pending purge are left out (CP-4), and consent data is
+ * never selected (CP-3).
+ */
+export async function getClientConversations(
+  input: GetClientConversationsInput
+): Promise<ActionResponse<ClientConversationItem[]>> {
+  return guarded('getClientConversations', async () => {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+    const parsed = getClientConversationsSchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    const rows = await prisma.conversation.findMany({
+      where: { contact: { clientId: parsed.data.clientId }, purgePendingAt: null },
+      orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        status: true,
+        aiPaused: true,
+        unreadCount: true,
+        lastMessagePreview: true,
+        lastMessageAt: true,
+        takenOverBy: { select: { name: true } },
+        contact: { select: { waId: true, profileName: true } },
+      },
+    })
+    return {
+      success: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        phone: `+${row.contact.waId}`,
+        profileName: row.contact.profileName,
+        status: row.status,
+        aiPaused: row.aiPaused,
+        unreadCount: row.unreadCount,
+        preview: row.lastMessagePreview,
+        lastMessageAt: row.lastMessageAt.toISOString(),
+        takenOverByName: row.takenOverBy?.name ?? null,
+      })),
+    }
+  })
 }

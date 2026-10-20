@@ -139,6 +139,11 @@ export const searchClientsForLinkSchema = z.object({
   q: z.string({ invalid_type_error: 'Búsqueda inválida' }).max(SEARCH_MAX_LENGTH, 'Búsqueda demasiado larga'),
 })
 
+export const getClientConversationsSchema = z.object({
+  clientId: z.string({ required_error: 'El cliente es requerido' }).cuid('Cliente inválido'),
+})
+
+export type GetClientConversationsInput = z.input<typeof getClientConversationsSchema>
 export type SearchClientsForLinkInput = z.input<typeof searchClientsForLinkSchema>
 export type ConversationActionInput = z.input<typeof conversationActionSchema>
 export type CloseConversationInput = z.input<typeof closeConversationSchema>
