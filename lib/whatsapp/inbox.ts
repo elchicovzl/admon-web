@@ -193,10 +193,11 @@ export function listPreview(preview: string | null, max = PREVIEW_MAX): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
 }
 
-export function senderLabel(message: Pick<ThreadMessage, 'source' | 'senderName'>): string {
+/** `contactName` is the conversation's display name; client bubbles show it instead of "Cliente". */
+export function senderLabel(message: Pick<ThreadMessage, 'source' | 'senderName'>, contactName?: string): string {
   switch (message.source) {
     case 'CLIENT':
-      return 'Cliente'
+      return contactName?.trim() || 'Cliente'
     case 'AI':
       return 'IA'
     case 'DASHBOARD':

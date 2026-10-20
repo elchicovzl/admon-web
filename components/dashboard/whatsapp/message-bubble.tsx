@@ -17,10 +17,13 @@ const SOURCE_STYLE: Record<ThreadMessage['source'], string> = {
 /** One message: source label, body (text, media or type placeholder), time and delivery state. */
 export function MessageBubble({
   message,
+  contactName,
   resend,
   onResend,
 }: {
   message: ThreadMessage
+  /** Conversation display name, shown on client bubbles. */
+  contactName?: string
   /** Retry state for a FAILED dashboard message; omit for messages that cannot be retried. */
   resend?: ResendAction
   onResend?: (message: ThreadMessage) => void
@@ -32,7 +35,7 @@ export function MessageBubble({
   return (
     <div className={cn('flex', outgoing ? 'justify-end' : 'justify-start')}>
       <div className={cn('max-w-[85%] space-y-1 rounded-lg px-3 py-2 text-sm sm:max-w-[70%]', SOURCE_STYLE[message.source])}>
-        <p className="text-[11px] font-medium opacity-70">{senderLabel(message)}</p>
+        <p className="text-[11px] font-medium opacity-70">{senderLabel(message, contactName)}</p>
 
         {message.media && <MessageMedia messageId={message.id} type={message.type} media={message.media} />}
         {body ? (

@@ -150,6 +150,7 @@ export function ThreadView({
               <MessageBubble
                 key={message.id}
                 message={message}
+                contactName={conversation.displayName}
                 onResend={onResend}
                 resend={
                   now
