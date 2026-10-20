@@ -1,23 +1,32 @@
 import type { Metadata } from 'next'
-import { MessageCircle } from 'lucide-react'
+import { Suspense } from 'react'
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { InboxContainer } from '@/components/dashboard/whatsapp/inbox-container'
+import { InboxSkeleton } from '@/components/dashboard/whatsapp/inbox-skeletons'
+import { listConversations } from '@/lib/actions/whatsapp.actions'
 
 export const metadata: Metadata = {
   title: 'WhatsApp | Dashboard',
 }
 
-// Placeholder until the shared inbox lands (M2). Access is enforced by
-// app/dashboard/whatsapp/layout.tsx.
+// Access is enforced by app/dashboard/whatsapp/layout.tsx and, again, by every action.
+async function Inbox() {
+  const result = await listConversations({})
+
+  if (!result.success || !result.data) {
+    return (
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        {result.error ?? 'No se pudo cargar la bandeja de WhatsApp.'}
+      </div>
+    )
+  }
+
+  return <InboxContainer initial={result.data} />
+}
+
 export default function WhatsAppPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">WhatsApp</h1>
         <p className="text-muted-foreground">
@@ -25,21 +34,9 @@ export default function WhatsAppPage() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5" />
-            Próximamente
-          </CardTitle>
-          <CardDescription>
-            La bandeja de WhatsApp estará disponible muy pronto.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Tienes acceso al módulo. Cuando la bandeja esté lista, aquí podrás ver
-          y responder las conversaciones.
-        </CardContent>
-      </Card>
+      <Suspense fallback={<InboxSkeleton />}>
+        <Inbox />
+      </Suspense>
     </div>
   )
 }
