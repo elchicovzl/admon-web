@@ -81,6 +81,30 @@ describe('POST /api/whatsapp/messages/media', () => {
     expect(m.sendMediaReply).not.toHaveBeenCalled()
   })
 
+  it('refuses a chunked body without Content-Length once it grows past the limit, without parsing it', async () => {
+    const chunk = new Uint8Array(1024 * 1024)
+    let sent = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // Endless on purpose: the route must stop reading at the cap.
+        sent++
+        controller.enqueue(chunk)
+      },
+    })
+    const response = await POST(
+      new NextRequest('http://localhost/api/whatsapp/messages/media', {
+        method: 'POST',
+        body,
+        headers: { 'content-type': 'multipart/form-data; boundary=x' },
+        duplex: 'half',
+      } as ConstructorParameters<typeof NextRequest>[1])
+    )
+
+    expect(response.status).toBe(413)
+    expect(sent).toBeLessThan(20)
+    expect(m.sendMediaReply).not.toHaveBeenCalled()
+  })
+
   it('maps a service failure to 400 with its Spanish message', async () => {
     m.sendMediaReply.mockResolvedValue({ success: false, error: 'La ventana de 24 horas está cerrada. Solo puede enviar plantillas aprobadas.' })
 

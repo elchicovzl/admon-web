@@ -81,6 +81,7 @@ export function buildConversationSearchSql(query: string | null | undefined): Pr
     JOIN whatsapp_contacts w ON w.id = c."contactId"
     LEFT JOIN clients cl ON cl.id = w."clientId"
     WHERE ${Prisma.join(conditions, ' OR ')}
+    ORDER BY c."lastMessageAt" DESC
     LIMIT ${SEARCH_RESULT_CAP}
   `
 }

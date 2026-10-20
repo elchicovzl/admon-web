@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto"
 import { NextResponse } from "next/server"
 import { enqueueEvent, isWhatsAppEnabled, storeWebhookItems } from "@/lib/whatsapp/ingest"
+import { readCappedBody } from "@/lib/utils/read-capped-body"
 import { verifySignature } from "@/lib/whatsapp/signature"
 import { MAX_BODY_BYTES } from "@/lib/whatsapp/webhook-limits"
 import {
@@ -25,28 +26,8 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(Buffer.from(sha256Hex(a), "hex"), Buffer.from(sha256Hex(b), "hex"))
 }
 
-/** Reads the raw body without ever buffering more than the cap. Returns null when too large. */
-async function readRawBody(request: Request): Promise<Uint8Array | null> {
-  const declared = Number(request.headers.get("content-length"))
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null
-
-  const reader = request.body?.getReader()
-  if (!reader) return new Uint8Array(0)
-
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > MAX_BODY_BYTES) {
-      await reader.cancel().catch(() => undefined)
-      return null
-    }
-    chunks.push(value)
-  }
-  return Buffer.concat(chunks)
-}
+/** Rejected signatures since this process started; logged so a spike is visible. */
+let invalidSignatureCount = 0
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams
@@ -78,13 +59,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Webhook not configured" }, { status: 503 })
   }
 
-  const rawBody = await readRawBody(request)
+  const rawBody = await readCappedBody(request, MAX_BODY_BYTES)
   if (rawBody === null) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 })
   }
 
   // Nothing is parsed, stored or enqueued before this check passes (WC-2).
-  if (!verifySignature(rawBody, request.headers.get("x-hub-signature-256"), appSecret)) {
+  const signature = request.headers.get("x-hub-signature-256")
+  if (!verifySignature(rawBody, signature, appSecret)) {
+    invalidSignatureCount++
+    // Reason and count only: never the body or the header value.
+    console.warn(
+      `[whatsapp] webhook rejected: invalid signature (${signature ? "mismatch" : "missing header"}); rejected so far: ${invalidSignatureCount}`
+    )
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 })
   }
 
