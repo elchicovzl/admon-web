@@ -18,7 +18,7 @@ Branch: `feat/whatsapp-m3-ai-turn` (base master). Delivery: stacked-to-main. Run
 - [x] T1 S9 plumbing: schedule `ai.turn` from inbound (incl. first contact and reopen into AI), worker + enqueue, `onSent` hook (consent evidence, `lastAiSentAt`) — inline (RED 1 + 2 modules missing → GREEN) — 15f3663
 - [x] T2 S5-S8 commit layer: deterministic texts, FOR UPDATE commit of a reply / escalation, chat usage records — inline (RED modules missing → GREEN texts 3, commit 12; chat usage recorder written with its test) — b49220f
 - [x] T3 S1-S8 turn orchestration (pre-checks, model call, guard, failure path) — inline (RED module missing → GREEN turn 21; worker 9 written with its implementation; real AI SDK loop 2)
-- [ ] T4 docs, full checks, independent verifier (3 blockers → fix 8df7c0f, recheck FIXED), RDD review — inline
+- [x] T4 docs, full checks, independent verifier (3 blockers → fix 8df7c0f, recheck FIXED), RDD review approved (4 lenses, review-35438d524b36092c acknowledged) — inline — 8df7c0f, ea0c475
 
 ## Log
 - L1 (2026-10-20, user): "si" (go ahead with PR3.6b).
@@ -40,3 +40,4 @@ Branch: `feat/whatsapp-m3-ai-turn` (base master). Delivery: stacked-to-main. Run
   - Full suite: 2219/2220 (same failure).
   - `tsc`: no errors in the touched files; 35 errors in unrelated modules were already there.
 - L10 Recheck limited to the 3 blockers: S1, S2 and S3 FIXED (commit.ts:57 live switch under the lock; turn.ts:241-260 DB discard count, terminates at 2; inbound.ts:294-299 cursor on reopen + newest 50 by createdAt). Advisory, not fixed: deterministic replies (no usage record) do not add to the discard count; window is a few DB round-trips with no model call.
+- L11 RDD review (risk, resilience, readability, reliability) approved and acknowledged; risk/resilience no findings. Non-blocking follow-ups: duplicate doc comment above `setUsageOutcome` (usage.ts:116); S9 text still says `toolChoice:'required'`/temperature (deviation in L3); `escalate` helper wrapper noise (turn.ts:215); a retried `processInboundMessage` after the message was already stored does not schedule the AI turn (inbound.ts:198, pre-existing retry shape). Next: push, PR, merge on user approval.
