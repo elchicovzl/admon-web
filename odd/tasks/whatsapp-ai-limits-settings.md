@@ -11,12 +11,14 @@ Branch: `feat/whatsapp-ai-limits-settings` (base master a60508a). Delivery: stac
 - S6 Keys, models and the `WHATSAPP_ENABLED` / `WHATSAPP_AI_ENABLED` flags stay in env.
 
 ## Tasks
-- [ ] T1 S3-S4 schema + migration + `lib/ai/limits.ts` (effective limits, spend today, replies in 24 h) + tests — inline
-- [ ] T2 S4 turn uses effective limits and the budget check; S5 transcription gate — inline
-- [ ] T3 S2 actions (get/update, SUPER_ADMIN) + settings form + docs — inline
+- [x] T1 S3-S4 schema + migration + `lib/ai/limits.ts` + tests — inline (RED module missing → GREEN 10; migration applied locally, `migrate diff` clean) — 48cf205
+- [x] T2 S4 turn uses effective limits + BUDGET_LIMIT; S5 transcription gate — inline (RED 4 + 3 → GREEN, 177 AI tests) — d9ced1d
+- [x] T3 S2 actions (get/update, SUPER_ADMIN) + settings form + docs — inline (RED → GREEN 108; limits module run against local Postgres, row restored)
 - [ ] T4 checks, prod migration (backup first), verifier (Risk items 1 and 2), RDD
 
 ## Log
 - L1 (2026-10-20, user): "si debemos tener en la configuracion estos settings sean modificables coloca una seccion de wassapp para eso"
 - L2 (2026-10-20, user) scope answer: "Costo y abuso (Recomendado)".
 - L3 Route: inline (one behavior chain; units depend on each other). Risk: item 1 (new persisted columns, prod migration) and item 2 (SUPER_ADMIN-only settings that control spend).
+- L4 Checks: full suite 2273 pass, 1 fail = known pre-existing `send.test.ts` retry-limit. tsc 35 errors, all pre-existing, none in touched files. Settings page not rendered with a login (local seed login fails).
+- L5 `prisma format` reformatted the whole schema; reverted and kept only the WhatsAppSettings columns (aligned by hand).
