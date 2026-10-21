@@ -24,3 +24,4 @@ Branch: `feat/whatsapp-m3-responder-pure` (base master). Delivery: stacked-to-ma
 - L4 Route: inline (one writer; each module is small).
 - L5 Consent notice text is user-facing legal copy: pending counsel review (OPS-G7) before AI goes live.
 - L6 Tool schemas carry no min/max constraints (strict mode supports a JSON Schema subset; not verified for length keywords); lengths are enforced by the guard.
+- L7 Suite 2149/2150 (pre-existing send.test). Assess medium, review not due. Risk: none at runtime (nothing imports these modules yet). The guard and tool surface are the prompt-injection controls: they get the independent verifier and review in PR3.6b, when the turn makes them reachable.
