@@ -14,7 +14,7 @@ Branch: `feat/whatsapp-ai-limits-settings` (base master a60508a). Delivery: stac
 - [x] T1 S3-S4 schema + migration + `lib/ai/limits.ts` + tests — inline (RED module missing → GREEN 10; migration applied locally, `migrate diff` clean) — 48cf205
 - [x] T2 S4 turn uses effective limits + BUDGET_LIMIT; S5 transcription gate — inline (RED 4 + 3 → GREEN, 177 AI tests) — d9ced1d
 - [x] T3 S2 actions (get/update, SUPER_ADMIN) + settings form + docs — inline (RED → GREEN 108; limits module run against local Postgres, row restored)
-- [ ] T4 checks, prod migration (backup first), verifier (Risk items 1 and 2), RDD
+- [x] T4 checks, prod backup + migration, independent verifier (B1 fixed in 875bcfa), RDD review approved (review-e2be2c162214476e: risk, readability, reliability; acknowledged) — inline
 
 ## Log
 - L1 (2026-10-20, user): "si debemos tener en la configuracion estos settings sean modificables coloca una seccion de wassapp para eso"
@@ -25,3 +25,4 @@ Branch: `feat/whatsapp-ai-limits-settings` (base master a60508a). Delivery: stac
 - L6 Independent verifier: S1-S4, S6 MET; S5 NOT MET (B1: HUMAN conversations stopped transcribing past the per-number limit or the cap, e.g. TURN_LIMIT → Atender → HUMAN). Fixed: HUMAN never skips; regression tests for both cases; S4/S5 wording aligned with what the user was told ("en HUMAN sí, el asesor usa la transcripción"). Migration verified additive on a singleton row with aiEnabled=true (BEGIN/ROLLBACK). Advisories accepted: topic limits count raw lines, reused denial message, skipped notes keep a null transcript state.
 - L7 Prod backup before migration: `~/Documents/admon-backups/admon-prod-20261020-2330-pre-ai-limits.dump` (pg_dump 18 from the local admon-postgres container; local pg_dump 17 cannot dump a v18 server).
 - L8 Prod migration applied 2026-10-20 23:3x (45/45, none pending); row unchanged: aiEnabled=true, new columns null/{}. Isolated Prisma config in the scratchpad (repo prisma.config.ts overrides with .env.local), deleted after use.
+- L9 RDD approved with 3 informational warnings (follow-ups, not blockers): R2 magic bounds in the limits schema, R2 transcription gate compares status strings, R3 a voice note skipped by the limits is never transcribed later.
