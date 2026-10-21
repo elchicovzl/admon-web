@@ -6,6 +6,8 @@ const m = vi.hoisted(() => ({
   messageFindMany: vi.fn(),
   messageCount: vi.fn(),
   usageCount: vi.fn(),
+  settingsFindUnique: vi.fn(),
+  usageAggregate: vi.fn(),
   globalAi: vi.fn(),
   getAiConfig: vi.fn(),
   generateText: vi.fn(),
@@ -20,7 +22,8 @@ vi.mock("@/lib/db/prisma", () => ({
   default: {
     conversation: { findUnique: m.conversationFindUnique, updateMany: m.conversationUpdateMany },
     whatsAppMessage: { findMany: m.messageFindMany, count: m.messageCount },
-    aiUsageRecord: { count: m.usageCount },
+    aiUsageRecord: { count: m.usageCount, aggregate: m.usageAggregate },
+    whatsAppSettings: { findUnique: m.settingsFindUnique },
   },
 }))
 vi.mock("@/lib/whatsapp/transitions", () => ({ isAiGloballyEnabled: m.globalAi }))
@@ -111,6 +114,8 @@ beforeEach(() => {
   m.messageFindMany.mockResolvedValueOnce([inbound()]).mockResolvedValue([])
   m.messageCount.mockResolvedValue(0)
   m.usageCount.mockResolvedValue(0)
+  m.settingsFindUnique.mockResolvedValue(null)
+  m.usageAggregate.mockResolvedValue({ _sum: { estimatedCostUsd: null } })
   m.retrieve.mockResolvedValue(RETRIEVED)
   m.recordUsage.mockResolvedValue("usage-1")
   m.commitReply.mockResolvedValue({ status: "QUEUED", messageId: "out-1" })
@@ -309,6 +314,65 @@ describe("handoff (AI-9, S-AI-4/5)", () => {
     })
     expect(m.commitEscalation).toHaveBeenCalledWith(expect.objectContaining({ reason: "TURN_LIMIT" }))
     expect(m.generateText).not.toHaveBeenCalled()
+  })
+})
+
+describe("limits saved in Configuración → WhatsApp (S3, S4)", () => {
+  const saved = (overrides: Record<string, unknown>) =>
+    m.settingsFindUnique.mockResolvedValue({
+      dailyBudgetUsd: null,
+      maxTurnsPerDay: null,
+      maxConsecutiveFailures: null,
+      forbiddenTopics: [],
+      ...overrides,
+    })
+
+  it("uses the saved replies-per-day limit over the env", async () => {
+    saved({ maxTurnsPerDay: 5 })
+    m.messageCount.mockResolvedValue(5)
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.commitEscalation).toHaveBeenCalledWith(expect.objectContaining({ reason: "TURN_LIMIT" }))
+    expect(m.generateText).not.toHaveBeenCalled()
+  })
+
+  it("escalates a saved forbidden topic without calling the model, and keeps the env ones", async () => {
+    saved({ forbiddenTopics: ["criptomonedas"] })
+    m.messageFindMany.mockReset().mockResolvedValueOnce([inbound({ text: "¿Reciben criptomonedas?" })]).mockResolvedValue([])
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.commitEscalation).toHaveBeenCalledWith(expect.objectContaining({ reason: "FORBIDDEN_TOPIC" }))
+    expect(m.generateText).not.toHaveBeenCalled()
+  })
+
+  it("uses the saved failure cap: one failure below it still replies with the fallback", async () => {
+    saved({ maxConsecutiveFailures: 3 })
+    m.conversationFindUnique.mockResolvedValue(conversation({ consecutiveAiFailures: 1 }))
+    modelEndsWith("sendReply", { type: "ANSWER", text: "x", sourceIds: [] })
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.commitEscalation).not.toHaveBeenCalled()
+    expect(m.commitReply).toHaveBeenCalledWith(expect.objectContaining({ text: FALLBACK_TEXT, consecutiveFailures: 2 }))
+  })
+
+  it("escalates with BUDGET_LIMIT and no model call once the daily spend reaches the cap", async () => {
+    saved({ dailyBudgetUsd: "5.00" })
+    m.usageAggregate.mockResolvedValue({ _sum: { estimatedCostUsd: "5.000000" } })
+
+    expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "ESCALATED" })
+    expect(m.commitEscalation).toHaveBeenCalledWith(expect.objectContaining({ reason: "BUDGET_LIMIT", usageRecordId: null }))
+    expect(m.generateText).not.toHaveBeenCalled()
+  })
+
+  it("answers normally while the daily spend is under the cap", async () => {
+    saved({ dailyBudgetUsd: "5.00" })
+    m.usageAggregate.mockResolvedValue({ _sum: { estimatedCostUsd: "4.990000" } })
+
+    expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "REPLIED" })
+    expect(m.generateText).toHaveBeenCalled()
   })
 })
 

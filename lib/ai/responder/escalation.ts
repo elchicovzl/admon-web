@@ -16,6 +16,8 @@ export const EscalationReason = {
   AI_FAILURE: "AI_FAILURE",
   /** AI_MAX_TURNS_PER_DAY reached for the conversation. */
   TURN_LIMIT: "TURN_LIMIT",
+  /** The global daily AI spend cap (Configuración → WhatsApp) was reached. */
+  BUDGET_LIMIT: "BUDGET_LIMIT",
 } as const
 
 export type EscalationReason = (typeof EscalationReason)[keyof typeof EscalationReason]

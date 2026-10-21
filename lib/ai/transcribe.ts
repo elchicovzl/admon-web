@@ -2,6 +2,7 @@ import { transcribe } from "ai"
 import prisma from "@/lib/db/prisma"
 import { transcriptionModel } from "@/lib/ai/providers"
 import { getAiConfig } from "@/lib/config/runtime-config"
+import { aiRepliesLast24h, getAiLimits, isOverDailyBudget } from "@/lib/ai/limits"
 import { StoredObjectError, getObjectBytes } from "@/lib/storage/r2"
 import { MEDIA_POLICY_LIMITS, classifyMedia } from "./responder/media-policy"
 import { recordTranscriptionUsage } from "./responder/usage"
@@ -16,7 +17,7 @@ import { recordTranscriptionUsage } from "./responder/usage"
  *   responder asks the client to write instead (S-MH-2), and staff can still play the audio.
  * - Audio the media policy rejects, or a missing/oversized stored file, fails at once. Provider
  *   errors and empty transcripts retry (the queue retries twice), then FAIL on the last attempt.
- * - Runs only with WHATSAPP_AI_ENABLED (it is an AI call). Every state change also bumps the
+ * - Runs only with WHATSAPP_AI_ENABLED (it is an AI call), and within the cost and abuse limits. Every state change also bumps the
  *   message's `updatedAt`, because the inbox polls messages by it.
  */
 
@@ -31,6 +32,19 @@ class EmptyTranscriptError extends Error {
 
 async function touchMessage(messageId: string): Promise<void> {
   await prisma.whatsAppMessage.update({ where: { id: messageId }, data: { updatedAt: new Date() } })
+}
+
+/**
+ * Cost and abuse limits (Configuración → WhatsApp): no transcription for an escalated
+ * conversation, one past its AI replies per day, or once the daily spend cap is reached. A
+ * conversation a person attends keeps transcribing, because the advisor reads the transcript.
+ */
+async function overLimits(conversationId: string, status: string, config: ReturnType<typeof getAiConfig>): Promise<boolean> {
+  if (status === "ESCALATED") return true
+  const now = new Date()
+  const limits = await getAiLimits(config)
+  if ((await aiRepliesLast24h(conversationId, now)) >= limits.maxTurnsPerDay) return true
+  return isOverDailyBudget(limits, now)
 }
 
 export async function transcribeAudioMessage(
@@ -49,10 +63,11 @@ export async function transcribeAudioMessage(
       mimeType: true,
       sizeBytes: true,
       durationSec: true,
-      message: { select: { id: true, conversationId: true, type: true } },
+      message: { select: { id: true, conversationId: true, type: true, conversation: { select: { status: true } } } },
     },
   })
   if (!media || media.status !== "STORED" || !media.s3Key) return { status: "SKIPPED" }
+  if (await overLimits(media.message.conversationId, media.message.conversation.status, config)) return { status: "SKIPPED" }
 
   const claimable = options.isRetry
     ? [{ transcriptStatus: null }, { transcriptStatus: "PENDING" as const }]

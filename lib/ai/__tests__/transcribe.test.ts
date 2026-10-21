@@ -9,6 +9,9 @@ const m = vi.hoisted(() => ({
   transcribe: vi.fn(),
   getAiConfig: vi.fn(),
   recordUsage: vi.fn(),
+  getAiLimits: vi.fn(),
+  repliesLast24h: vi.fn(),
+  overBudget: vi.fn(),
 }))
 vi.mock("@/lib/db/prisma", () => ({
   default: {
@@ -24,6 +27,7 @@ vi.mock("ai", () => ({ transcribe: m.transcribe }))
 vi.mock("@/lib/config/runtime-config", () => ({ getAiConfig: m.getAiConfig }))
 vi.mock("@/lib/ai/providers", () => ({ transcriptionModel: () => "stt-model" }))
 vi.mock("../responder/usage", () => ({ recordTranscriptionUsage: m.recordUsage }))
+vi.mock("@/lib/ai/limits", () => ({ getAiLimits: m.getAiLimits, aiRepliesLast24h: m.repliesLast24h, isOverDailyBudget: m.overBudget }))
 
 import { StoredObjectError } from "@/lib/storage/r2"
 import { transcribeAudioMessage } from "../transcribe"
@@ -36,7 +40,7 @@ const MEDIA = {
   sizeBytes: 120_000,
   durationSec: null,
   transcriptStatus: null,
-  message: { id: "msg-1", conversationId: "conv-1", type: "AUDIO" },
+  message: { id: "msg-1", conversationId: "conv-1", type: "AUDIO", conversation: { status: "AI" } },
 }
 const AUDIO = new Uint8Array([1, 2, 3])
 const first = { isLastAttempt: false, isRetry: false }
@@ -57,6 +61,9 @@ beforeEach(() => {
   m.getObjectBytes.mockResolvedValue(AUDIO)
   m.transcribe.mockResolvedValue({ text: " Hola, necesito afiliarme. ", durationInSeconds: 42, segments: [] })
   m.recordUsage.mockResolvedValue("usage-1")
+  m.getAiLimits.mockResolvedValue({ dailyBudgetUsd: null, maxTurnsPerDay: 30, maxConsecutiveFailures: 2, forbiddenTopics: [] })
+  m.repliesLast24h.mockResolvedValue(0)
+  m.overBudget.mockResolvedValue(false)
 })
 
 describe("transcribeAudioMessage: claim (S-MH-7, MH-10)", () => {
@@ -179,5 +186,40 @@ describe("transcribeAudioMessage: failures (MH-4, S-MH-2)", () => {
     await transcribeAudioMessage("msg-1", first)
 
     expect(m.messageUpdate).toHaveBeenLastCalledWith({ where: { id: "msg-1" }, data: { updatedAt: expect.any(Date) } })
+  })
+})
+
+describe("transcribeAudioMessage: cost and abuse limits (S5)", () => {
+  const withStatus = (status: string) => ({ ...MEDIA, message: { ...MEDIA.message, conversation: { status } } })
+
+  it("skips an escalated conversation without claiming the media or calling the provider", async () => {
+    m.mediaFindUnique.mockResolvedValue(withStatus("ESCALATED"))
+
+    expect(await transcribeAudioMessage("msg-1", first)).toEqual({ status: "SKIPPED" })
+    expect(m.mediaUpdateMany).not.toHaveBeenCalled()
+    expect(m.transcribe).not.toHaveBeenCalled()
+  })
+
+  it("still transcribes a conversation a person is attending (advisors read the transcript)", async () => {
+    m.mediaFindUnique.mockResolvedValue(withStatus("HUMAN"))
+
+    expect(await transcribeAudioMessage("msg-1", first)).toEqual({ status: "DONE" })
+    expect(m.transcribe).toHaveBeenCalled()
+  })
+
+  it("skips once the conversation reached its AI replies per day", async () => {
+    m.repliesLast24h.mockResolvedValue(30)
+
+    expect(await transcribeAudioMessage("msg-1", first)).toEqual({ status: "SKIPPED" })
+    expect(m.repliesLast24h).toHaveBeenCalledWith("conv-1", expect.any(Date))
+    expect(m.transcribe).not.toHaveBeenCalled()
+  })
+
+  it("skips once the daily spend cap is reached", async () => {
+    m.overBudget.mockResolvedValue(true)
+
+    expect(await transcribeAudioMessage("msg-1", first)).toEqual({ status: "SKIPPED" })
+    expect(m.mediaUpdateMany).not.toHaveBeenCalled()
+    expect(m.transcribe).not.toHaveBeenCalled()
   })
 })
