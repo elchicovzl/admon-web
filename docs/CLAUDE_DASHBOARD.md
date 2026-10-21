@@ -811,7 +811,7 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 #### Notas de voz, medios y uso de IA (PR3.5)
 
 - Qué puede leer el asistente (`lib/ai/responder/media-policy.ts`): audio hasta 10 min (y 25 MB, el
-  límite del proveedor) se transcribe; JPG/PNG/WEBP hasta 5 MB e imágenes y PDF hasta 10 MB se leen; video,
+  límite del proveedor) se transcribe; JPG/PNG/WEBP hasta 5 MB y PDF hasta 10 MB se leen; video,
   stickers, GIF, ubicaciones, contactos, DOCX y XLSX no.
 - Transcripción `ai.transcribe` (`lib/ai/transcribe.ts`, reintentos 2): cuando una nota de voz queda
   en R2, el puerto de audio la encola (solo con `WHATSAPP_AI_ENABLED=true`; con IA apagada el audio queda
