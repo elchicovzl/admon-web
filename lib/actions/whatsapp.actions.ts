@@ -1,9 +1,9 @@
 'use server'
 
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/db/prisma'
 import type { ActionResponse } from '@/lib/types/auth.types'
-import { requireWhatsAppAuth } from '@/lib/whatsapp/access'
+import { requireWhatsAppAuth, requireWhatsAppSuperAdmin } from '@/lib/whatsapp/access'
 import { presignGet } from '@/lib/storage/r2'
 import {
   closeConversationSchema,
@@ -12,6 +12,7 @@ import {
   getConversationThreadSchema,
   getMediaUrlSchema,
   getUpdatesSchema,
+  getUsageSummarySchema,
   linkContactToClientSchema,
   listConversationsSchema,
   markConversationReadInboxSchema,
@@ -20,12 +21,14 @@ import {
   searchClientsForLinkSchema,
   sendReplySchema,
   sendTemplateSchema,
+  setAiEnabledSchema,
   setConversationAiPausedSchema,
   type CloseConversationInput,
   type ConversationActionInput,
   type GetClientConversationsInput,
   type GetConversationThreadInput,
   type GetUpdatesInput,
+  type GetUsageSummaryInput,
   type LinkContactToClientInput,
   type ListConversationsInput,
   type ReopenConversationInput,
@@ -33,9 +36,14 @@ import {
   type SearchClientsForLinkInput,
   type SendReplyInput,
   type SendTemplateInput,
+  type SetAiEnabledInput,
   type SetConversationAiPausedInput,
 } from '@/lib/validations/whatsapp.schema'
 import type {
+  AiSettings,
+  AiUsageCounters,
+  AiUsageDay,
+  AiUsageSummary,
   ClientConversationItem,
   ClientLinkOption,
   ConversationListPage,
@@ -734,5 +742,145 @@ export async function getClientConversations(
         takenOverByName: row.takenOverBy?.name ?? null,
       })),
     }
+  })
+}
+
+// ---------------------------------------------------------------- global AI switch and usage (PR3.7)
+
+function aiEnvEnabled(): boolean {
+  return process.env.WHATSAPP_AI_ENABLED?.trim() === 'true'
+}
+
+function toAiSettings(row: { aiEnabled: boolean; updatedAt: Date } | null, canManage: boolean): AiSettings {
+  return {
+    envEnabled: aiEnvEnabled(),
+    aiEnabled: row?.aiEnabled === true,
+    canManage,
+    updatedAt: row?.updatedAt.toISOString() ?? null,
+  }
+}
+
+/** Global AI switch state (AI-12). Readable by every WhatsApp user; only a SUPER_ADMIN may change it. */
+export async function getAiSettings(): Promise<ActionResponse<AiSettings>> {
+  return guarded('getAiSettings', async () => {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+
+    const [row, user] = await Promise.all([
+      prisma.whatsAppSettings.findUnique({
+        where: { id: 'singleton' },
+        select: { aiEnabled: true, updatedAt: true },
+      }),
+      prisma.user.findUnique({ where: { id: authCheck.userId }, select: { role: true, isActive: true } }),
+    ])
+    const canManage = user?.isActive === true && user.role === 'SUPER_ADMIN'
+    return { success: true, data: toAiSettings(row, canManage) }
+  })
+}
+
+/**
+ * Turns the AI on or off for every conversation (AI-12, D9). Off is instant: queued `ai.turn`
+ * jobs re-check the switch and do nothing. WHATSAPP_AI_ENABLED still has to be `true` for on
+ * to take effect.
+ */
+export async function setAiEnabled(input: SetAiEnabledInput): Promise<ActionResponse<AiSettings>> {
+  return guarded('setAiEnabled', async () => {
+    const authCheck = await requireWhatsAppSuperAdmin()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+    const parsed = setAiEnabledSchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    const data = { aiEnabled: parsed.data.enabled, updatedById: authCheck.userId }
+    const row = await prisma.whatsAppSettings.upsert({
+      where: { id: 'singleton' },
+      create: { id: 'singleton', ...data },
+      update: data,
+      select: { aiEnabled: true, updatedAt: true },
+    })
+    return { success: true, data: toAiSettings(row, true) }
+  })
+}
+
+type UsageRow = {
+  day: Date
+  turns: bigint
+  replied: bigint
+  escalated: bigint
+  failed: bigint
+  inputTokens: bigint
+  outputTokens: bigint
+  transcriptions: bigint
+  audioSeconds: number | null
+  costUsd: Prisma.Decimal | string | null
+}
+
+const emptyCounters = (): AiUsageCounters => ({
+  turns: 0,
+  replied: 0,
+  escalated: 0,
+  failed: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  transcriptions: 0,
+  audioMinutes: 0,
+  costUsd: 0,
+})
+
+function toUsageDay(row: UsageRow): AiUsageDay {
+  return {
+    day: row.day.toISOString().slice(0, 10),
+    turns: Number(row.turns),
+    replied: Number(row.replied),
+    escalated: Number(row.escalated),
+    failed: Number(row.failed),
+    inputTokens: Number(row.inputTokens),
+    outputTokens: Number(row.outputTokens),
+    transcriptions: Number(row.transcriptions),
+    audioMinutes: Math.round(((row.audioSeconds ?? 0) / 60) * 100) / 100,
+    costUsd: Number(row.costUsd ?? 0),
+  }
+}
+
+/**
+ * AI usage per Bogota day over the last `days` days (AI-13): turn outcomes, tokens, audio
+ * minutes and estimated cost. Only counters are read, never content, tool calls or ids.
+ */
+export async function getUsageSummary(input: GetUsageSummaryInput): Promise<ActionResponse<AiUsageSummary>> {
+  return guarded('getUsageSummary', async () => {
+    const authCheck = await requireWhatsAppAuth()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+    const parsed = getUsageSummarySchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+    const { days } = parsed.data
+
+    const rows = await prisma.$queryRaw<UsageRow[]>(Prisma.sql`
+      SELECT
+        ("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Bogota')::date AS "day",
+        COUNT(*) FILTER (WHERE "kind" = 'CHAT_TURN') AS "turns",
+        COUNT(*) FILTER (WHERE "kind" = 'CHAT_TURN' AND "outcome" = 'REPLIED') AS "replied",
+        COUNT(*) FILTER (WHERE "kind" = 'CHAT_TURN' AND "outcome" = 'ESCALATED') AS "escalated",
+        COUNT(*) FILTER (WHERE "kind" = 'CHAT_TURN' AND "outcome" = 'FAILED') AS "failed",
+        COALESCE(SUM("inputTokens"), 0)::bigint AS "inputTokens",
+        COALESCE(SUM("outputTokens"), 0)::bigint AS "outputTokens",
+        COUNT(*) FILTER (WHERE "kind" = 'TRANSCRIPTION') AS "transcriptions",
+        SUM("audioSeconds") AS "audioSeconds",
+        SUM("estimatedCostUsd") AS "costUsd"
+      FROM "ai_usage_records"
+      WHERE "createdAt" >= (
+        ((now() AT TIME ZONE 'America/Bogota')::date - (${days}::int - 1))::timestamp
+          AT TIME ZONE 'America/Bogota' AT TIME ZONE 'UTC'
+      )
+      GROUP BY 1
+      ORDER BY 1
+    `)
+
+    const perDay = rows.map(toUsageDay)
+    const totals = perDay.reduce<AiUsageCounters>((sum, day) => {
+      for (const key of Object.keys(sum) as (keyof AiUsageCounters)[]) sum[key] += day[key]
+      return sum
+    }, emptyCounters())
+    totals.audioMinutes = Math.round(totals.audioMinutes * 100) / 100
+    totals.costUsd = Math.round(totals.costUsd * 1e6) / 1e6
+    return { success: true, data: { days, perDay, totals } }
   })
 }

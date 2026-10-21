@@ -106,3 +106,36 @@ export interface ClientConversationItem {
   lastMessageAt: string
   takenOverByName: string | null
 }
+
+/** Global AI switch as the inbox shows it (AI-12). `envEnabled` is the server flag WHATSAPP_AI_ENABLED. */
+export interface AiSettings {
+  envEnabled: boolean
+  aiEnabled: boolean
+  /** Only a SUPER_ADMIN may change `aiEnabled`. */
+  canManage: boolean
+  updatedAt: string | null
+}
+
+/** AI usage counters; never carries conversation content (AI-13). */
+export interface AiUsageCounters {
+  turns: number
+  replied: number
+  escalated: number
+  failed: number
+  inputTokens: number
+  outputTokens: number
+  transcriptions: number
+  audioMinutes: number
+  costUsd: number
+}
+
+export interface AiUsageDay extends AiUsageCounters {
+  /** YYYY-MM-DD in America/Bogota. */
+  day: string
+}
+
+export interface AiUsageSummary {
+  days: number
+  perDay: AiUsageDay[]
+  totals: AiUsageCounters
+}
