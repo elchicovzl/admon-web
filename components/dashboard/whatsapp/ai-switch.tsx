@@ -23,8 +23,8 @@ interface AiSwitchProps {
 }
 
 function statusText(settings: AiSettings): string {
-  if (!settings.aiEnabled) return 'IA apagada'
-  return settings.envEnabled ? 'IA encendida' : 'IA encendida (desactivada en el servidor)'
+  const base = settings.aiEnabled ? 'IA encendida' : 'IA apagada'
+  return settings.envEnabled ? base : `${base} (desactivada en el servidor)`
 }
 
 /**
