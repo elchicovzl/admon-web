@@ -12,13 +12,15 @@ Branch: `feat/whatsapp-m3-responder-pure` (base master). Delivery: stacked-to-ma
 - Acceptance: AI-2, AI-3, AI-4, AI-5 (text), AI-6, AI-7, AI-8, AI-10, AI-15; S-AI-1/2/3/6/7/10.
 
 ## Tasks
-- [ ] T1 S3 escalation + S4 business hours — inline
-- [ ] T2 S2 debounce + S5 consent — inline
-- [ ] T3 S1 guard — inline
-- [ ] T4 S6 prompt, tools, history + docs — inline
+- [x] T1 S3 escalation + S4 business hours — inline (RED modules missing → GREEN 16) — d2a5cae
+- [x] T2 S2 debounce + S5 consent — inline (RED → GREEN 11) — 575cbc0
+- [x] T3 S1 guard — inline (RED → GREEN 13) — dcc8c80
+- [x] T4 S6 prompt, tools, history + docs — inline (RED → GREEN 21; one expectation corrected before GREEN: 3×2000 tokens fit the 6000 budget exactly)
 
 ## Log
 - L1 (2026-10-20, user): "si sigue con PR3.6a"
 - L2 Model constraint (carried from PR3.1 L4): `claude-opus-5-5` returns 400 for forced tool choice and for `temperature`. Tools are declared with `strict: true` and used with `toolChoice: 'auto'`; the prompt tells the model to finish every turn with `sendReply` (or `escalateToHuman`), and PR3.6b stops on `hasToolCall('sendReply' | 'escalateToHuman')` (verified in AI SDK v7 docs: a tool without `execute` ends the loop; `strict` per tool). A plain-text reply has no tool call and the guard sends the fallback (S1); PR3.6b's eval must measure how often that happens.
 - L3 Colombia has no daylight saving time, so Bogota is a fixed UTC-5; business hours use Intl (America/Bogota) for reading and the fixed offset for building the next slot. Holidays: honoured only when a holiday list is passed (OI-1 still open; none shipped).
 - L4 Route: inline (one writer; each module is small).
+- L5 Consent notice text is user-facing legal copy: pending counsel review (OPS-G7) before AI goes live.
+- L6 Tool schemas carry no min/max constraints (strict mode supports a JSON Schema subset; not verified for length keywords); lengths are enforced by the guard.
