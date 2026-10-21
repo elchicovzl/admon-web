@@ -50,7 +50,7 @@ export default function PrivacyPage() {
           </h1>
 
           <p className="text-gray-600 mb-8">
-            Última actualización: 20 de diciembre de 2025
+            Última actualización: 20 de octubre de 2026
           </p>
 
           <div className="prose prose-gray max-w-none">
@@ -122,9 +122,51 @@ export default function PrivacyPage() {
               </p>
             </section>
 
+            {/* AI and WhatsApp copy (XC-1): pending legal review before the AI goes live (OPS-G7). */}
+            <section id="whatsapp-ia" className="mb-8">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+                5. Atención por WhatsApp y Asistente de Inteligencia Artificial
+              </h2>
+              <p className="text-gray-700 mb-4">
+                Cuando nos escribe por WhatsApp, guardamos su número, su nombre de perfil y los mensajes,
+                imágenes, documentos y notas de voz de la conversación, con el fin de atender su consulta y
+                darle continuidad a sus trámites.
+              </p>
+              <p className="text-gray-700 mb-4">
+                Algunas conversaciones son atendidas inicialmente por un asistente virtual basado en
+                inteligencia artificial. El asistente se identifica como tal en su primer mensaje, responde
+                con base en la información de nuestros servicios y puede comunicarlo con un asesor humano en
+                cualquier momento; basta con pedirlo. El asistente no crea, modifica ni aprueba
+                afiliaciones, trámites ni pagos.
+              </p>
+              <p className="text-gray-700 mb-4">
+                Para generar las respuestas, el contenido de la conversación (textos, imágenes y documentos)
+                se procesa con <strong>Anthropic</strong> (modelos Claude), y las notas de voz se transcriben
+                con <strong>OpenAI</strong>. Estos proveedores actúan como encargados del tratamiento por
+                cuenta de Administración Segura, solo procesan los datos para prestarnos el servicio y,
+                según sus condiciones comerciales, no los usan para entrenar sus modelos.
+              </p>
+              <p className="text-gray-700 mb-4">
+                <strong>Transferencia internacional:</strong> Anthropic y OpenAI procesan la información en
+                servidores ubicados fuera de Colombia, principalmente en los Estados Unidos. Al usar este canal,
+                usted autoriza esta transmisión de datos en los términos de la Ley 1581 de 2012.
+              </p>
+              <p className="text-gray-700 mb-4">
+                <strong>Autorización:</strong> el primer mensaje del asistente le informa que es un sistema de
+                inteligencia artificial y le indica el enlace a esta política. Si continúa la conversación,
+                entendemos que autoriza el tratamiento descrito en esta sección. Si no está de acuerdo, puede
+                pedir que lo atienda un asesor humano, dejar de escribir o revocar su autorización por los
+                canales de contacto indicados al final de esta política.
+              </p>
+              <p className="text-gray-700 mb-4">
+                Para controlar costos y calidad, registramos estadísticas de uso del asistente (por ejemplo,
+                cantidad de respuestas y tiempo de procesamiento) que no incluyen el contenido de sus mensajes.
+              </p>
+            </section>
+
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                5. Derechos del Titular de los Datos
+                6. Derechos del Titular de los Datos
               </h2>
               <p className="text-gray-700 mb-4">
                 De acuerdo con la Ley 1581 de 2012, usted tiene derecho a:
@@ -141,7 +183,7 @@ export default function PrivacyPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                6. Seguridad de la Información
+                7. Seguridad de la Información
               </h2>
               <p className="text-gray-700 mb-4">
                 Implementamos medidas de seguridad técnicas, administrativas y físicas para proteger
@@ -158,7 +200,7 @@ export default function PrivacyPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                7. Cookies y Tecnologías Similares
+                8. Cookies y Tecnologías Similares
               </h2>
               <p className="text-gray-700 mb-4">
                 Nuestro sitio web puede utilizar cookies y tecnologías similares para mejorar su
@@ -177,7 +219,7 @@ export default function PrivacyPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                8. Conservación de Datos
+                9. Conservación de Datos
               </h2>
               <p className="text-gray-700 mb-4">
                 Conservaremos sus datos personales durante el tiempo necesario para cumplir con las
@@ -189,7 +231,7 @@ export default function PrivacyPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                9. Cambios a esta Política
+                10. Cambios a esta Política
               </h2>
               <p className="text-gray-700 mb-4">
                 Nos reservamos el derecho de modificar esta Política de Privacidad en cualquier
@@ -200,7 +242,7 @@ export default function PrivacyPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                10. Contacto
+                11. Contacto
               </h2>
               <p className="text-gray-700 mb-4">
                 Para ejercer sus derechos o resolver cualquier duda sobre el tratamiento de sus
