@@ -10,12 +10,14 @@ Branch: `feat/whatsapp-m3-stt` (base master). Delivery: stacked-to-main. Runner:
 - Acceptance: MH-3, MH-4, MH-6, MH-10, AI-13; S-MH-1/2/4/5/7.
 
 ## Tasks
-- [ ] T1 S1 media policy — inline
-- [ ] T2 S2-S3 usage records, transcription, worker + port, docs — inline
-- [ ] T4 S4 — already shipped in PR2.2 (`components/dashboard/whatsapp/message-media.tsx` `Transcript`: DONE text, «Transcripción fallida», «Transcribiendo…»); this PR makes the inbox refresh it
+- [x] T1 S1 media policy — inline (RED module missing → GREEN 7/7) — 8680914
+- [x] T2 S2-S3 usage records, transcription, worker + port, docs — inline (RED usage/transcribe modules missing → GREEN 6 + 12; worker 6 written with its implementation, RED not observed separately; bootstrap +1)
+- [x] T4 S4 — already shipped in PR2.2 (`components/dashboard/whatsapp/message-media.tsx` `Transcript`: DONE text, «Transcripción fallida», «Transcribiendo…»); this PR makes the inbox refresh it
 
 ## Log
 - L1 (2026-10-20, user): "si" (go ahead with PR3.5).
 - L2 Decision: transcription is an AI call, so it runs only with `WHATSAPP_AI_ENABLED=true` (both when enqueueing and when the job runs, so turning the flag off stops queued jobs). With the flag off, audio stays untranscribed (`transcriptStatus` null) and staff listen to it. Knowledge-base ingestion stays the only model call that runs with AI off (an explicit manager action, PR3.2).
 - L3 Inbox refresh: thread polling reads messages by `whatsapp_messages.updatedAt`; media rows do not touch it, so every transcript state change also bumps the message's `updatedAt`.
 - L4 Route: inline (one writer).
+- L5 Prices for cost estimates checked on openai.com 2026-10-20: gpt-4o-mini-transcribe $0.003/min, gpt-4o-transcribe and whisper-1 $0.006/min (partial minutes round up); Claude prices from the Anthropic model table (2026-10-06). Estimates only.
+- L6 Decisions: audio the policy rejects, a missing/oversized stored file, and audio measured longer than AI_STT_MAX_SECONDS fail at once (no retry can help) — the spec's ">10 min retries" read as provider errors/empty results only; provider duration falls back to the last segment's end.

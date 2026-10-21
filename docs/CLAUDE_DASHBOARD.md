@@ -808,6 +808,23 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 - Evaluación manual: `pnpm eval:assistant <set.json>` (ejemplo en `scripts/eval-set.example.json`;
   necesita `OPENAI_API_KEY` y solo lee). Sale con código 1 si falla alguna expectativa.
 
+#### Notas de voz, medios y uso de IA (PR3.5)
+
+- Qué puede leer el asistente (`lib/ai/responder/media-policy.ts`): audio hasta 10 min (y 25 MB, el
+  límite del proveedor) se transcribe; JPG/PNG/WEBP hasta 5 MB e imágenes y PDF hasta 10 MB se leen; video,
+  stickers, GIF, ubicaciones, contactos, DOCX y XLSX no.
+- Transcripción `ai.transcribe` (`lib/ai/transcribe.ts`, reintentos 2): cuando una nota de voz queda
+  en R2, el puerto de audio la encola (solo con `WHATSAPP_AI_ENABLED=true`; con IA apagada el audio queda
+  sin transcribir). El job reclama el medio con `updateMany where transcriptStatus = null`, así un job
+  repetido nunca transcribe dos veces. Español (`language: es`), `AI_STT_MODEL`. Resultado DONE con el
+  texto o FAILED (política, archivo faltante o más largo que `AI_STT_MAX_SECONDS` fallan al instante; un
+  error del proveedor o un texto vacío reintentan). Cada cambio toca el `updatedAt` del mensaje para que la
+  bandeja muestre «Transcribiendo…», el texto o «Transcripción fallida» sin recargar.
+- Uso (`lib/ai/responder/usage.ts`): cada llamada deja un `AiUsageRecord` sin contenido (modelo, segundos
+  de audio o tokens, latencia, error corto y costo estimado). Precios de lista: transcripción por minuto
+  redondeado hacia arriba (OpenAI, revisado 2026-10-20) y chat por millón de tokens (Anthropic,
+  2026-10-06); un modelo desconocido guarda costo nulo.
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)
