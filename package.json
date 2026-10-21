@@ -17,6 +17,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "seed:whatsapp-dev": "tsx --env-file=.env.local scripts/seed-whatsapp-inbox-dev.ts",
+    "eval:assistant": "tsx --env-file=.env --env-file=.env.local scripts/eval-assistant.ts",
     "db:studio": "prisma studio",
     "email:dev": "email dev -p 3001",
     "email:export": "email export"

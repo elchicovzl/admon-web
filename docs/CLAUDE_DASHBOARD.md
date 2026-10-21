@@ -792,6 +792,22 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
 - Límites: un DOCX que declara más de 50 MB descomprimido se rechaza sin abrirlo; un archivo de R2
   faltante o demasiado grande falla al instante (no reintentable).
 
+#### Base de conocimiento: recuperación (PR3.4)
+
+- `retrieveKnowledge(pregunta)` (`lib/knowledge/retrieve.ts`) genera el embedding de la pregunta y
+  busca en dos listas: las 20 más cercanas por coseno (pgvector) y las 20 mejores por texto en español
+  (`websearch_to_tsquery('spanish')` sobre el índice GIN). Las fusiona con RRF (`lib/knowledge/rrf.ts`,
+  k = 60) y devuelve las 6 mejores con similitud, `rrfScore` y el documento.
+- Solo documentos activos y chunks del modelo y dimensiones configurados (`openai/<modelo>`): nunca
+  mezcla modelos. El filtro corre sobre el HNSW con `SET LOCAL hnsw.iterative_scan = relaxed_order` y
+  `hnsw.ef_search = 100` dentro de una transacción; sin eso, una búsqueda filtrada puede devolver
+  muchas menos filas (medido: 1 de 20).
+- Resultados: `OK`; `NO_SUFFICIENT_MATCH` cuando nada supera `AI_MIN_SIMILARITY` y no hay coincidencia
+  de texto (el asistente no debe responder con contexto débil); `REINDEX_REQUIRED` cuando solo hay
+  chunks de otro modelo. Un fallo del proveedor de embeddings se propaga al que llama.
+- Evaluación manual: `pnpm eval:assistant <set.json>` (ejemplo en `scripts/eval-set.example.json`;
+  necesita `OPENAI_API_KEY` y solo lee). Sale con código 1 si falla alguna expectativa.
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)
