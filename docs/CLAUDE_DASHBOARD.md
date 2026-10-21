@@ -887,7 +887,7 @@ las conecta en el turno.
   guard → commit. Una llamada a herramienta que el SDK marca `invalid` se ignora, y un motivo de escalada
   reservado al código (AI_FAILURE, TURN_LIMIT…) se toma como LOW_CONFIDENCE.
 - Llamada al modelo: `toolChoice: 'auto'`, herramientas `strict`, corta en `sendReply` o
-  `escalateToHuman` o a los `AI_MAX_STEPS`, 600 tokens de salida, 2 reintentos, `effort: medium`. Sin
+  `escalateToHuman` o a los `AI_MAX_STEPS`, 4000 tokens de salida por paso (el thinking del modelo siempre activo cuenta ahí; con 600 se cortaba la llamada a `sendReply` en respuestas con lista), 2 reintentos, `effort: medium`. Sin
   `temperature` (Opus 5.5 y Sonnet 5.5 lo rechazan, igual que forzar herramienta).
 - Commit (`lib/ai/responder/commit.ts`): `SELECT … FOR UPDATE` sobre la conversación; solo escribe si
   sigue en AI, con la misma `stateVersion`, sin pausa, con IA encendida (el interruptor se relee dentro
