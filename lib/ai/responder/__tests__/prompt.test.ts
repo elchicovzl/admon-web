@@ -35,6 +35,13 @@ describe("system prompt (AI-2, AI-15)", () => {
   it("is the same for every conversation (no per-turn data, so it can be cached)", () => {
     expect(buildSystemPrompt()).toBe(prompt)
   })
+
+  // A greeting that adds the opening hours or a date is a fact without sources: the guard replaces
+  // it with the fallback and counts a failure, so two greetings escalate the conversation.
+  it("keeps greetings and courtesies short, without hours, dates or numbers", () => {
+    expect(prompt).toMatch(/SMALLTALK[^\n]*una o dos frases/)
+    expect(prompt).toMatch(/SMALLTALK[^\n]*sin horarios, fechas ni números/)
+  })
 })
 
 describe("turn context", () => {
@@ -54,6 +61,14 @@ describe("turn context", () => {
     expect(context).toContain("10:30")
     expect(context).toContain("viernes")
     expect(context).toContain("Dentro del horario de atención")
+  })
+
+  it("says the hours and the next slot are for the assistant's judgement, not to tell the client", () => {
+    for (const isBusinessHours of [true, false]) {
+      const context = buildTurnContext({ ...base, isBusinessHours, nextBusinessSlot: new Date("2026-10-26T13:00:00Z") })
+
+      expect(context).toContain("no se los mencione al cliente")
+    }
   })
 
   it("gives the next business slot outside business hours, and says when the contact is a lead", () => {
