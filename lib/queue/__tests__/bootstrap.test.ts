@@ -10,6 +10,8 @@ const registerWhatsAppWorkers = vi.fn()
 vi.mock("@/lib/whatsapp/event-worker", () => ({ registerWhatsAppWorkers }))
 const registerKnowledgeWorkers = vi.fn()
 vi.mock("@/lib/knowledge/worker", () => ({ registerKnowledgeWorkers }))
+const registerTranscriptionWorkers = vi.fn()
+vi.mock("@/lib/ai/transcription-worker", () => ({ registerTranscriptionWorkers }))
 vi.mock("../boss", () => ({ startBoss }))
 vi.mock("../queues", () => ({ ensureQueues }))
 vi.mock("../schedules", () => ({ ensureSchedules }))
@@ -59,6 +61,10 @@ describe("bootstrapRuntime", () => {
     )
     // Knowledge-base ingestion (kb.ingest) is attached before the workers start.
     expect(registerKnowledgeWorkers.mock.invocationCallOrder[0]).toBeLessThan(
+      startWorkers.mock.invocationCallOrder[0]
+    )
+    // Voice-note transcription (ai.transcribe + the audio port) too.
+    expect(registerTranscriptionWorkers.mock.invocationCallOrder[0]).toBeLessThan(
       startWorkers.mock.invocationCallOrder[0]
     )
   })
