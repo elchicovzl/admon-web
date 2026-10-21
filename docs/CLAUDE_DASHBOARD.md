@@ -618,6 +618,16 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   muestra a todo usuario con acceso al módulo (`canManage` dice si puede cambiarlo) y avisa si
   `WHATSAPP_AI_ENABLED` está apagado. Apagar es inmediato: los turnos encolados releen el
   interruptor y no hacen nada. En la bandeja: `components/dashboard/whatsapp/ai-switch.tsx`.
+- Límites de costo y abuso (Configuración → WhatsApp, solo SUPER_ADMIN): `getAiLimitSettings` /
+  `updateAiLimitSettings` guardan en `WhatsAppSettings` el tope de gasto diario global en USD,
+  las respuestas de IA por número por día, las fallas seguidas antes de escalar y temas prohibidos.
+  Un campo vacío usa la variable de entorno (`AI_MAX_TURNS_PER_DAY`, `AI_MAX_CONSECUTIVE_FAILURES`);
+  los temas se suman a `AI_FORBIDDEN_TOPICS`; sin tope guardado no hay tope global.
+  `lib/ai/limits.ts` los resuelve en cada turno y transcripción (sin deploy). El gasto del día es la
+  suma de `estimatedCostUsd` desde la medianoche de Bogotá: al llegar al tope el turno escala con
+  `BUDGET_LIMIT` sin llamar al modelo. Las notas de voz no se transcriben si la conversación está
+  ESCALATED, o si la atiende la IA y llegó a su límite diario o se alcanzó el tope (en HUMAN siempre, el asesor usa la
+  transcripción).
 - Resumen de uso: `getUsageSummary({ days })` (1-90, por defecto 30) agrega
   `ai_usage_records` por día de Bogotá: turnos y su resultado, tokens, transcripciones, minutos
   de audio y costo estimado. Solo lee contadores, nunca contenido, herramientas ni ids. Diálogo

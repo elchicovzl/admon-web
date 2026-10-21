@@ -2034,10 +2034,17 @@ model AiUsageRecord {
 }
 
 model WhatsAppSettings {
-  id          String   @id @default("singleton")
-  aiEnabled   Boolean  @default(false)
-  updatedById String?
-  updatedAt   DateTime @updatedAt
+  id                     String   @id @default("singleton")
+  aiEnabled              Boolean  @default(false)
+  // AI cost and abuse limits set from the dashboard. Null falls back to the server env;
+  // a null daily budget means no global cap.
+  dailyBudgetUsd         Decimal? @db.Decimal(10, 2)
+  maxTurnsPerDay         Int?
+  maxConsecutiveFailures Int?
+  // Added to AI_FORBIDDEN_TOPICS.
+  forbiddenTopics        String[] @default([])
+  updatedById            String?
+  updatedAt              DateTime @updatedAt
 
   @@map("whatsapp_settings")
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { UserRole } from '@prisma/client'
+import { Prisma, UserRole } from '@prisma/client'
 
-const { prismaMock, authMock, hasWhatsAppAccessMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, hasWhatsAppAccessMock, aiConfigMock, spentTodayMock } = vi.hoisted(() => ({
   prismaMock: {
     user: { findUnique: vi.fn() },
     whatsAppSettings: { findUnique: vi.fn(), upsert: vi.fn() },
@@ -9,6 +9,8 @@ const { prismaMock, authMock, hasWhatsAppAccessMock } = vi.hoisted(() => ({
   },
   authMock: vi.fn(),
   hasWhatsAppAccessMock: vi.fn(),
+  aiConfigMock: vi.fn(),
+  spentTodayMock: vi.fn(),
 }))
 
 vi.mock('@/lib/db/prisma', () => ({ default: prismaMock }))
@@ -16,8 +18,13 @@ vi.mock('@/lib/auth/auth', () => ({ auth: authMock }))
 vi.mock('@/lib/auth/rbac', () => ({ hasWhatsAppAccess: hasWhatsAppAccessMock }))
 vi.mock('@/lib/storage/r2', () => ({ presignGet: vi.fn() }))
 vi.mock('@/lib/whatsapp/outbound', () => ({}))
+vi.mock('@/lib/config/runtime-config', () => ({ getAiConfig: aiConfigMock }))
+vi.mock('@/lib/ai/limits', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/ai/limits')>()),
+  spentTodayUsd: spentTodayMock,
+}))
 
-import { getAiSettings, getUsageSummary, setAiEnabled } from '../whatsapp.actions'
+import { getAiLimitSettings, getAiSettings, getUsageSummary, setAiEnabled, updateAiLimitSettings } from '../whatsapp.actions'
 
 const UPDATED_AT = new Date('2026-10-20T15:00:00.000Z')
 
@@ -35,6 +42,8 @@ beforeEach(() => {
   vi.resetAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
   vi.stubEnv('WHATSAPP_AI_ENABLED', 'true')
+  aiConfigMock.mockReturnValue({ maxTurnsPerDay: 30, maxConsecutiveFailures: 2, forbiddenTopics: ['política'] })
+  spentTodayMock.mockResolvedValue(1.234567)
   hasWhatsAppAccessMock.mockResolvedValue(true)
   asSuperAdmin()
   prismaMock.whatsAppSettings.findUnique.mockResolvedValue({
@@ -296,5 +305,106 @@ describe('getUsageSummary (S2, AI-13)', () => {
 
     expect(r.success).toBe(false)
     expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
+  })
+})
+
+describe('getAiLimitSettings (S2, S3)', () => {
+  it('gives a SUPER_ADMIN the saved limits, the server values they fall back to, and today\'s spend', async () => {
+    prismaMock.whatsAppSettings.findUnique.mockResolvedValue({
+      dailyBudgetUsd: new Prisma.Decimal('20.00'),
+      maxTurnsPerDay: null,
+      maxConsecutiveFailures: 3,
+      forbiddenTopics: ['criptomonedas'],
+    })
+
+    const r = await getAiLimitSettings()
+
+    expect(r).toEqual({
+      success: true,
+      data: {
+        saved: { dailyBudgetUsd: 20, maxTurnsPerDay: null, maxConsecutiveFailures: 3, forbiddenTopics: ['criptomonedas'] },
+        server: { maxTurnsPerDay: 30, maxConsecutiveFailures: 2, forbiddenTopics: ['política'] },
+        spentTodayUsd: 1.234567,
+      },
+    })
+  })
+
+  it('returns empty saved limits when nothing was saved', async () => {
+    prismaMock.whatsAppSettings.findUnique.mockResolvedValue(null)
+
+    const r = await getAiLimitSettings()
+
+    expect(r.data?.saved).toEqual({ dailyBudgetUsd: null, maxTurnsPerDay: null, maxConsecutiveFailures: null, forbiddenTopics: [] })
+  })
+
+  it('denies a MANAGER', async () => {
+    asManager()
+
+    const r = await getAiLimitSettings()
+
+    expect(r).toEqual({ success: false, error: 'Solo un super administrador puede cambiar la IA global' })
+    expect(prismaMock.whatsAppSettings.findUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('updateAiLimitSettings (S1-S3)', () => {
+  const input = { dailyBudgetUsd: 20, maxTurnsPerDay: 10, maxConsecutiveFailures: 3, forbiddenTopics: [' Criptomonedas ', 'criptomonedas', ''] }
+
+  beforeEach(() => {
+    prismaMock.whatsAppSettings.upsert.mockResolvedValue({})
+  })
+
+  it('saves the limits for a SUPER_ADMIN, normalizing the topics and recording who changed them', async () => {
+    const r = await updateAiLimitSettings(input)
+
+    const data = { dailyBudgetUsd: 20, maxTurnsPerDay: 10, maxConsecutiveFailures: 3, forbiddenTopics: ['Criptomonedas'], updatedById: 'admin-1' }
+    expect(prismaMock.whatsAppSettings.upsert).toHaveBeenCalledWith({
+      where: { id: 'singleton' },
+      create: { id: 'singleton', ...data },
+      update: data,
+    })
+    expect(r).toEqual({ success: true, message: 'Límites de IA guardados' })
+  })
+
+  it('clears a field with null, so it falls back to the server value (or no cap)', async () => {
+    await updateAiLimitSettings({ dailyBudgetUsd: null, maxTurnsPerDay: null, maxConsecutiveFailures: null, forbiddenTopics: [] })
+
+    expect(prismaMock.whatsAppSettings.upsert.mock.calls[0][0].update).toEqual({
+      dailyBudgetUsd: null,
+      maxTurnsPerDay: null,
+      maxConsecutiveFailures: null,
+      forbiddenTopics: [],
+      updatedById: 'admin-1',
+    })
+  })
+
+  it('never touches the AI switch', async () => {
+    await updateAiLimitSettings(input)
+
+    expect(prismaMock.whatsAppSettings.upsert.mock.calls[0][0].update).not.toHaveProperty('aiEnabled')
+    expect(prismaMock.whatsAppSettings.upsert.mock.calls[0][0].create).not.toHaveProperty('aiEnabled')
+  })
+
+  it.each([
+    ['a zero budget', { dailyBudgetUsd: 0 }],
+    ['a budget with more than 2 decimals', { dailyBudgetUsd: 1.234 }],
+    ['zero replies per day', { maxTurnsPerDay: 0 }],
+    ['a fractional failure cap', { maxConsecutiveFailures: 1.5 }],
+    ['a topic longer than 80 characters', { forbiddenTopics: ['x'.repeat(81)] }],
+    ['more than 50 topics', { forbiddenTopics: Array.from({ length: 51 }, (_, i) => `tema ${i}`) }],
+  ])('rejects %s and writes nothing', async (_label, overrides) => {
+    const r = await updateAiLimitSettings({ ...input, ...overrides })
+
+    expect(r.success).toBe(false)
+    expect(prismaMock.whatsAppSettings.upsert).not.toHaveBeenCalled()
+  })
+
+  it('denies a MANAGER and writes nothing', async () => {
+    asManager()
+
+    const r = await updateAiLimitSettings(input)
+
+    expect(r.success).toBe(false)
+    expect(prismaMock.whatsAppSettings.upsert).not.toHaveBeenCalled()
   })
 })

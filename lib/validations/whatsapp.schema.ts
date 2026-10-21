@@ -158,6 +158,33 @@ export const getUsageSummarySchema = z.object({
     .default(30),
 })
 
+export const FORBIDDEN_TOPICS_MAX = 50
+export const FORBIDDEN_TOPIC_MAX_LENGTH = 80
+
+const optionalLimit = (max: number, label: string) =>
+  z
+    .number({ invalid_type_error: `${label} inválido` })
+    .int(`${label} debe ser un número entero`)
+    .min(1, `${label} debe ser al menos 1`)
+    .max(max, `${label} no puede ser mayor a ${max}`)
+    .nullable()
+
+/** AI cost and abuse limits (Configuración → WhatsApp). null = use the server value, or no cap. */
+export const updateAiLimitSettingsSchema = z.object({
+  dailyBudgetUsd: z
+    .number({ invalid_type_error: 'Tope diario inválido' })
+    .positive('El tope diario debe ser mayor a 0')
+    .max(100_000, 'El tope diario no puede ser mayor a 100000')
+    .refine((value) => Number.isInteger(Math.round(value * 100 * 1e6) / 1e6), 'El tope diario admite máximo 2 decimales')
+    .nullable(),
+  maxTurnsPerDay: optionalLimit(1000, 'El límite de respuestas por día'),
+  maxConsecutiveFailures: optionalLimit(10, 'El límite de fallas seguidas'),
+  forbiddenTopics: z
+    .array(z.string().max(FORBIDDEN_TOPIC_MAX_LENGTH, `Cada tema admite máximo ${FORBIDDEN_TOPIC_MAX_LENGTH} caracteres`))
+    .max(FORBIDDEN_TOPICS_MAX, `Máximo ${FORBIDDEN_TOPICS_MAX} temas prohibidos`),
+})
+
+export type UpdateAiLimitSettingsInput = z.input<typeof updateAiLimitSettingsSchema>
 export type SetAiEnabledInput = z.input<typeof setAiEnabledSchema>
 export type GetUsageSummaryInput = z.input<typeof getUsageSummarySchema>
 export type GetClientConversationsInput = z.input<typeof getClientConversationsSchema>

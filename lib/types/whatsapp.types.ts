@@ -139,3 +139,17 @@ export interface AiUsageSummary {
   perDay: AiUsageDay[]
   totals: AiUsageCounters
 }
+
+/** AI cost and abuse limits as Configuración → WhatsApp shows them (SUPER_ADMIN only). */
+export interface AiLimitSettings {
+  /** null = not saved: the server value applies (no cap for the daily budget). */
+  saved: {
+    dailyBudgetUsd: number | null
+    maxTurnsPerDay: number | null
+    maxConsecutiveFailures: number | null
+    forbiddenTopics: string[]
+  }
+  /** Values from the server env, used when a saved field is empty. */
+  server: { maxTurnsPerDay: number; maxConsecutiveFailures: number; forbiddenTopics: string[] }
+  spentTodayUsd: number
+}

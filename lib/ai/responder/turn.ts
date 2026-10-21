@@ -11,6 +11,7 @@ import { commitAiEscalation, commitAiReply, type TurnSnapshot } from "./commit"
 import { siteUrlFrom } from "./consent"
 import { decideDebounce } from "./debounce"
 import { EscalationReason, detectEscalation, nextFailureState } from "./escalation"
+import { aiRepliesLast24h, getAiLimits, isOverDailyBudget } from "@/lib/ai/limits"
 import { guardModelOutput, type TerminalReply } from "./guard"
 import { buildHistory, type HistoryMessage } from "./history"
 import { MEDIA_POLICY_LIMITS, classifyMedia } from "./media-policy"
@@ -23,7 +24,7 @@ import { recordChatTurnUsage, setUsageOutcome, type ChatTurnUsage } from "./usag
  * One AI turn (`ai.turn`, AI-1..AI-16): answers every client message since `aiCursorAt`.
  *
  * Order: kill switches → pending batch → staleness → debounce → deterministic checks (request for
- * a person, forbidden topic, daily limit, unreadable attachments) → the model with the knowledge
+ * a person, forbidden topic, daily limit, daily spend cap, unreadable attachments) → the model with the knowledge
  * search → output guard → commit under a row lock (commit.ts). Nothing is written before the
  * commit, except the usage record and moving the cursor past a stale batch.
  *
@@ -53,7 +54,6 @@ const MAX_ATTACHMENTS = 4
 const HISTORY_FETCH = 30
 // Per step, thinking included: the chat model always thinks, and 600 cut list answers in half.
 const MAX_OUTPUT_TOKENS = 4000
-const DAY_MS = 24 * 60 * 60 * 1000
 
 const pendingSelect = {
   id: true,
@@ -268,24 +268,19 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
   const { parts, text, transcriptFailed } = await buildUserParts(pending)
 
   // Deterministic checks first: no model call is needed to hand over or to refuse a topic.
-  const requested = detectEscalation(text, config.forbiddenTopics)
+  const limits = await getAiLimits(config)
+  const requested = detectEscalation(text, limits.forbiddenTopics)
   if (requested) return toOutcome(await escalate(requested, null), "ESCALATED")
 
-  const aiRepliesToday = await prisma.whatsAppMessage.count({
-    where: {
-      conversationId: conversation.id,
-      direction: "OUT",
-      source: "AI",
-      status: { not: "FAILED" },
-      createdAt: { gte: new Date(now.getTime() - DAY_MS) },
-    },
-  })
-  if (aiRepliesToday >= config.maxTurnsPerDay) return toOutcome(await escalate(EscalationReason.TURN_LIMIT, null), "ESCALATED")
+  if ((await aiRepliesLast24h(conversation.id, now)) >= limits.maxTurnsPerDay) {
+    return toOutcome(await escalate(EscalationReason.TURN_LIMIT, null), "ESCALATED")
+  }
+  if (await isOverDailyBudget(limits, now)) return toOutcome(await escalate(EscalationReason.BUDGET_LIMIT, null), "ESCALATED")
 
   // Nothing the model can read (stickers, video, a voice note that failed): answer without it (S-MH-2/4/5).
   if (parts.length === 0) {
     const failures = conversation.consecutiveAiFailures + 1
-    const next = nextFailureState(failures, config.maxConsecutiveFailures, true)
+    const next = nextFailureState(failures, limits.maxConsecutiveFailures, true)
     if (next.escalate) return toOutcome(await escalate(next.reason, null), "ESCALATED")
     return toOutcome(await reply(transcriptFailed ? TRANSCRIPTION_FAILED_TEXT : UNSUPPORTED_MEDIA_TEXT, [], null, failures), "REPLIED")
   }
@@ -392,7 +387,7 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
       outcome = toOutcome(await reply(decision.text, decision.sourceIds, usageRecordId, 0), "REPLIED")
     } else {
       const failures = conversation.consecutiveAiFailures + 1
-      const next = nextFailureState(failures, config.maxConsecutiveFailures, false)
+      const next = nextFailureState(failures, limits.maxConsecutiveFailures, false)
       outcome = next.escalate
         ? toOutcome(await escalate(next.reason, usageRecordId), "ESCALATED")
         : toOutcome(await reply(decision.text, [], usageRecordId, failures), "REPLIED")
