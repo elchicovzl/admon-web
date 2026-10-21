@@ -12,6 +12,7 @@ describe("EscalationReason", () => {
       REPEATED_FAILURE: "REPEATED_FAILURE",
       DOCUMENT_REVIEW: "DOCUMENT_REVIEW",
       AI_FAILURE: "AI_FAILURE",
+      TURN_LIMIT: "TURN_LIMIT",
     })
   })
 })

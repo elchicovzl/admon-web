@@ -3,6 +3,7 @@ import prisma from "@/lib/db/prisma"
 import { getBoss } from "@/lib/queue/boss"
 import { QUEUES } from "@/lib/queue/queues"
 import { getNotifyPort } from "@/lib/notifications/port"
+import { scheduleAiTurnFor } from "./ai-turn-port"
 import { ensureLead, upsertAndMatchContact } from "./contacts"
 import { transition } from "./state-machine"
 import { applyTransition, isAiGloballyEnabled } from "./transitions"
@@ -195,11 +196,13 @@ export async function processInboundMessage(payload: unknown, receivedAt: Date =
 
   let stored = await findStoredMessage(message.wamid)
   let notifyActivity = false
+  let scheduleAiTurn = false
   if (!stored) {
     try {
       const persisted = await persistMessage(conversation, message)
       stored = persisted
       notifyActivity = persisted.notifyActivity
+      scheduleAiTurn = persisted.scheduleAiTurn
     } catch (error) {
       if (!isUniqueViolation(error)) throw error
       stored = await findStoredMessage(message.wamid) // concurrent duplicate delivery (WC-4)
@@ -218,6 +221,17 @@ export async function processInboundMessage(payload: unknown, receivedAt: Date =
   }
 
   if (stored.media?.status === "PENDING") await enqueueMediaDownload(stored.id)
+
+  // The AI answers an AI conversation (AI-1). Best effort after the commit: a missed turn leaves
+  // the message unanswered in the inbox for staff, never lost. The turn itself re-checks every
+  // kill switch, debounces the burst and answers everything pending since its cursor.
+  if (scheduleAiTurn) {
+    try {
+      await scheduleAiTurnFor(conversation.id)
+    } catch {
+      console.error("[whatsapp] scheduling the AI turn failed; message was stored")
+    }
+  }
 
   if (contact.matchStatus === "UNMATCHED") {
     try {
@@ -272,8 +286,17 @@ async function persistMessage(conversation: Conversation, message: ParsedInbound
             }
           : {}),
       },
-      select: { id: true, media: { select: { status: true } } },
+      select: { id: true, createdAt: true, media: { select: { status: true } } },
     })
+
+    // A reopen into AI answers only from this message on: what came before was handled (or left)
+    // by staff while the conversation was closed, and must never be replayed by the AI turn.
+    if (moved.changed && moved.from === "CLOSED" && moved.to === "AI") {
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: { aiCursorAt: new Date(created.createdAt.getTime() - 1) },
+      })
+    }
 
     // Counters. Timestamps only move forward so a late-processed older message cannot
     // shrink the 24 h window (lastInboundAt) or replace a newer preview.
@@ -287,7 +310,6 @@ async function persistMessage(conversation: Conversation, message: ParsedInbound
       data: { lastMessageAt: ts, lastMessagePreview: messagePreview(message) },
     })
 
-    // A turn for an AI conversation is scheduled by PR3.6b from `moved.scheduleAiTurn`.
-    return { ...created, notifyActivity: moved.notifyActivity }
+    return { id: created.id, media: created.media, notifyActivity: moved.notifyActivity, scheduleAiTurn: moved.scheduleAiTurn }
   })
 }

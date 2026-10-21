@@ -40,6 +40,7 @@ vi.mock("../contacts", () => ({
 }))
 
 import { setNotifyPort } from "@/lib/notifications/port"
+import { setAiTurnScheduler } from "../ai-turn-port"
 import { messagePreview, parseInboundMessage, processInboundMessage } from "../inbound"
 
 const RECEIVED = new Date("2026-10-19T12:00:00Z")
@@ -71,6 +72,7 @@ beforeEach(() => {
   })
   m.tx.whatsAppMessage.create.mockImplementation(async ({ data }) => ({
     id: "msg1",
+    createdAt: new Date("2026-10-20T12:00:00.000Z"),
     media: data.media ? { status: "PENDING" } : null,
   }))
   // The state machine re-reads the conversation inside the transaction (version 5).
@@ -84,6 +86,73 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs()
   setNotifyPort()
+  setAiTurnScheduler()
+})
+
+describe("processInboundMessage: AI turn (AI-1)", () => {
+  const schedule = vi.fn()
+
+  beforeEach(() => {
+    schedule.mockReset()
+    schedule.mockImplementation(async () => {
+      m.order.push("schedule")
+    })
+    setAiTurnScheduler(schedule)
+    vi.stubEnv("WHATSAPP_AI_ENABLED", "true")
+  })
+
+  it("schedules a turn for an AI conversation after the message is committed", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(schedule).toHaveBeenCalledWith("conv1")
+    expect(m.order.indexOf("schedule")).toBeGreaterThan(m.order.indexOf("transaction"))
+  })
+
+  it("does not schedule a turn for a HUMAN conversation, a paused AI, or with AI off", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "HUMAN", stateVersion: 5, aiPaused: false })
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: true })
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    vi.stubEnv("WHATSAPP_AI_ENABLED", "false")
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(schedule).not.toHaveBeenCalled()
+  })
+
+  it("moves the AI cursor to the reopening message, so staff-handled backlog is never replayed", async () => {
+    const createdAt = new Date("2026-10-23T15:00:00.500Z")
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "CLOSED", stateVersion: 5, aiPaused: false })
+    m.tx.whatsAppMessage.create.mockImplementation(async () => ({ id: "msg1", createdAt, media: null }))
+
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(m.tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: "conv1" },
+      data: { aiCursorAt: new Date(createdAt.getTime() - 1) },
+    })
+    expect(schedule).toHaveBeenCalledWith("conv1")
+  })
+
+  it("leaves the cursor alone for a message to an open AI conversation", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(m.tx.conversation.update.mock.calls.some((call) => "aiCursorAt" in call[0].data)).toBe(false)
+  })
+
+  it("keeps the stored message when scheduling fails", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+    schedule.mockRejectedValue(new Error("queue down"))
+
+    await expect(processInboundMessage(payloadOf(fixtures.text))).resolves.toBeUndefined()
+    expect(m.tx.whatsAppMessage.create).toHaveBeenCalled()
+  })
 })
 
 describe("parseInboundMessage", () => {

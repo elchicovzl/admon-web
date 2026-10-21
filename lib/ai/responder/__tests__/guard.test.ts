@@ -32,6 +32,10 @@ describe("guardModelOutput: grounding (AI-3, AI-4, S-AI-3)", () => {
     })
   })
 
+  it("treats a reply with no sourceIds field as an answer without sources", () => {
+    expect(guardModelOutput({ type: "ANSWER", text: "Texto." } as never, allowed)).toMatchObject({ kind: "FALLBACK", reason: "NO_SOURCES" })
+  })
+
   it("falls back when the model ends without calling sendReply", () => {
     expect(guardModelOutput(null, allowed)).toMatchObject({ kind: "FALLBACK", reason: "NO_TOOL_CALL", failure: true })
   })

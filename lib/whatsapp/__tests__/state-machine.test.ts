@@ -50,6 +50,13 @@ describe("inbound", () => {
     expect(ok(transition("CLOSED", "INBOUND", AI_OFF))).toMatchObject({ to: "HUMAN", auditEvent: "INBOUND_REOPEN" })
   })
 
+  it("schedules an AI turn for the message that reopens or starts a conversation into AI (AI-1)", () => {
+    expect(ok(transition("CLOSED", "INBOUND", AI_ON))).toMatchObject({ to: "AI", scheduleAiTurn: true })
+    expect(ok(transition(null, "INBOUND", AI_ON))).toMatchObject({ to: "AI", scheduleAiTurn: true })
+    expect(ok(transition("CLOSED", "INBOUND", AI_OFF))).toMatchObject({ to: "HUMAN", scheduleAiTurn: false })
+    expect(ok(transition(null, "INBOUND", AI_OFF))).toMatchObject({ to: "HUMAN", scheduleAiTurn: false })
+  })
+
   it("keeps AI and schedules a turn only when the AI is effective", () => {
     expect(ok(transition("AI", "INBOUND", AI_ON))).toMatchObject({ to: "AI", changed: false, scheduleAiTurn: true })
     // paused (aiEffective false) behaves like HUMAN for replies

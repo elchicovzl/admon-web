@@ -1,4 +1,5 @@
 import { registerTranscriptionWorkers } from "@/lib/ai/transcription-worker"
+import { registerAiTurnWorkers } from "@/lib/ai/turn-worker"
 import { loadRuntimeConfig } from "@/lib/config/runtime-config"
 import { registerKnowledgeWorkers } from "@/lib/knowledge/worker"
 import { registerWhatsAppWorkers } from "@/lib/whatsapp/event-worker"
@@ -50,6 +51,7 @@ export async function bootstrapRuntime(
   registerWhatsAppWorkers()
   registerKnowledgeWorkers()
   registerTranscriptionWorkers()
+  registerAiTurnWorkers()
   const workers = await startWorkers(boss)
   console.info(`[queue] started (${workers} workers registered)`)
 }

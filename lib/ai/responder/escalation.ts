@@ -14,6 +14,8 @@ export const EscalationReason = {
   REPEATED_FAILURE: "REPEATED_FAILURE",
   DOCUMENT_REVIEW: "DOCUMENT_REVIEW",
   AI_FAILURE: "AI_FAILURE",
+  /** AI_MAX_TURNS_PER_DAY reached for the conversation. */
+  TURN_LIMIT: "TURN_LIMIT",
 } as const
 
 export type EscalationReason = (typeof EscalationReason)[keyof typeof EscalationReason]
