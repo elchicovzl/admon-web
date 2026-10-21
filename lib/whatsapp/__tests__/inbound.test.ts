@@ -40,6 +40,7 @@ vi.mock("../contacts", () => ({
 }))
 
 import { setNotifyPort } from "@/lib/notifications/port"
+import { setAiTurnScheduler } from "../ai-turn-port"
 import { messagePreview, parseInboundMessage, processInboundMessage } from "../inbound"
 
 const RECEIVED = new Date("2026-10-19T12:00:00Z")
@@ -84,6 +85,51 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs()
   setNotifyPort()
+  setAiTurnScheduler()
+})
+
+describe("processInboundMessage: AI turn (AI-1)", () => {
+  const schedule = vi.fn()
+
+  beforeEach(() => {
+    schedule.mockReset()
+    schedule.mockImplementation(async () => {
+      m.order.push("schedule")
+    })
+    setAiTurnScheduler(schedule)
+    vi.stubEnv("WHATSAPP_AI_ENABLED", "true")
+  })
+
+  it("schedules a turn for an AI conversation after the message is committed", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(schedule).toHaveBeenCalledWith("conv1")
+    expect(m.order.indexOf("schedule")).toBeGreaterThan(m.order.indexOf("transaction"))
+  })
+
+  it("does not schedule a turn for a HUMAN conversation, a paused AI, or with AI off", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "HUMAN", stateVersion: 5, aiPaused: false })
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: true })
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    vi.stubEnv("WHATSAPP_AI_ENABLED", "false")
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(schedule).not.toHaveBeenCalled()
+  })
+
+  it("keeps the stored message when scheduling fails", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+    schedule.mockRejectedValue(new Error("queue down"))
+
+    await expect(processInboundMessage(payloadOf(fixtures.text))).resolves.toBeUndefined()
+    expect(m.tx.whatsAppMessage.create).toHaveBeenCalled()
+  })
 })
 
 describe("parseInboundMessage", () => {

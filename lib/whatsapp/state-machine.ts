@@ -109,10 +109,11 @@ export function transition(
     case "INBOUND": {
       const entry = context.aiEffective ? "AI" : "HUMAN"
       switch (from) {
+        // The message that starts or reopens a conversation into AI is answered by the AI too (AI-1).
         case null:
-          return moved(null, entry, "INBOUND_FIRST_CONTACT")
+          return moved(null, entry, "INBOUND_FIRST_CONTACT", { scheduleAiTurn: context.aiEffective })
         case "CLOSED":
-          return moved("CLOSED", entry, "INBOUND_REOPEN")
+          return moved("CLOSED", entry, "INBOUND_REOPEN", { scheduleAiTurn: context.aiEffective })
         case "AI":
           return moved("AI", "AI", "INBOUND", { scheduleAiTurn: context.aiEffective })
         case "HUMAN":
