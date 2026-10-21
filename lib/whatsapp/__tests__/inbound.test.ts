@@ -72,6 +72,7 @@ beforeEach(() => {
   })
   m.tx.whatsAppMessage.create.mockImplementation(async ({ data }) => ({
     id: "msg1",
+    createdAt: new Date("2026-10-20T12:00:00.000Z"),
     media: data.media ? { status: "PENDING" } : null,
   }))
   // The state machine re-reads the conversation inside the transaction (version 5).
@@ -121,6 +122,28 @@ describe("processInboundMessage: AI turn (AI-1)", () => {
     await processInboundMessage(payloadOf(fixtures.text))
 
     expect(schedule).not.toHaveBeenCalled()
+  })
+
+  it("moves the AI cursor to the reopening message, so staff-handled backlog is never replayed", async () => {
+    const createdAt = new Date("2026-10-23T15:00:00.500Z")
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "CLOSED", stateVersion: 5, aiPaused: false })
+    m.tx.whatsAppMessage.create.mockImplementation(async () => ({ id: "msg1", createdAt, media: null }))
+
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(m.tx.conversation.update).toHaveBeenCalledWith({
+      where: { id: "conv1" },
+      data: { aiCursorAt: new Date(createdAt.getTime() - 1) },
+    })
+    expect(schedule).toHaveBeenCalledWith("conv1")
+  })
+
+  it("leaves the cursor alone for a message to an open AI conversation", async () => {
+    m.tx.conversation.findUnique.mockResolvedValue({ status: "AI", stateVersion: 5, aiPaused: false })
+
+    await processInboundMessage(payloadOf(fixtures.text))
+
+    expect(m.tx.conversation.update.mock.calls.some((call) => "aiCursorAt" in call[0].data)).toBe(false)
   })
 
   it("keeps the stored message when scheduling fails", async () => {

@@ -16,7 +16,7 @@ import { buildHistory, type HistoryMessage } from "./history"
 import { MEDIA_POLICY_LIMITS, classifyMedia } from "./media-policy"
 import { PROMPT_VERSION, buildSystemPrompt, buildTurnContext, type TurnContext } from "./prompt"
 import { AI_FAILURE_HOLDING_TEXT, TRANSCRIPTION_FAILED_TEXT, UNSUPPORTED_MEDIA_TEXT, handoffText } from "./texts"
-import { buildResponderTools, toolResultForModel } from "./tools"
+import { MODEL_ESCALATION_REASONS, buildResponderTools, toolResultForModel } from "./tools"
 import { recordChatTurnUsage, setUsageOutcome, type ChatTurnUsage } from "./usage"
 
 /**
@@ -35,8 +35,6 @@ import { recordChatTurnUsage, setUsageOutcome, type ChatTurnUsage } from "./usag
 
 export interface TurnJob {
   conversationId: string
-  /** Times this batch was discarded because the client kept writing. */
-  discards?: number
 }
 
 export type TurnOutcome =
@@ -50,6 +48,8 @@ export type TurnOutcome =
 /** After this many discards caused by new client messages, the turn answers anyway. */
 const MAX_DISCARDS = 2
 const PENDING_LIMIT = 50
+/** Images and PDFs given to the model in one turn; the rest are named, not read. */
+const MAX_ATTACHMENTS = 4
 const HISTORY_FETCH = 30
 const MAX_OUTPUT_TOKENS = 600
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -59,6 +59,7 @@ const pendingSelect = {
   type: true,
   text: true,
   timestamp: true,
+  createdAt: true,
   media: {
     select: { status: true, mimeType: true, sizeBytes: true, durationSec: true, transcript: true, transcriptStatus: true, s3Key: true },
   },
@@ -79,6 +80,7 @@ interface PendingMessage {
   type: MessageType
   text: string | null
   timestamp: Date
+  createdAt: Date
   media: PendingMedia | null
 }
 
@@ -92,10 +94,23 @@ function isMediaPending(message: PendingMessage): boolean {
 
 type UserPart = TextPart | ImagePart | FilePart
 
-/** Turns the pending batch into the user message parts the model reads (MH-5). */
+const TRANSCRIPT_FAILED_NOTE = "[Nota de voz que no se pudo transcribir]"
+
+/**
+ * Turns the pending batch into the user message parts the model reads (MH-5). Notes (a voice note
+ * that failed, attachments over the cap) are only context: a batch of notes alone has nothing to
+ * answer and gets the deterministic reply instead.
+ */
 async function buildUserParts(pending: PendingMessage[]): Promise<{ parts: UserPart[]; text: string; transcriptFailed: boolean }> {
   const parts: UserPart[] = []
+  const notes = new Set<UserPart>()
+  const note = (text: string) => {
+    const part: TextPart = { type: "text", text }
+    notes.add(part)
+    parts.push(part)
+  }
   let transcriptFailed = false
+  let attachments = 0
   const caption = (message: PendingMessage) => message.text?.trim() || null
 
   for (const message of pending) {
@@ -108,6 +123,7 @@ async function buildUserParts(pending: PendingMessage[]): Promise<{ parts: UserP
         parts.push({ type: "text", text: `[Nota de voz] ${message.media.transcript.trim()}` })
       } else {
         transcriptFailed = true
+        note(TRANSCRIPT_FAILED_NOTE)
       }
       continue
     }
@@ -117,6 +133,11 @@ async function buildUserParts(pending: PendingMessage[]): Promise<{ parts: UserP
       : "UNSUPPORTED"
     const label = message.type === "IMAGE" ? "[Imagen]" : message.type === "DOCUMENT" ? "[Documento]" : null
     if (media?.status === "STORED" && media.s3Key && (decision === "VISION_IMAGE" || decision === "VISION_PDF")) {
+      if (attachments >= MAX_ATTACHMENTS) {
+        note(decision === "VISION_IMAGE" ? "[Imagen no revisada: demasiados adjuntos]" : "[Documento no revisado: demasiados adjuntos]")
+        if (caption(message) && label) parts.push({ type: "text", text: `${label} ${caption(message)}` })
+        continue
+      }
       try {
         const limit = decision === "VISION_IMAGE" ? MEDIA_POLICY_LIMITS.imageBytes : MEDIA_POLICY_LIMITS.pdfBytes
         const bytes = await getObjectBytes(media.s3Key, limit)
@@ -126,6 +147,7 @@ async function buildUserParts(pending: PendingMessage[]): Promise<{ parts: UserP
             ? { type: "image", image: bytes, mediaType: media.mimeType }
             : { type: "file", data: bytes, mediaType: "application/pdf" }
         )
+        attachments++
         continue
       } catch {
         console.error(`[ai] could not read attachment of message ${message.id}`)
@@ -135,7 +157,11 @@ async function buildUserParts(pending: PendingMessage[]): Promise<{ parts: UserP
     if (caption(message) && label) parts.push({ type: "text", text: `${label} ${caption(message)}` })
   }
 
-  const text = parts.filter((part): part is TextPart => part.type === "text").map((part) => part.text).join("\n")
+  if (parts.every((part) => notes.has(part))) return { parts: [], text: "", transcriptFailed }
+  const text = parts
+    .filter((part): part is TextPart => part.type === "text" && !notes.has(part))
+    .map((part) => part.text)
+    .join("\n")
   return { parts, text, transcriptFailed }
 }
 
@@ -159,36 +185,41 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
   })
   if (!conversation || conversation.status !== "AI" || conversation.aiPaused) return { status: "SKIPPED", reason: "NOT_AI" }
 
-  const pending: PendingMessage[] = await prisma.whatsAppMessage.findMany({
-    where: {
-      conversationId: conversation.id,
-      direction: "IN",
-      ...(conversation.aiCursorAt ? { timestamp: { gt: conversation.aiCursorAt } } : {}),
-    },
-    orderBy: [{ timestamp: "asc" }, { id: "asc" }],
-    take: PENDING_LIMIT,
-    select: pendingSelect,
-  })
+  // The cursor is server time (`createdAt`, ms precision): WhatsApp timestamps have one-second
+  // resolution, so two messages in the same second would hide one behind the cursor. The newest 50
+  // are read, so a long backlog never hides the latest message.
+  const pending: PendingMessage[] = (
+    await prisma.whatsAppMessage.findMany({
+      where: {
+        conversationId: conversation.id,
+        direction: "IN",
+        ...(conversation.aiCursorAt ? { createdAt: { gt: conversation.aiCursorAt } } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: PENDING_LIMIT,
+      select: pendingSelect,
+    })
+  ).reverse()
   if (pending.length === 0) return { status: "SKIPPED", reason: "NOTHING_PENDING" }
-  const oldest = pending[0].timestamp
-  const newest = pending[pending.length - 1].timestamp
+  const oldest = pending[0]
+  const newest = pending[pending.length - 1]
 
   // Never answer a stale batch (a backlog after an outage would read as nonsense, threat: stale replay).
-  if (now.getTime() - newest.getTime() > config.maxReplyAgeMinutes * 60 * 1000) {
+  if (now.getTime() - newest.timestamp.getTime() > config.maxReplyAgeMinutes * 60 * 1000) {
     await prisma.conversation.updateMany({
-      where: { id: conversation.id, OR: [{ aiCursorAt: null }, { aiCursorAt: { lt: newest } }] },
-      data: { aiCursorAt: newest },
+      where: { id: conversation.id, OR: [{ aiCursorAt: null }, { aiCursorAt: { lt: newest.createdAt } }] },
+      data: { aiCursorAt: newest.createdAt },
     })
     return { status: "SKIPPED", reason: "STALE" }
   }
 
   const debounce = decideDebounce(
-    { now, lastInboundAt: newest, oldestPendingAt: oldest, mediaPending: pending.some(isMediaPending) },
+    { now, lastInboundAt: newest.timestamp, oldestPendingAt: oldest.timestamp, mediaPending: pending.some(isMediaPending) },
     { debounceSeconds: config.debounceSeconds, debounceMaxSeconds: config.debounceMaxSeconds }
   )
   if (debounce.action === "WAIT") return { status: "WAIT", delaySeconds: debounce.delaySeconds }
 
-  const snapshot: TurnSnapshot = { conversationId: conversation.id, stateVersion: conversation.stateVersion, newestPendingAt: newest }
+  const snapshot: TurnSnapshot = { conversationId: conversation.id, stateVersion: conversation.stateVersion, newestPendingAt: newest.createdAt }
   const siteUrl = siteUrlFrom()
   const inHours = isBusinessHours(now)
   const nextSlot = inHours ? null : nextBusinessSlot(now)
@@ -207,6 +238,17 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
     })
     return result
   }
+  // Discards of this batch are counted in the usage records: the stately queue keeps one queued job,
+  // so a count carried in the job data would be lost whenever a new message had already queued one.
+  const discards = await prisma.aiUsageRecord.count({
+    where: {
+      conversationId: conversation.id,
+      kind: "CHAT_TURN",
+      outcome: "DISCARDED",
+      error: "NEWER_INBOUND",
+      createdAt: { gte: oldest.createdAt },
+    },
+  })
   const reply = (text: string, sourceChunkIds: string[], usageRecordId: string | null, consecutiveFailures: number) =>
     commitAiReply({
       snapshot,
@@ -215,7 +257,7 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
       usageRecordId,
       consecutiveFailures,
       globalAi,
-      ignoreNewerInbound: (job.discards ?? 0) >= MAX_DISCARDS,
+      ignoreNewerInbound: discards >= MAX_DISCARDS,
       siteUrl,
       now,
     })
@@ -229,7 +271,13 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
   if (requested) return toOutcome(await escalate(requested, null), "ESCALATED")
 
   const aiRepliesToday = await prisma.whatsAppMessage.count({
-    where: { conversationId: conversation.id, direction: "OUT", source: "AI", timestamp: { gte: new Date(now.getTime() - DAY_MS) } },
+    where: {
+      conversationId: conversation.id,
+      direction: "OUT",
+      source: "AI",
+      status: { not: "FAILED" },
+      createdAt: { gte: new Date(now.getTime() - DAY_MS) },
+    },
   })
   if (aiRepliesToday >= config.maxTurnsPerDay) return toOutcome(await escalate(EscalationReason.TURN_LIMIT, null), "ESCALATED")
 
@@ -243,7 +291,7 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
 
   const history: HistoryMessage[] = (
     await prisma.whatsAppMessage.findMany({
-      where: { conversationId: conversation.id, timestamp: { lt: oldest } },
+      where: { conversationId: conversation.id, createdAt: { lt: oldest.createdAt } },
       orderBy: [{ timestamp: "desc" }, { id: "desc" }],
       take: HISTORY_FETCH,
       select: { direction: true, source: true, type: true, text: true, timestamp: true, media: { select: { transcript: true } } },
@@ -313,7 +361,8 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
     return { status: "FAILED" }
   }
 
-  const calls = result.steps.flatMap((step) => step.toolCalls ?? [])
+  // A call the SDK could not parse against the schema is marked `invalid`: never act on it.
+  const calls = result.steps.flatMap((step) => step.toolCalls ?? []).filter((call) => !(call as { invalid?: boolean }).invalid)
   const terminal = [...calls].reverse().find((call) => call.toolName === "sendReply" || call.toolName === "escalateToHuman")
   const usageRecordId = await recordChatTurnUsage({
     ...usageBase,
@@ -330,8 +379,12 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
 
   let outcome: TurnOutcome
   if (terminal?.toolName === "escalateToHuman") {
-    const input = terminal.input as { reason: EscalationReason }
-    outcome = toOutcome(await escalate(input.reason, usageRecordId), "ESCALATED")
+    const input = terminal.input as { reason?: string }
+    // Reasons such as AI_FAILURE or TURN_LIMIT are decided by code, never by the model.
+    const reason = (MODEL_ESCALATION_REASONS as readonly string[]).includes(input.reason ?? "")
+      ? (input.reason as EscalationReason)
+      : EscalationReason.LOW_CONFIDENCE
+    outcome = toOutcome(await escalate(reason, usageRecordId), "ESCALATED")
   } else {
     const decision = guardModelOutput((terminal?.input as TerminalReply | undefined) ?? null, allowedSourceIds)
     if (decision.kind === "SEND") {
@@ -344,6 +397,7 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
         : toOutcome(await reply(decision.text, [], usageRecordId, failures), "REPLIED")
     }
   }
-  await setUsageOutcome(usageRecordId, outcome.status === "DISCARDED" ? "DISCARDED" : outcome.status === "ESCALATED" ? "ESCALATED" : "REPLIED")
+  if (outcome.status === "DISCARDED") await setUsageOutcome(usageRecordId, "DISCARDED", outcome.reason)
+  else await setUsageOutcome(usageRecordId, outcome.status === "ESCALATED" ? "ESCALATED" : "REPLIED")
   return outcome
 }

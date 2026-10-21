@@ -41,13 +41,13 @@ describe("enqueueAiTurn", () => {
   it("queues one turn per conversation (stately singletonKey) after the debounce delay", async () => {
     await enqueueAiTurn("conv-1")
 
-    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1", discards: 0 }, { startAfter: 8, singletonKey: "conv-1" })
+    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1" }, { startAfter: 8, singletonKey: "conv-1" })
   })
 
-  it("can ask for a specific delay and carry the discard count", async () => {
-    await enqueueAiTurn("conv-1", { delaySeconds: 5, discards: 1 })
+  it("can ask for a specific delay", async () => {
+    await enqueueAiTurn("conv-1", { delaySeconds: 5 })
 
-    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1", discards: 1 }, { startAfter: 5, singletonKey: "conv-1" })
+    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1" }, { startAfter: 5, singletonKey: "conv-1" })
   })
 
   it("queues nothing while AI is off", async () => {
@@ -63,7 +63,7 @@ describe("ai.turn handler (AI-14)", () => {
   it("runs the turn and does nothing more on a final outcome", async () => {
     await handleAiTurnJobs([job({})])
 
-    expect(m.runAiTurn).toHaveBeenCalledWith({ conversationId: "conv-1", discards: 0 })
+    expect(m.runAiTurn).toHaveBeenCalledWith({ conversationId: "conv-1" })
     expect(m.send).not.toHaveBeenCalled()
   })
 
@@ -72,15 +72,15 @@ describe("ai.turn handler (AI-14)", () => {
 
     await handleAiTurnJobs([job({})])
 
-    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1", discards: 0 }, { startAfter: 5, singletonKey: "conv-1" })
+    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1" }, { startAfter: 5, singletonKey: "conv-1" })
   })
 
-  it("re-runs the combined batch when the client wrote again, counting the discard", async () => {
+  it("asks for another turn when the client wrote again (usually already queued by that message)", async () => {
     m.runAiTurn.mockResolvedValue({ status: "DISCARDED", reason: "NEWER_INBOUND" })
 
-    await handleAiTurnJobs([job({ discards: 1 })])
+    await handleAiTurnJobs([job({})])
 
-    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1", discards: 2 }, { startAfter: 8, singletonKey: "conv-1" })
+    expect(m.send).toHaveBeenCalledWith("ai.turn", { conversationId: "conv-1" }, { startAfter: 8, singletonKey: "conv-1" })
   })
 
   it("does not re-queue other discards (a person took over)", async () => {

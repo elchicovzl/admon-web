@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const m = vi.hoisted(() => ({ create: vi.fn() }))
-vi.mock("@/lib/db/prisma", () => ({ default: { aiUsageRecord: { create: m.create } } }))
+const m = vi.hoisted(() => ({ create: vi.fn(), update: vi.fn() }))
+vi.mock("@/lib/db/prisma", () => ({ default: { aiUsageRecord: { create: m.create, update: m.update } } }))
 
-import { estimateChatCostUsd, estimateTranscriptionCostUsd, recordChatTurnUsage, recordTranscriptionUsage } from "../responder/usage"
+import { estimateChatCostUsd, estimateTranscriptionCostUsd, recordChatTurnUsage, recordTranscriptionUsage, setUsageOutcome } from "../responder/usage"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -121,5 +121,17 @@ describe("recordChatTurnUsage (AI-13)", () => {
     await expect(
       recordChatTurnUsage({ conversationId: "c", outcome: "FAILED", model: "m", promptVersion: "v", steps: 0, inputTokens: 0, outputTokens: 0, toolCalls: [], retrievalScores: [], retrievedChunkIds: [], topSimilarity: null, latencyMs: 1, error: "PROVIDER_ERROR" })
     ).resolves.toBeNull()
+  })
+})
+
+describe("setUsageOutcome", () => {
+  it("stores the final outcome, and why a reply was discarded", async () => {
+    m.update.mockResolvedValue({})
+
+    await setUsageOutcome("usage-1", "DISCARDED", "NEWER_INBOUND")
+    await setUsageOutcome("usage-1", "REPLIED")
+
+    expect(m.update).toHaveBeenNthCalledWith(1, { where: { id: "usage-1" }, data: { outcome: "DISCARDED", error: "NEWER_INBOUND" } })
+    expect(m.update).toHaveBeenNthCalledWith(2, { where: { id: "usage-1" }, data: { outcome: "REPLIED" } })
   })
 })

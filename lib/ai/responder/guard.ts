@@ -70,15 +70,16 @@ export function guardModelOutput(reply: TerminalReply | null, allowedSourceIds: 
   const text = toWhatsAppText(reply.text)
   if (!/[\p{L}\p{N}]/u.test(text)) return fallback("EMPTY")
 
+  const sourceIds = Array.isArray(reply.sourceIds) ? reply.sourceIds : []
   const isAnswer = reply.type === "ANSWER" || text.length > SHORT_REPLY_LENGTH || looksFactual(text)
   if (isAnswer) {
-    if (reply.sourceIds.length === 0) return fallback("NO_SOURCES")
-    if (reply.sourceIds.some((id) => !allowedSourceIds.has(id))) return fallback("FOREIGN_SOURCE")
+    if (sourceIds.length === 0) return fallback("NO_SOURCES")
+    if (sourceIds.some((id) => !allowedSourceIds.has(id))) return fallback("FOREIGN_SOURCE")
   }
   return {
     kind: "SEND",
     type: isAnswer ? "ANSWER" : reply.type,
     text: capLength(text),
-    sourceIds: isAnswer ? [...new Set(reply.sourceIds)] : [],
+    sourceIds: isAnswer ? [...new Set(sourceIds)] : [],
   }
 }

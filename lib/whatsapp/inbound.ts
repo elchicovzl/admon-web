@@ -286,8 +286,17 @@ async function persistMessage(conversation: Conversation, message: ParsedInbound
             }
           : {}),
       },
-      select: { id: true, media: { select: { status: true } } },
+      select: { id: true, createdAt: true, media: { select: { status: true } } },
     })
+
+    // A reopen into AI answers only from this message on: what came before was handled (or left)
+    // by staff while the conversation was closed, and must never be replayed by the AI turn.
+    if (moved.changed && moved.from === "CLOSED" && moved.to === "AI") {
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: { aiCursorAt: new Date(created.createdAt.getTime() - 1) },
+      })
+    }
 
     // Counters. Timestamps only move forward so a late-processed older message cannot
     // shrink the 24 h window (lastInboundAt) or replace a newer preview.
@@ -301,6 +310,6 @@ async function persistMessage(conversation: Conversation, message: ParsedInbound
       data: { lastMessageAt: ts, lastMessagePreview: messagePreview(message) },
     })
 
-    return { ...created, notifyActivity: moved.notifyActivity, scheduleAiTurn: moved.scheduleAiTurn }
+    return { id: created.id, media: created.media, notifyActivity: moved.notifyActivity, scheduleAiTurn: moved.scheduleAiTurn }
   })
 }

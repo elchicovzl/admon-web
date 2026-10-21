@@ -32,7 +32,7 @@ export function toolResultForModel(result: RetrievalResult): SearchToolResult {
 }
 
 /** Reasons the model may give; the rest (forbidden topic, failures) are decided by code. */
-const MODEL_ESCALATION_REASONS = [
+export const MODEL_ESCALATION_REASONS = [
   EscalationReason.USER_REQUEST,
   EscalationReason.COMPLAINT,
   EscalationReason.OUT_OF_SCOPE,

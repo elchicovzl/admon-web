@@ -13,15 +13,17 @@ import { recordAiMessageSent } from "./sent-hook"
  * `ai.turn` (stately: at most one queued and one active job per conversation, singletonKey =
  * conversationId). The first run starts after the debounce (AI_DEBOUNCE_SECONDS); a turn that must
  * wait (client still typing, media pending) or was discarded because the client wrote again queues
- * itself again, which the stately policy allows while it is the active job.
+ * itself again, which the stately policy allows while it is the active job. When a turn is already
+ * queued that send is a no-op, so nothing is carried in the job data: the turn counts its own
+ * discards in the usage records.
  */
 
-export async function enqueueAiTurn(conversationId: string, options: { delaySeconds?: number; discards?: number } = {}): Promise<void> {
+export async function enqueueAiTurn(conversationId: string, options: { delaySeconds?: number } = {}): Promise<void> {
   const config = getAiConfig()
   if (!config.enabled) return
   const boss = await getBoss()
   const defaults = buildQueueSendDefaults(config)[QUEUES.AI_TURN]
-  const data: TurnJob = { conversationId, discards: options.discards ?? 0 }
+  const data: TurnJob = { conversationId }
   await boss.send(QUEUES.AI_TURN, data, {
     ...defaults,
     ...(options.delaySeconds !== undefined ? { startAfter: options.delaySeconds } : {}),
@@ -33,12 +35,12 @@ export async function enqueueAiTurn(conversationId: string, options: { delaySeco
 export async function handleAiTurnJobs(jobs: Job<TurnJob>[]): Promise<void> {
   if (!isWhatsAppEnabled()) return
   for (const job of jobs) {
-    const data = { conversationId: job.data.conversationId, discards: job.data.discards ?? 0 }
-    const outcome = await runAiTurn(data)
+    const conversationId = job.data.conversationId
+    const outcome = await runAiTurn({ conversationId })
     if (outcome.status === "WAIT") {
-      await enqueueAiTurn(data.conversationId, { delaySeconds: outcome.delaySeconds, discards: data.discards })
+      await enqueueAiTurn(conversationId, { delaySeconds: outcome.delaySeconds })
     } else if (outcome.status === "DISCARDED" && outcome.reason === "NEWER_INBOUND") {
-      await enqueueAiTurn(data.conversationId, { discards: data.discards + 1 })
+      await enqueueAiTurn(conversationId)
     }
   }
 }

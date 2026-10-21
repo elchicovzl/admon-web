@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   conversationUpdateMany: vi.fn(),
   messageFindMany: vi.fn(),
   messageCount: vi.fn(),
+  usageCount: vi.fn(),
   globalAi: vi.fn(),
   getAiConfig: vi.fn(),
   generateText: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/lib/db/prisma", () => ({
   default: {
     conversation: { findUnique: m.conversationFindUnique, updateMany: m.conversationUpdateMany },
     whatsAppMessage: { findMany: m.messageFindMany, count: m.messageCount },
+    aiUsageRecord: { count: m.usageCount },
   },
 }))
 vi.mock("@/lib/whatsapp/transitions", () => ({ isAiGloballyEnabled: m.globalAi }))
@@ -72,6 +74,7 @@ function inbound(overrides: Record<string, unknown> = {}) {
     type: "TEXT",
     text: "¿Qué necesito para afiliar a un empleado?",
     timestamp: ago(20),
+    createdAt: ago(19),
     media: null,
     ...overrides,
   }
@@ -107,6 +110,7 @@ beforeEach(() => {
   // First call: pending inbound; second call: earlier history.
   m.messageFindMany.mockResolvedValueOnce([inbound()]).mockResolvedValue([])
   m.messageCount.mockResolvedValue(0)
+  m.usageCount.mockResolvedValue(0)
   m.retrieve.mockResolvedValue(RETRIEVED)
   m.recordUsage.mockResolvedValue("usage-1")
   m.commitReply.mockResolvedValue({ status: "QUEUED", messageId: "out-1" })
@@ -137,16 +141,23 @@ describe("cursor, staleness and debounce (S-AI-13, AI-7)", () => {
     m.messageFindMany.mockReset().mockResolvedValue([])
 
     expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "SKIPPED", reason: "NOTHING_PENDING" })
-    expect(m.messageFindMany.mock.calls[0][0].where).toMatchObject({ timestamp: { gt: ago(20) } })
+    // The cursor is server time (createdAt, ms precision), not WhatsApp's second-resolution timestamp.
+    expect(m.messageFindMany.mock.calls[0][0].where).toMatchObject({ createdAt: { gt: ago(20) } })
+  })
+
+  it("reads the newest 50 pending messages, so a long backlog never hides the latest one", async () => {
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.messageFindMany.mock.calls[0][0]).toMatchObject({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 50 })
   })
 
   it("skips a stale batch (older than AI_MAX_REPLY_AGE_MINUTES) and moves the cursor past it", async () => {
-    m.messageFindMany.mockReset().mockResolvedValueOnce([inbound({ timestamp: ago(16 * 60) })]).mockResolvedValue([])
+    m.messageFindMany.mockReset().mockResolvedValueOnce([inbound({ timestamp: ago(16 * 60), createdAt: ago(16 * 60 - 1) })]).mockResolvedValue([])
 
     expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "SKIPPED", reason: "STALE" })
     expect(m.conversationUpdateMany).toHaveBeenCalledWith({
-      where: { id: "conv-1", OR: [{ aiCursorAt: null }, { aiCursorAt: { lt: ago(16 * 60) } }] },
-      data: { aiCursorAt: ago(16 * 60) },
+      where: { id: "conv-1", OR: [{ aiCursorAt: null }, { aiCursorAt: { lt: ago(16 * 60 - 1) } }] },
+      data: { aiCursorAt: ago(16 * 60 - 1) },
     })
     expect(m.generateText).not.toHaveBeenCalled()
   })
@@ -173,7 +184,7 @@ describe("answer (AI-16, AI-13)", () => {
     expect(call.messages.at(-1)).toEqual({ role: "user", content: [{ type: "text", text: "¿Qué necesito para afiliar a un empleado?" }] })
     expect(m.commitReply).toHaveBeenCalledWith(
       expect.objectContaining({
-        snapshot: { conversationId: "conv-1", stateVersion: 7, newestPendingAt: ago(20) },
+        snapshot: { conversationId: "conv-1", stateVersion: 7, newestPendingAt: ago(19) },
         text: "Necesita la cédula.",
         sourceChunkIds: ["chunk-1"],
         usageRecordId: "usage-1",
@@ -221,13 +232,26 @@ describe("race and newer messages (CH-5, S-CH-2, S-AI-8)", () => {
 
     expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "DISCARDED", reason: "NOT_AI" })
     expect(m.recordUsage).toHaveBeenCalled()
-    expect(m.setOutcome).toHaveBeenCalledWith("usage-1", "DISCARDED")
+    expect(m.setOutcome).toHaveBeenCalledWith("usage-1", "DISCARDED", "NOT_AI")
   })
 
-  it("answers anyway after two discards caused by new client messages", async () => {
-    await runAiTurn({ conversationId: "conv-1", discards: 2 }, { now: () => NOW })
+  it("counts earlier discards for this batch in the database (the stately queue keeps only one queued job)", async () => {
+    m.usageCount.mockResolvedValue(2)
 
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.usageCount).toHaveBeenCalledWith({
+      where: { conversationId: "conv-1", kind: "CHAT_TURN", outcome: "DISCARDED", error: "NEWER_INBOUND", createdAt: { gte: ago(19) } },
+    })
     expect(m.commitReply).toHaveBeenCalledWith(expect.objectContaining({ ignoreNewerInbound: true }))
+  })
+
+  it("keeps checking for newer messages before the second discard", async () => {
+    m.usageCount.mockResolvedValue(1)
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.commitReply).toHaveBeenCalledWith(expect.objectContaining({ ignoreNewerInbound: false }))
   })
 })
 
@@ -273,10 +297,37 @@ describe("handoff (AI-9, S-AI-4/5)", () => {
     await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
 
     expect(m.messageCount).toHaveBeenCalledWith({
-      where: { conversationId: "conv-1", direction: "OUT", source: "AI", timestamp: { gte: new Date(NOW.getTime() - 24 * 3600 * 1000) } },
+      where: {
+        conversationId: "conv-1",
+        direction: "OUT",
+        source: "AI",
+        status: { not: "FAILED" },
+        createdAt: { gte: new Date(NOW.getTime() - 24 * 3600 * 1000) },
+      },
     })
     expect(m.commitEscalation).toHaveBeenCalledWith(expect.objectContaining({ reason: "TURN_LIMIT" }))
     expect(m.generateText).not.toHaveBeenCalled()
+  })
+})
+
+describe("invalid tool calls (AI SDK marks them invalid)", () => {
+  function modelReturns(calls: Record<string, unknown>[]) {
+    m.generateText.mockResolvedValue({ steps: [{ toolCalls: calls }], totalUsage: { inputTokens: 10, outputTokens: 5 } })
+  }
+
+  it("ignores a call the SDK marked invalid and sends the fallback instead of crashing", async () => {
+    modelReturns([{ toolName: "sendReply", input: { type: "ANSWER", text: "x" }, invalid: true }])
+
+    expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "REPLIED" })
+    expect(m.commitReply).toHaveBeenCalledWith(expect.objectContaining({ text: FALLBACK_TEXT, consecutiveFailures: 1 }))
+  })
+
+  it("never lets the model pick a reason reserved for the code (AI_FAILURE, TURN_LIMIT...)", async () => {
+    modelReturns([{ toolName: "escalateToHuman", input: { reason: "AI_FAILURE", summary: "x" } }])
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.commitEscalation).toHaveBeenCalledWith(expect.objectContaining({ reason: "LOW_CONFIDENCE" }))
   })
 })
 
@@ -343,9 +394,10 @@ describe("media (S-MH-2/4/5, MH-5)", () => {
   it("gives the model images and PDFs within the media policy (MH-5)", async () => {
     const bytes = new Uint8Array([1, 2])
     m.getObjectBytes.mockResolvedValue(bytes)
+    // Newest first, as the query returns them.
     m.messageFindMany.mockReset().mockResolvedValueOnce([
+      inbound({ id: "in-2", type: "DOCUMENT", text: null, timestamp: ago(15), createdAt: ago(14), media: { status: "STORED", mimeType: "application/pdf", sizeBytes: 1000, durationSec: null, transcript: null, transcriptStatus: null, s3Key: "pdf" } }),
       inbound({ type: "IMAGE", text: "mi cédula", media: { status: "STORED", mimeType: "image/jpeg", sizeBytes: 1000, durationSec: null, transcript: null, transcriptStatus: null, s3Key: "img" } }),
-      inbound({ id: "in-2", type: "DOCUMENT", text: null, timestamp: ago(15), media: { status: "STORED", mimeType: "application/pdf", sizeBytes: 1000, durationSec: null, transcript: null, transcriptStatus: null, s3Key: "pdf" } }),
     ]).mockResolvedValue([])
 
     await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
@@ -356,5 +408,30 @@ describe("media (S-MH-2/4/5, MH-5)", () => {
       { type: "text", text: "[Documento]" },
       { type: "file", data: bytes, mediaType: "application/pdf" },
     ])
+  })
+
+  it("tells the model about a voice note it could not hear when the client also wrote", async () => {
+    m.messageFindMany.mockReset().mockResolvedValueOnce([inbound({ createdAt: ago(10) }), voice("FAILED")]).mockResolvedValue([])
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.generateText.mock.calls[0][0].messages.at(-1).content).toEqual([
+      { type: "text", text: "[Nota de voz que no se pudo transcribir]" },
+      { type: "text", text: "¿Qué necesito para afiliar a un empleado?" },
+    ])
+  })
+
+  it("gives the model at most 4 attachments per turn", async () => {
+    m.getObjectBytes.mockResolvedValue(new Uint8Array([1]))
+    const images = Array.from({ length: 6 }, (_, i) =>
+      inbound({ id: `img-${i}`, type: "IMAGE", text: null, createdAt: ago(30 - i), media: { status: "STORED", mimeType: "image/png", sizeBytes: 10, durationSec: null, transcript: null, transcriptStatus: null, s3Key: `k${i}` } })
+    ).reverse()
+    m.messageFindMany.mockReset().mockResolvedValueOnce(images).mockResolvedValue([])
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    const content = m.generateText.mock.calls[0][0].messages.at(-1).content as { type: string; text?: string }[]
+    expect(content.filter((part) => part.type === "image")).toHaveLength(4)
+    expect(content.filter((part) => part.text === "[Imagen no revisada: demasiados adjuntos]")).toHaveLength(2)
   })
 })

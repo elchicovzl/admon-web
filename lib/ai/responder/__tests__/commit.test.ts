@@ -13,6 +13,7 @@ const m = vi.hoisted(() => {
     enqueueSend: vi.fn(),
     touch: vi.fn(),
     applyTransition: vi.fn(),
+    liveAi: vi.fn(),
     notify: vi.fn(),
   }
 })
@@ -28,7 +29,7 @@ vi.mock("@/lib/db/prisma", () => ({
 }))
 vi.mock("@/lib/whatsapp/send", () => ({ createOutboundMessage: m.createOutbound, enqueueOutboundSend: m.enqueueSend }))
 vi.mock("@/lib/whatsapp/outbound", () => ({ touchConversation: m.touch }))
-vi.mock("@/lib/whatsapp/transitions", () => ({ applyTransition: m.applyTransition }))
+vi.mock("@/lib/whatsapp/transitions", () => ({ applyTransition: m.applyTransition, isAiGloballyEnabled: m.liveAi }))
 vi.mock("@/lib/notifications/port", () => ({ getNotifyPort: () => ({ notify: m.notify }) }))
 
 import { consentNotice } from "../consent"
@@ -70,6 +71,7 @@ beforeEach(() => {
   m.touch.mockResolvedValue(undefined)
   m.applyTransition.mockResolvedValue({ ok: true, from: "AI", to: "ESCALATED", changed: true, stateVersion: 8, scheduleAiTurn: false, notifyActivity: false })
   m.notify.mockResolvedValue(undefined)
+  m.liveAi.mockResolvedValue(true)
 })
 
 describe("commitAiReply (CH-5, S-CH-2, S-AI-8)", () => {
@@ -125,12 +127,20 @@ describe("commitAiReply (CH-5, S-CH-2, S-AI-8)", () => {
     expect(await commitAiReply({ ...reply, globalAi: false })).toEqual({ status: "DISCARDED", reason: "AI_OFF" })
   })
 
+  it("re-reads the AI switch inside the locked transaction: turning AI off stops a reply in flight", async () => {
+    m.liveAi.mockResolvedValue(false)
+
+    expect(await commitAiReply(reply)).toEqual({ status: "DISCARDED", reason: "AI_OFF" })
+    expect(m.liveAi).toHaveBeenCalledWith(m.tx)
+    expect(m.createOutbound).not.toHaveBeenCalled()
+  })
+
   it("discards when the client wrote again after the batch, unless told to ignore it", async () => {
     m.tx.whatsAppMessage.count.mockResolvedValue(1)
 
     expect(await commitAiReply(reply)).toEqual({ status: "DISCARDED", reason: "NEWER_INBOUND" })
     expect(m.tx.whatsAppMessage.count).toHaveBeenCalledWith({
-      where: { conversationId: "conv-1", direction: "IN", timestamp: { gt: NEWEST } },
+      where: { conversationId: "conv-1", direction: "IN", createdAt: { gt: NEWEST } },
     })
     expect(await commitAiReply({ ...reply, ignoreNewerInbound: true })).toEqual({ status: "QUEUED", messageId: "msg-ai" })
   })
@@ -193,6 +203,13 @@ describe("commitAiEscalation (AI-9, S-AI-4/5)", () => {
     await commitAiEscalation({ ...escalation, outOfHours: true, attentionDueAt: monday })
 
     expect(m.applyTransition.mock.calls[0][0].escalation).toEqual({ reason: "USER_REQUEST", outOfHours: true, attentionDueAt: monday })
+  })
+
+  it("does not escalate with an AI message once AI was switched off, except to report an AI failure", async () => {
+    m.liveAi.mockResolvedValue(false)
+
+    expect(await commitAiEscalation(escalation)).toEqual({ status: "DISCARDED", reason: "AI_OFF" })
+    expect(await commitAiEscalation({ ...escalation, reason: "AI_FAILURE" })).toEqual({ status: "ESCALATED", messageId: "msg-ai" })
   })
 
   it("sends an AI_FAILURE notification for a provider failure (S-AI-11)", async () => {

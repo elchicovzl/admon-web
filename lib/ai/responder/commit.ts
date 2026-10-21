@@ -3,7 +3,7 @@ import prisma from "@/lib/db/prisma"
 import { getNotifyPort } from "@/lib/notifications/port"
 import { touchConversation } from "@/lib/whatsapp/outbound"
 import { createOutboundMessage, enqueueOutboundSend } from "@/lib/whatsapp/send"
-import { applyTransition } from "@/lib/whatsapp/transitions"
+import { applyTransition, isAiGloballyEnabled } from "@/lib/whatsapp/transitions"
 import { prefixConsent } from "./consent"
 import type { EscalationReason } from "./escalation"
 
@@ -11,8 +11,10 @@ import type { EscalationReason } from "./escalation"
  * The only place an AI turn writes (CH-5, S-CH-2, S-AI-8). The model call happens outside any
  * transaction; its result is committed here under `SELECT … FOR UPDATE` on the conversation, and
  * only if nothing changed while the model was thinking: still AI, same `stateVersion` (a person
- * taking over, a pause or a close bumps it), AI still on, and no newer client message. Otherwise
- * the reply is discarded and nothing is sent. The outbound row carries the decided version, so
+ * taking over or a close bumps it), not paused, AI still on, and no newer client message. Otherwise
+ * the reply is discarded and nothing is sent. The AI switch is re-read inside the transaction, so
+ * turning AI off stops a reply that was in flight. `aiPaused` is checked on its own: pausing does
+ * not bump the version. The outbound row carries the decided version, so
  * the send job also drops it if the state moves before delivery. Jobs and notifications run only
  * after the commit.
  */
@@ -21,7 +23,7 @@ export interface TurnSnapshot {
   conversationId: string
   /** `stateVersion` read before the model call. */
   stateVersion: number
-  /** Timestamp of the newest client message this turn answers; becomes `aiCursorAt`. */
+  /** Server time (`createdAt`) of the newest client message this turn answers; becomes `aiCursorAt`. */
   newestPendingAt: Date
 }
 
@@ -46,16 +48,16 @@ async function lockConversation(tx: Tx, conversationId: string): Promise<LockedC
 async function checkStillOurs(
   tx: Tx,
   snapshot: TurnSnapshot,
-  options: { globalAi: boolean; ignoreNewerInbound: boolean; checkVersion: boolean }
+  options: { globalAi: boolean; ignoreNewerInbound: boolean; checkVersion: boolean; allowAiOff?: boolean }
 ): Promise<{ ok: true; conversation: LockedConversation } | { ok: false; reason: DiscardReason }> {
   const conversation = await lockConversation(tx, snapshot.conversationId)
   if (!conversation || conversation.status !== "AI") return { ok: false, reason: "NOT_AI" }
   if (options.checkVersion && conversation.stateVersion !== snapshot.stateVersion) return { ok: false, reason: "VERSION" }
   if (conversation.aiPaused) return { ok: false, reason: "PAUSED" }
-  if (!options.globalAi) return { ok: false, reason: "AI_OFF" }
+  if (!options.allowAiOff && !(options.globalAi && (await isAiGloballyEnabled(tx)))) return { ok: false, reason: "AI_OFF" }
   if (!options.ignoreNewerInbound) {
     const newer = await tx.whatsAppMessage.count({
-      where: { conversationId: snapshot.conversationId, direction: "IN", timestamp: { gt: snapshot.newestPendingAt } },
+      where: { conversationId: snapshot.conversationId, direction: "IN", createdAt: { gt: snapshot.newestPendingAt } },
     })
     if (newer > 0) return { ok: false, reason: "NEWER_INBOUND" }
   }
@@ -168,7 +170,8 @@ export async function commitAiEscalation(input: {
   const result = await prisma.$transaction(async (tx): Promise<(EscalationResult & { version?: number })> => {
     const check = await checkStillOurs(tx, input.snapshot, {
       // An AI failure still escalates while AI is being switched off, so the client is not left waiting.
-      globalAi: input.globalAi || input.reason === "AI_FAILURE",
+      globalAi: input.globalAi,
+      allowAiOff: input.reason === "AI_FAILURE",
       ignoreNewerInbound: true,
       checkVersion: false,
     })
