@@ -128,8 +128,8 @@ export function WhatsAppAiLimitsForm({ initial }: WhatsAppAiLimitsFormProps) {
           </div>
 
           <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-            Las notas de voz no se transcriben en conversaciones escaladas, ni cuando la conversación llegó a su
-            límite diario o se alcanzó el tope de gasto.
+            Las notas de voz no se transcriben en conversaciones escaladas, ni en las que atiende la IA cuando
+            llegaron a su límite diario o se alcanzó el tope de gasto. Las que atiende un asesor siempre se transcriben.
           </p>
 
           <Button type="submit" disabled={pending}>

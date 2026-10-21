@@ -626,7 +626,7 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   `lib/ai/limits.ts` los resuelve en cada turno y transcripción (sin deploy). El gasto del día es la
   suma de `estimatedCostUsd` desde la medianoche de Bogotá: al llegar al tope el turno escala con
   `BUDGET_LIMIT` sin llamar al modelo. Las notas de voz no se transcriben si la conversación está
-  ESCALATED, llegó a su límite diario o se alcanzó el tope (en HUMAN sí, el asesor usa la
+  ESCALATED, o si la atiende la IA y llegó a su límite diario o se alcanzó el tope (en HUMAN siempre, el asesor usa la
   transcripción).
 - Resumen de uso: `getUsageSummary({ days })` (1-90, por defecto 30) agrega
   `ai_usage_records` por día de Bogotá: turnos y su resultado, tokens, transcripciones, minutos

@@ -41,6 +41,9 @@ async function touchMessage(messageId: string): Promise<void> {
  */
 async function overLimits(conversationId: string, status: string, config: ReturnType<typeof getAiConfig>): Promise<boolean> {
   if (status === "ESCALATED") return true
+  // An escalated chat reaches HUMAN with its counters full ("Atender" after TURN_LIMIT or
+  // BUDGET_LIMIT): the limits stop AI work, never the advisor's transcripts.
+  if (status === "HUMAN") return false
   const now = new Date()
   const limits = await getAiLimits(config)
   if ((await aiRepliesLast24h(conversationId, now)) >= limits.maxTurnsPerDay) return true

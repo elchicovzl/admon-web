@@ -207,6 +207,17 @@ describe("transcribeAudioMessage: cost and abuse limits (S5)", () => {
     expect(m.transcribe).toHaveBeenCalled()
   })
 
+  it.each([
+    ["its AI replies per day", () => m.repliesLast24h.mockResolvedValue(30)],
+    ["the daily spend cap", () => m.overBudget.mockResolvedValue(true)],
+  ])("keeps transcribing for an advisor even past %s (an escalated chat reaches HUMAN with its counters full)", async (_label, reach) => {
+    m.mediaFindUnique.mockResolvedValue(withStatus("HUMAN"))
+    reach()
+
+    expect(await transcribeAudioMessage("msg-1", first)).toEqual({ status: "DONE" })
+    expect(m.transcribe).toHaveBeenCalled()
+  })
+
   it("skips once the conversation reached its AI replies per day", async () => {
     m.repliesLast24h.mockResolvedValue(30)
 
