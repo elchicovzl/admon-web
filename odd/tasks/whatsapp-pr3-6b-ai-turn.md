@@ -18,7 +18,7 @@ Branch: `feat/whatsapp-m3-ai-turn` (base master). Delivery: stacked-to-main. Run
 - [x] T1 S9 plumbing: schedule `ai.turn` from inbound (incl. first contact and reopen into AI), worker + enqueue, `onSent` hook (consent evidence, `lastAiSentAt`) — inline (RED 1 + 2 modules missing → GREEN) — 15f3663
 - [x] T2 S5-S8 commit layer: deterministic texts, FOR UPDATE commit of a reply / escalation, chat usage records — inline (RED modules missing → GREEN texts 3, commit 12; chat usage recorder written with its test) — b49220f
 - [x] T3 S1-S8 turn orchestration (pre-checks, model call, guard, failure path) — inline (RED module missing → GREEN turn 21; worker 9 written with its implementation; real AI SDK loop 2)
-- [ ] T4 docs, full checks, independent verifier, RDD review — inline
+- [ ] T4 docs, full checks, independent verifier (3 blockers → fix 8df7c0f, recheck pending), RDD review — inline
 
 ## Log
 - L1 (2026-10-20, user): "si" (go ahead with PR3.6b).
@@ -28,3 +28,14 @@ Branch: `feat/whatsapp-m3-ai-turn` (base master). Delivery: stacked-to-main. Run
 - L5 Added `EscalationReason.TURN_LIMIT` for AI_MAX_TURNS_PER_DAY (stored as a string, no migration). Daily limit counts AI outbound messages in the last 24 h.
 - L6 Real checks beyond mocks: the commit's `SELECT … FOR UPDATE` ran against the local DB (BEGIN/ROLLBACK, no change); the real AI SDK loop with `MockLanguageModelV4` (ai/test) confirmed a terminal tool without `execute` ends the loop after sendReply/escalateToHuman and `steps[].toolCalls` carries `toolName` + parsed `input`.
 - L7 Not done: a real Claude call (no ANTHROPIC_API_KEY locally) — S10 manual harness and the eval set stay PENDING-OPERATOR.
+- L8 Independent verifier (high risk: items 4 concurrency, 1 stored data): S4-S9 pass; 3 blockers. (1) S1: the AI switch was not re-read at commit. (2) S2: "proceeds after 2 discards" was ineffective, because the stately queue drops the worker's re-enqueue when an inbound message has already queued a job, losing the count carried in job data. (3) S3: a CLOSED→AI reopen replayed the staff-handled backlog. Advisories fixed in the same batch: the second-resolution `timestamp` cursor, now `createdAt`; SDK-invalid tool calls are now ignored; reserved escalation reasons from the model now map to LOW_CONFIDENCE; the guard no longer crashes when `sourceIds` is missing; a cap of 4 attachments per turn; a note for a failed voice note sent with text; TURN_LIMIT no longer counts FAILED sends; the commit comment about pause. Not fixed: the escalateToHuman summary is still unused, and a crash between commit and enqueue (pre-existing pattern).
+- L9 Correction batch `8df7c0f`. Fixes:
+  - `checkStillOurs` re-reads `isAiGloballyEnabled(tx)` under the lock (an AI_FAILURE escalation still goes through).
+  - Discards are counted from `ai_usage_records` (CHAT_TURN, DISCARDED, error NEWER_INBOUND, since the oldest pending `createdAt`). The job data no longer carries them.
+  - A reopen sets `aiCursorAt = createdAt - 1 ms` in the inbound transaction.
+  - The turn reads the newest 50 messages by `createdAt`.
+
+  Checks:
+  - `pnpm vitest run lib/ai lib/whatsapp lib/queue`: 770/771 (the one failure is the base's `send.test` retry-limit test).
+  - Full suite: 2219/2220 (same failure).
+  - `tsc`: no errors in the touched files; 35 errors in unrelated modules were already there.

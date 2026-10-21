@@ -864,18 +864,24 @@ las conecta en el turno.
   Cola `stately` con `singletonKey = conversationId`: como mucho un turno en cola y uno corriendo por
   conversación; arranca tras `AI_DEBOUNCE_SECONDS`.
 - Qué hace (`lib/ai/responder/turn.ts`), en orden: interruptores (`WHATSAPP_AI_ENABLED`, `aiEnabled` en la
-  base, `aiPaused`, estado AI) → mensajes del cliente posteriores a `aiCursorAt` → lote viejo (más de
+  base, `aiPaused`, estado AI) → los 50 mensajes del cliente más nuevos posteriores a `aiCursorAt` (hora
+  del servidor, `createdAt`; al reabrir en AI el cursor salta al mensaje que reabre, así nunca repite lo
+  que atendió un asesor) → lote viejo (más de
   `AI_MAX_REPLY_AGE_MINUTES`) se salta y mueve el cursor → debounce → pedido de asesor o tema prohibido
   (escala sin llamar al modelo) → tope `AI_MAX_TURNS_PER_DAY` (escala TURN_LIMIT) → adjuntos ilegibles
   (respuesta fija sin modelo; una nota de voz fallida pide escribir; al tope de fallos, DOCUMENT_REVIEW) →
-  Claude con `searchKnowledge` (imágenes y PDF dentro de la política van al modelo) → guard → commit.
+  Claude con `searchKnowledge` (imágenes y PDF dentro de la política van al modelo, hasta 4 por turno) →
+  guard → commit. Una llamada a herramienta que el SDK marca `invalid` se ignora, y un motivo de escalada
+  reservado al código (AI_FAILURE, TURN_LIMIT…) se toma como LOW_CONFIDENCE.
 - Llamada al modelo: `toolChoice: 'auto'`, herramientas `strict`, corta en `sendReply` o
   `escalateToHuman` o a los `AI_MAX_STEPS`, 600 tokens de salida, 2 reintentos, `effort: medium`. Sin
   `temperature` (Opus 5.5 y Sonnet 5.5 lo rechazan, igual que forzar herramienta).
 - Commit (`lib/ai/responder/commit.ts`): `SELECT … FOR UPDATE` sobre la conversación; solo escribe si
-  sigue en AI, con la misma `stateVersion`, sin pausa, con IA encendida y sin mensajes nuevos del cliente.
-  Si no, descarta (y si el cliente siguió escribiendo, el turno se vuelve a encolar y, tras dos descartes,
-  responde igual). El mensaje lleva `sourceChunkIds`, `usageRecordId` y la versión decidida
+  sigue en AI, con la misma `stateVersion`, sin pausa, con IA encendida (el interruptor se relee dentro
+  de la transacción; solo un aviso de falla AI_FAILURE pasa con la IA apagada) y sin mensajes nuevos del
+  cliente. Si no, descarta. Si el cliente siguió escribiendo, el turno se vuelve a encolar y, tras dos
+  descartes del mismo lote, responde igual: los descartes se cuentan en `ai_usage_records` (DISCARDED con
+  `error = NEWER_INBOUND`), porque la cola `stately` descarta el reencolado si ya hay un turno en cola. El mensaje lleva `sourceChunkIds`, `usageRecordId` y la versión decidida
   (`expectedStateVersion`), así un traspaso a humano lo cancela aunque ya esté en cola.
 - Escalar: AI_ESCALATE por la máquina de estados, «Un asesor lo atenderá en breve.» en horario o el
   horario y la próxima atención fuera de él (`escalatedOutOfHours`, `attentionDueAt`), y notificación
