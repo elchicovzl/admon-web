@@ -65,7 +65,7 @@ type OutboundDraft =
   | { kind: "media"; mediaType: "IMAGE" | "DOCUMENT"; caption: string | null; file: OutboundFile }
 
 /** Forward-only counters, like inbound and echoes: the list shows the reply and re-sorts. */
-async function touchConversation(
+export async function touchConversation(
   tx: Pick<typeof prisma, "conversation">,
   conversationId: string,
   draft: { type: Parameters<typeof messagePreview>[0]["type"]; text: string | null },

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const m = vi.hoisted(() => ({ create: vi.fn() }))
 vi.mock("@/lib/db/prisma", () => ({ default: { aiUsageRecord: { create: m.create } } }))
 
-import { estimateChatCostUsd, estimateTranscriptionCostUsd, recordTranscriptionUsage } from "../responder/usage"
+import { estimateChatCostUsd, estimateTranscriptionCostUsd, recordChatTurnUsage, recordTranscriptionUsage } from "../responder/usage"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -70,6 +70,56 @@ describe("recordTranscriptionUsage", () => {
 
     await expect(
       recordTranscriptionUsage({ conversationId: null, messageId: "msg-1", model: "gpt-4o-mini-transcribe", audioSeconds: 10, latencyMs: 10 })
+    ).resolves.toBeNull()
+  })
+})
+
+describe("recordChatTurnUsage (AI-13)", () => {
+  it("stores a CHAT_TURN record with model, prompt version, tokens, tool calls and retrieval scores, no content", async () => {
+    const id = await recordChatTurnUsage({
+      conversationId: "conv-1",
+      outcome: "REPLIED",
+      model: "claude-sonnet-5-5",
+      promptVersion: "2026-10-20.2",
+      steps: 2,
+      inputTokens: 10_000,
+      outputTokens: 1_000,
+      toolCalls: [{ name: "searchKnowledge" }, { name: "sendReply" }],
+      retrievalScores: [{ id: "chunk-1", similarity: 0.8, rrfScore: 0.03 }],
+      retrievedChunkIds: ["chunk-1"],
+      topSimilarity: 0.8,
+      latencyMs: 2500,
+    })
+
+    expect(id).toBe("usage-1")
+    expect(m.create).toHaveBeenCalledWith({
+      data: {
+        kind: "CHAT_TURN",
+        conversationId: "conv-1",
+        messageId: null,
+        outcome: "REPLIED",
+        model: "claude-sonnet-5-5",
+        promptVersion: "2026-10-20.2",
+        steps: 2,
+        inputTokens: 10_000,
+        outputTokens: 1_000,
+        toolCalls: [{ name: "searchKnowledge" }, { name: "sendReply" }],
+        retrievalScores: [{ id: "chunk-1", similarity: 0.8, rrfScore: 0.03 }],
+        retrievedChunkIds: ["chunk-1"],
+        topSimilarity: 0.8,
+        latencyMs: 2500,
+        estimatedCostUsd: 0.03,
+        error: null,
+      },
+      select: { id: true },
+    })
+  })
+
+  it("never throws", async () => {
+    m.create.mockRejectedValue(new Error("db down"))
+
+    await expect(
+      recordChatTurnUsage({ conversationId: "c", outcome: "FAILED", model: "m", promptVersion: "v", steps: 0, inputTokens: 0, outputTokens: 0, toolCalls: [], retrievalScores: [], retrievedChunkIds: [], topSimilarity: null, latencyMs: 1, error: "PROVIDER_ERROR" })
     ).resolves.toBeNull()
   })
 })

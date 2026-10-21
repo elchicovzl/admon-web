@@ -66,3 +66,52 @@ export async function recordTranscriptionUsage(usage: TranscriptionUsage): Promi
     return null
   }
 }
+
+export interface ChatTurnUsage {
+  conversationId: string
+  outcome: "REPLIED" | "ESCALATED" | "DISCARDED" | "FAILED" | "SKIPPED"
+  model: string
+  promptVersion: string
+  steps: number
+  inputTokens: number
+  outputTokens: number
+  /** Tool names only, never their arguments (they can carry client text). */
+  toolCalls: { name: string }[]
+  retrievalScores: { id: string; similarity: number; rrfScore: number }[]
+  retrievedChunkIds: string[]
+  topSimilarity: number | null
+  latencyMs: number
+  /** Short code, never provider text. */
+  error?: string | null
+}
+
+/** Returns the record id, or null when it could not be written (usage never blocks the turn). */
+export async function recordChatTurnUsage(usage: ChatTurnUsage): Promise<string | null> {
+  try {
+    const record = await prisma.aiUsageRecord.create({
+      data: {
+        kind: "CHAT_TURN",
+        conversationId: usage.conversationId,
+        messageId: null,
+        outcome: usage.outcome,
+        model: usage.model,
+        promptVersion: usage.promptVersion,
+        steps: usage.steps,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        toolCalls: usage.toolCalls,
+        retrievalScores: usage.retrievalScores,
+        retrievedChunkIds: usage.retrievedChunkIds,
+        topSimilarity: usage.topSimilarity,
+        latencyMs: usage.latencyMs,
+        estimatedCostUsd: estimateChatCostUsd(usage.model, usage.inputTokens, usage.outputTokens),
+        error: usage.error ?? null,
+      },
+      select: { id: true },
+    })
+    return record.id
+  } catch {
+    console.error("[ai] could not record chat turn usage")
+    return null
+  }
+}
