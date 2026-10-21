@@ -12,6 +12,8 @@ const registerKnowledgeWorkers = vi.fn()
 vi.mock("@/lib/knowledge/worker", () => ({ registerKnowledgeWorkers }))
 const registerTranscriptionWorkers = vi.fn()
 vi.mock("@/lib/ai/transcription-worker", () => ({ registerTranscriptionWorkers }))
+const registerAiTurnWorkers = vi.fn()
+vi.mock("@/lib/ai/turn-worker", () => ({ registerAiTurnWorkers }))
 vi.mock("../boss", () => ({ startBoss }))
 vi.mock("../queues", () => ({ ensureQueues }))
 vi.mock("../schedules", () => ({ ensureSchedules }))
@@ -67,6 +69,8 @@ describe("bootstrapRuntime", () => {
     expect(registerTranscriptionWorkers.mock.invocationCallOrder[0]).toBeLessThan(
       startWorkers.mock.invocationCallOrder[0]
     )
+    // The AI responder (ai.turn, inbound scheduling and the AI send hook).
+    expect(registerAiTurnWorkers.mock.invocationCallOrder[0]).toBeLessThan(startWorkers.mock.invocationCallOrder[0])
   })
 
   it("is a strict no-op with the flag unset: nothing started, no validation", async () => {

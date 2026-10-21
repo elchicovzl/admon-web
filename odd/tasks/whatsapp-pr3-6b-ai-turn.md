@@ -15,9 +15,9 @@ Branch: `feat/whatsapp-m3-ai-turn` (base master). Delivery: stacked-to-main. Run
 - S10 (3.6.9) manual harness (AI on in dev with the test number) — PENDING-OPERATOR.
 
 ## Tasks
-- [ ] T1 S9 plumbing: schedule `ai.turn` from inbound (incl. first contact and reopen into AI), worker + enqueue, `onSent` hook (consent evidence, `lastAiSentAt`) — inline
-- [ ] T2 S5-S8 commit layer: deterministic texts, FOR UPDATE commit of a reply / escalation, chat usage records — inline
-- [ ] T3 S1-S8 turn orchestration (pre-checks, model call, guard, failure path) — inline
+- [x] T1 S9 plumbing: schedule `ai.turn` from inbound (incl. first contact and reopen into AI), worker + enqueue, `onSent` hook (consent evidence, `lastAiSentAt`) — inline (RED 1 + 2 modules missing → GREEN) — 15f3663
+- [x] T2 S5-S8 commit layer: deterministic texts, FOR UPDATE commit of a reply / escalation, chat usage records — inline (RED modules missing → GREEN texts 3, commit 12; chat usage recorder written with its test) — b49220f
+- [x] T3 S1-S8 turn orchestration (pre-checks, model call, guard, failure path) — inline (RED module missing → GREEN turn 21; worker 9 written with its implementation; real AI SDK loop 2)
 - [ ] T4 docs, full checks, independent verifier, RDD review — inline
 
 ## Log
@@ -25,3 +25,6 @@ Branch: `feat/whatsapp-m3-ai-turn` (base master). Delivery: stacked-to-main. Run
 - L2 Explorer map (2026-10-20): nothing enqueues `ai.turn`; `scheduleAiTurn` is dropped in `persistMessage` (inbound.ts:290) and only true for AI→AI (state-machine.ts:117), not for first contact or CLOSED→AI reopen; `onSent` hook exists (send.ts:200-205) but nothing registers it; nothing writes `lastAiSentAt` (echoes rely on it); `applyTransition` never notifies (producer sends ESCALATION/AI_FAILURE after commit; dedup `escalation:<id>:<escalatedAt>`, `ai-failure:<id>`); AI sends must pass `expectedStateVersion` (send job fails STALE_STATE otherwise) and only template messages bypass the 24 h window.
 - L3 Deviations from S9 (model constraint, PR3.1 L4 / PR3.6a L2): no `toolChoice:'required'` and no `temperature` (400 on claude-opus-5-5 / claude-sonnet-5-5). Use `toolChoice:'auto'`, strict tools, `stopWhen: [isStepCount(AI_MAX_STEPS), hasToolCall('sendReply'), hasToolCall('escalateToHuman')]`, `maxOutputTokens 600`, `maxRetries 2`, `providerOptions.anthropic.effort = 'medium'`. Verified in the installed packages: `isStepCount`, `stepCountIs`, `hasToolCall`, `tool` exported by ai@7.0.147; `effort` is an @ai-sdk/anthropic@4.0.84 provider option; user content accepts `ImagePart {type:'image', image, mediaType}` and `FilePart {type:'file', data, mediaType}`.
 - L4 Route: inline (one writer; units depend on each other).
+- L5 Added `EscalationReason.TURN_LIMIT` for AI_MAX_TURNS_PER_DAY (stored as a string, no migration). Daily limit counts AI outbound messages in the last 24 h.
+- L6 Real checks beyond mocks: the commit's `SELECT … FOR UPDATE` ran against the local DB (BEGIN/ROLLBACK, no change); the real AI SDK loop with `MockLanguageModelV4` (ai/test) confirmed a terminal tool without `execute` ends the loop after sendReply/escalateToHuman and `steps[].toolCalls` carries `toolName` + parsed `input`.
+- L7 Not done: a real Claude call (no ANTHROPIC_API_KEY locally) — S10 manual harness and the eval set stay PENDING-OPERATOR.

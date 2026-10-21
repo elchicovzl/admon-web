@@ -115,3 +115,13 @@ export async function recordChatTurnUsage(usage: ChatTurnUsage): Promise<string 
     return null
   }
 }
+
+/** Sets the final outcome once the turn committed (the record exists before, so the message can point to it). */
+export async function setUsageOutcome(id: string | null, outcome: ChatTurnUsage["outcome"]): Promise<void> {
+  if (!id) return
+  try {
+    await prisma.aiUsageRecord.update({ where: { id }, data: { outcome } })
+  } catch {
+    console.error("[ai] could not update the chat turn outcome")
+  }
+}

@@ -857,6 +857,36 @@ las conecta en el turno.
 - `history.ts`: últimos 20 mensajes dentro de ~6000 tokens, empezando por el cliente; respuestas del
   equipo con «[Asesor humano]»; notas de voz con su transcripción; mensajes de sistema fuera.
 
+#### Asistente IA: el turno (PR3.6b)
+
+- Cuándo corre: un mensaje entrante en una conversación AI (también el que la crea o la reabre en AI)
+  programa `ai.turn` por el puerto `lib/whatsapp/ai-turn-port.ts` (sin que el canal importe la IA).
+  Cola `stately` con `singletonKey = conversationId`: como mucho un turno en cola y uno corriendo por
+  conversación; arranca tras `AI_DEBOUNCE_SECONDS`.
+- Qué hace (`lib/ai/responder/turn.ts`), en orden: interruptores (`WHATSAPP_AI_ENABLED`, `aiEnabled` en la
+  base, `aiPaused`, estado AI) → mensajes del cliente posteriores a `aiCursorAt` → lote viejo (más de
+  `AI_MAX_REPLY_AGE_MINUTES`) se salta y mueve el cursor → debounce → pedido de asesor o tema prohibido
+  (escala sin llamar al modelo) → tope `AI_MAX_TURNS_PER_DAY` (escala TURN_LIMIT) → adjuntos ilegibles
+  (respuesta fija sin modelo; una nota de voz fallida pide escribir; al tope de fallos, DOCUMENT_REVIEW) →
+  Claude con `searchKnowledge` (imágenes y PDF dentro de la política van al modelo) → guard → commit.
+- Llamada al modelo: `toolChoice: 'auto'`, herramientas `strict`, corta en `sendReply` o
+  `escalateToHuman` o a los `AI_MAX_STEPS`, 600 tokens de salida, 2 reintentos, `effort: medium`. Sin
+  `temperature` (Opus 5.5 y Sonnet 5.5 lo rechazan, igual que forzar herramienta).
+- Commit (`lib/ai/responder/commit.ts`): `SELECT … FOR UPDATE` sobre la conversación; solo escribe si
+  sigue en AI, con la misma `stateVersion`, sin pausa, con IA encendida y sin mensajes nuevos del cliente.
+  Si no, descarta (y si el cliente siguió escribiendo, el turno se vuelve a encolar y, tras dos descartes,
+  responde igual). El mensaje lleva `sourceChunkIds`, `usageRecordId` y la versión decidida
+  (`expectedStateVersion`), así un traspaso a humano lo cancela aunque ya esté en cola.
+- Escalar: AI_ESCALATE por la máquina de estados, «Un asesor lo atenderá en breve.» en horario o el
+  horario y la próxima atención fuera de él (`escalatedOutOfHours`, `attentionDueAt`), y notificación
+  ESCALATION después del commit. Si el proveedor falla: registro FAILED, escala con AI_FAILURE, un único
+  mensaje neutro y notificación AI_FAILURE; el job no reintenta.
+- Consentimiento: se antepone el aviso mientras `consentNoticeSentAt` sea nulo y se guarda
+  `consentNoticeMessageId`; el hook `onSent` (`lib/ai/sent-hook.ts`) marca `consentNoticeSentAt` solo
+  cuando ese mensaje llega a SENT, y mueve `lastAiSentAt` (lo usan los echoes).
+- Uso: un `AiUsageRecord` CHAT_TURN por llamada (modelo, `PROMPT_VERSION`, pasos, tokens, nombres de
+  herramientas, puntajes de recuperación, costo estimado; nunca contenido).
+
 ---
 
 ## Módulo de Finanzas (integración con Alegra)
