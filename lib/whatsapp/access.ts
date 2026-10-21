@@ -1,4 +1,6 @@
 import { auth } from '@/lib/auth/auth'
+import { UserRole } from '@prisma/client'
+import prisma from '@/lib/db/prisma'
 import { hasWhatsAppAccess } from '@/lib/auth/rbac'
 
 export const WHATSAPP_ERROR_NOT_AUTHENTICATED = 'No autenticado'
@@ -30,4 +32,24 @@ export async function requireWhatsAppAuth() {
   }
 
   return { authorized: true as const, userId: session.user.id }
+}
+
+export const WHATSAPP_ERROR_SUPER_ADMIN_ONLY = 'Solo un super administrador puede cambiar la IA global'
+
+/**
+ * Module access plus SUPER_ADMIN, for the global AI switch (AI-12). The role is read from
+ * the database like `hasWhatsAppAccess`, so a demoted or deactivated admin loses it at once.
+ */
+export async function requireWhatsAppSuperAdmin() {
+  const authCheck = await requireWhatsAppAuth()
+  if (!authCheck.authorized) return authCheck
+
+  const user = await prisma.user.findUnique({
+    where: { id: authCheck.userId },
+    select: { role: true, isActive: true },
+  })
+  if (!user?.isActive || user.role !== UserRole.SUPER_ADMIN) {
+    return { authorized: false as const, error: WHATSAPP_ERROR_SUPER_ADMIN_ONLY }
+  }
+  return authCheck
 }

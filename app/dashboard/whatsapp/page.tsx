@@ -3,10 +3,12 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { BookOpen, Users } from 'lucide-react'
 
+import { AiSwitch } from '@/components/dashboard/whatsapp/ai-switch'
+import { AiUsageSummaryDialog } from '@/components/dashboard/whatsapp/ai-usage-summary'
 import { InboxContainer } from '@/components/dashboard/whatsapp/inbox-container'
 import { InboxSkeleton } from '@/components/dashboard/whatsapp/inbox-skeletons'
 import { Button } from '@/components/ui/button'
-import { listConversations } from '@/lib/actions/whatsapp.actions'
+import { getAiSettings, listConversations } from '@/lib/actions/whatsapp.actions'
 import { getTemplateOptions } from '@/lib/whatsapp/outbound'
 
 export const metadata: Metadata = {
@@ -28,6 +30,11 @@ async function Inbox() {
   return <InboxContainer initial={result.data} templates={getTemplateOptions()} />
 }
 
+async function GlobalAiSwitch() {
+  const result = await getAiSettings()
+  return result.success && result.data ? <AiSwitch initial={result.data} /> : null
+}
+
 export default function WhatsAppPage() {
   return (
     <div className="space-y-4">
@@ -38,7 +45,11 @@ export default function WhatsAppPage() {
             Bandeja compartida de conversaciones con clientes.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Suspense fallback={null}>
+            <GlobalAiSwitch />
+          </Suspense>
+          <AiUsageSummaryDialog />
           <Button asChild variant="outline" size="sm">
             <Link href="/dashboard/whatsapp/knowledge">
               <BookOpen className="h-4 w-4" />

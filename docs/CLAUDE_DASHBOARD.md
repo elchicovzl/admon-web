@@ -612,6 +612,19 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   `stateVersion`, se audita como `AI_PAUSED` / `AI_RESUMED`. Una conversación `AI` pausada
   no agenda turnos y se comporta como `HUMAN` para las respuestas.
 - IA efectiva = `WHATSAPP_AI_ENABLED` y `WhatsAppSettings.aiEnabled` y no `aiPaused`.
+- Interruptor global (PR3.7): `setAiEnabled({ enabled })` escribe `WhatsAppSettings.aiEnabled`
+  (fila `singleton`, con `updatedById`). Solo SUPER_ADMIN activo, leído de la base con
+  `requireWhatsAppSuperAdmin()` (`lib/whatsapp/access.ts`), no del JWT. `getAiSettings()` lo
+  muestra a todo usuario con acceso al módulo (`canManage` dice si puede cambiarlo) y avisa si
+  `WHATSAPP_AI_ENABLED` está apagado. Apagar es inmediato: los turnos encolados releen el
+  interruptor y no hacen nada. En la bandeja: `components/dashboard/whatsapp/ai-switch.tsx`.
+- Resumen de uso: `getUsageSummary({ days })` (1-90, por defecto 30) agrega
+  `ai_usage_records` por día de Bogotá: turnos y su resultado, tokens, transcripciones, minutos
+  de audio y costo estimado. Solo lee contadores, nunca contenido, herramientas ni ids. Diálogo
+  "Uso de IA" en la bandeja (`ai-usage-summary.tsx`).
+- `/privacy#whatsapp-ia` y `/terms#whatsapp-ia` describen el asistente, la transferencia
+  internacional a Anthropic/OpenAI y la autorización por el aviso del primer mensaje. Textos
+  pendientes de revisión legal antes de encender la IA (OPS-G7).
 - El puerto de transición del eco (`transition-port.ts`) se reemplaza por la máquina real
   al registrar los workers (`setApplyTransitionPort`).
 - Las acciones de servidor para tomar, devolver a IA, cerrar y reabrir se publican en

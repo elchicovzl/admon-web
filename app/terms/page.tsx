@@ -50,7 +50,7 @@ export default function TermsPage() {
           </h1>
 
           <p className="text-gray-600 mb-8">
-            Última actualización: 20 de diciembre de 2025
+            Última actualización: 20 de octubre de 2026
           </p>
 
           <div className="prose prose-gray max-w-none">
@@ -137,9 +137,31 @@ export default function TermsPage() {
               </p>
             </section>
 
+            {/* AI and WhatsApp copy (XC-1): pending legal review before the AI goes live (OPS-G7). */}
+            <section id="whatsapp-ia" className="mb-8">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+                6. Atención por WhatsApp con Asistente de Inteligencia Artificial
+              </h2>
+              <p className="text-gray-700 mb-4">
+                Nuestro canal de WhatsApp puede ser atendido por un asistente virtual basado en inteligencia
+                artificial, que se identifica como tal en su primer mensaje. Al usar este canal, usted acepta
+                que:
+              </p>
+              <ul className="list-disc pl-6 text-gray-700 mb-4 space-y-2">
+                <li>Las respuestas del asistente son informativas y se basan en la información de nuestros servicios; pueden contener errores y no reemplazan la confirmación de un asesor.</li>
+                <li>El asistente no crea, modifica ni aprueba afiliaciones, trámites ni pagos, y no promete resultados ni plazos.</li>
+                <li>Puede pedir en cualquier momento que lo atienda un asesor humano. Nuestros asesores atienden de lunes a viernes, de 8:00 a.m. a 5:00 p.m. (hora de Colombia); las solicitudes recibidas fuera de ese horario se atienden el siguiente día hábil.</li>
+                <li>El contenido de la conversación se trata conforme a la sección «Atención por WhatsApp y Asistente de Inteligencia Artificial» de nuestra{' '}
+                  <Link href="/privacy#whatsapp-ia" className="text-[#00A86B] hover:underline">
+                    Política de Privacidad
+                  </Link>, incluido su procesamiento por proveedores de inteligencia artificial ubicados fuera de Colombia.
+                </li>
+              </ul>
+            </section>
+
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                6. Limitación de Responsabilidad
+                7. Limitación de Responsabilidad
               </h2>
               <p className="text-gray-700 mb-4">
                 Administración Segura no será responsable por:
@@ -159,7 +181,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                7. Garantías Específicas
+                8. Garantías Específicas
               </h2>
               <p className="text-gray-700 mb-4">
                 Para el servicio de <strong>Traslado de EPS</strong>, ofrecemos una garantía de
@@ -171,7 +193,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                8. Propiedad Intelectual
+                9. Propiedad Intelectual
               </h2>
               <p className="text-gray-700 mb-4">
                 Todos los contenidos del sitio web de Administración Segura, incluyendo textos,
@@ -187,7 +209,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                9. Terminación del Servicio
+                10. Terminación del Servicio
               </h2>
               <p className="text-gray-700 mb-4">
                 Cualquiera de las partes puede terminar la relación contractual con previo aviso.
@@ -206,7 +228,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                10. Modificaciones a los Términos
+                11. Modificaciones a los Términos
               </h2>
               <p className="text-gray-700 mb-4">
                 Nos reservamos el derecho de modificar estos Términos de Servicio en cualquier
@@ -218,7 +240,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                11. Legislación Aplicable y Jurisdicción
+                12. Legislación Aplicable y Jurisdicción
               </h2>
               <p className="text-gray-700 mb-4">
                 Estos Términos de Servicio se rigen por las leyes de la República de Colombia.
@@ -230,7 +252,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                12. Resolución de Conflictos
+                13. Resolución de Conflictos
               </h2>
               <p className="text-gray-700 mb-4">
                 Antes de acudir a instancias judiciales, las partes se comprometen a intentar
@@ -241,7 +263,7 @@ export default function TermsPage() {
 
             <section className="mb-8">
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                13. Contacto
+                14. Contacto
               </h2>
               <p className="text-gray-700 mb-4">
                 Para cualquier consulta sobre estos Términos de Servicio, puede contactarnos:

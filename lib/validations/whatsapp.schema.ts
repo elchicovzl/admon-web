@@ -143,6 +143,23 @@ export const getClientConversationsSchema = z.object({
   clientId: z.string({ required_error: 'El cliente es requerido' }).cuid('Cliente inválido'),
 })
 
+export const setAiEnabledSchema = z.object({
+  enabled: z.boolean({ required_error: 'Valor requerido', invalid_type_error: 'Valor inválido' }),
+})
+
+export const USAGE_SUMMARY_MAX_DAYS = 90
+
+export const getUsageSummarySchema = z.object({
+  days: z
+    .number({ invalid_type_error: 'Rango inválido' })
+    .int('Rango inválido')
+    .min(1, 'Rango inválido')
+    .max(USAGE_SUMMARY_MAX_DAYS, 'Rango inválido')
+    .default(30),
+})
+
+export type SetAiEnabledInput = z.input<typeof setAiEnabledSchema>
+export type GetUsageSummaryInput = z.input<typeof getUsageSummarySchema>
 export type GetClientConversationsInput = z.input<typeof getClientConversationsSchema>
 export type SearchClientsForLinkInput = z.input<typeof searchClientsForLinkSchema>
 export type ConversationActionInput = z.input<typeof conversationActionSchema>
