@@ -144,6 +144,8 @@ Se validan **al arrancar el servidor** (`instrumentation.ts` → `lib/config/run
 | `WORKER_ENABLED` | `true` | — |
 | `QUEUE_DATABASE_URL` | cae a `DIRECT_URL` | — |
 
+`AI_MAX_TURNS_PER_DAY`, `AI_MAX_CONSECUTIVE_FAILURES` y `AI_FORBIDDEN_TOPICS` son los valores por defecto: un SUPER_ADMIN puede cambiarlos (y fijar un tope de gasto diario en USD) en Configuración → WhatsApp sin redeploy.
+
 IA (`lib/ai/providers.ts`, AI SDK v7): Claude vía `@ai-sdk/anthropic` para conversación y visión; OpenAI vía `@ai-sdk/openai` para embeddings y transcripción. Nada se lee al importar. Valor recomendado para `AI_CHAT_MODEL`: `claude-opus-5-5`. `AI_EMBEDDING_DIMENSIONS` debe ser `1536` (tamaño de la columna `knowledge_chunks.embedding`). La ingesta de la base de conocimiento solo necesita `OPENAI_API_KEY`.
 
 Base de conocimiento: migración `knowledge_base` con índices crudos (HNSW coseno sobre `embedding`, GIN `spanish` sobre `content`) y RLS. Prisma no puede expresar el HNSW y `migrate dev` lo reporta como drift proponiendo `DROP INDEX knowledge_chunks_embedding_hnsw`: **no aceptar ese drop**; `lib/__tests__/migration-guard.test.ts` falla si una migración posterior lo borra.

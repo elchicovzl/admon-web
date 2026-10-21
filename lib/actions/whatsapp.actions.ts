@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/db/prisma'
 import type { ActionResponse } from '@/lib/types/auth.types'
 import { requireWhatsAppAuth, requireWhatsAppSuperAdmin } from '@/lib/whatsapp/access'
+import { getAiConfig } from '@/lib/config/runtime-config'
+import { normalizeTopics, spentTodayUsd } from '@/lib/ai/limits'
 import { presignGet } from '@/lib/storage/r2'
 import {
   closeConversationSchema,
@@ -22,6 +24,7 @@ import {
   sendReplySchema,
   sendTemplateSchema,
   setAiEnabledSchema,
+  updateAiLimitSettingsSchema,
   setConversationAiPausedSchema,
   type CloseConversationInput,
   type ConversationActionInput,
@@ -37,9 +40,11 @@ import {
   type SendReplyInput,
   type SendTemplateInput,
   type SetAiEnabledInput,
+  type UpdateAiLimitSettingsInput,
   type SetConversationAiPausedInput,
 } from '@/lib/validations/whatsapp.schema'
 import type {
+  AiLimitSettings,
   AiSettings,
   AiUsageCounters,
   AiUsageDay,
@@ -882,5 +887,64 @@ export async function getUsageSummary(input: GetUsageSummaryInput): Promise<Acti
     totals.audioMinutes = Math.round(totals.audioMinutes * 100) / 100
     totals.costUsd = Math.round(totals.costUsd * 1e6) / 1e6
     return { success: true, data: { days, perDay, totals } }
+  })
+}
+
+// ---------------------------------------------------------------- AI cost and abuse limits
+
+/** Configuración → WhatsApp (SUPER_ADMIN): saved limits, the server values they fall back to, today's spend. */
+export async function getAiLimitSettings(): Promise<ActionResponse<AiLimitSettings>> {
+  return guarded('getAiLimitSettings', async () => {
+    const authCheck = await requireWhatsAppSuperAdmin()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+
+    const config = getAiConfig()
+    const [row, spent] = await Promise.all([
+      prisma.whatsAppSettings.findUnique({
+        where: { id: 'singleton' },
+        select: { dailyBudgetUsd: true, maxTurnsPerDay: true, maxConsecutiveFailures: true, forbiddenTopics: true },
+      }),
+      spentTodayUsd(new Date()),
+    ])
+    return {
+      success: true,
+      data: {
+        saved: {
+          dailyBudgetUsd: row?.dailyBudgetUsd == null ? null : Number(row.dailyBudgetUsd),
+          maxTurnsPerDay: row?.maxTurnsPerDay ?? null,
+          maxConsecutiveFailures: row?.maxConsecutiveFailures ?? null,
+          forbiddenTopics: row?.forbiddenTopics ?? [],
+        },
+        server: {
+          maxTurnsPerDay: config.maxTurnsPerDay,
+          maxConsecutiveFailures: config.maxConsecutiveFailures,
+          forbiddenTopics: config.forbiddenTopics,
+        },
+        spentTodayUsd: spent,
+      },
+    }
+  })
+}
+
+/**
+ * Saves the AI cost and abuse limits (SUPER_ADMIN). The next turn and transcription read them;
+ * no deploy needed. Never touches the AI switch.
+ */
+export async function updateAiLimitSettings(input: UpdateAiLimitSettingsInput): Promise<ActionResponse> {
+  return guarded('updateAiLimitSettings', async () => {
+    const authCheck = await requireWhatsAppSuperAdmin()
+    if (!authCheck.authorized) return { success: false, error: authCheck.error }
+    const parsed = updateAiLimitSettingsSchema.safeParse(input)
+    if (!parsed.success) return validationError(parsed.error.issues)
+
+    const data = {
+      dailyBudgetUsd: parsed.data.dailyBudgetUsd,
+      maxTurnsPerDay: parsed.data.maxTurnsPerDay,
+      maxConsecutiveFailures: parsed.data.maxConsecutiveFailures,
+      forbiddenTopics: normalizeTopics(parsed.data.forbiddenTopics),
+      updatedById: authCheck.userId,
+    }
+    await prisma.whatsAppSettings.upsert({ where: { id: 'singleton' }, create: { id: 'singleton', ...data }, update: data })
+    return { success: true, message: 'Límites de IA guardados' }
   })
 }

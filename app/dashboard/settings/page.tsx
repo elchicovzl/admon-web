@@ -6,6 +6,8 @@ import { UserRole } from '@prisma/client'
 import { ProfileSettingsForm } from '@/components/dashboard/profile-settings-form'
 import { ConfiguracionEmpresaForm } from '@/components/dashboard/configuracion-empresa-form'
 import { getConfiguracionEmpresa } from '@/lib/actions/configuracion-empresa.actions'
+import { WhatsAppAiLimitsForm } from '@/components/dashboard/settings/whatsapp-ai-limits-form'
+import { getAiLimitSettings } from '@/lib/actions/whatsapp.actions'
 
 export const metadata: Metadata = {
   title: 'Configuración | Dashboard',
@@ -28,6 +30,8 @@ export default async function SettingsPage() {
     lecturaEmpresa && !lecturaEmpresa.success
       ? lecturaEmpresa.error ?? 'No se pudo leer la configuración de la empresa'
       : null
+  // The action re-checks SUPER_ADMIN against the database; a failed read shows the error.
+  const lecturaLimitesIa = esSuperAdmin ? await getAiLimitSettings() : null
 
   return (
     <div className="space-y-6">
@@ -65,6 +69,16 @@ export default async function SettingsPage() {
             email: configuracionEmpresa?.email ?? '',
           }}
         />
+      )}
+
+      {lecturaLimitesIa?.success && lecturaLimitesIa.data && (
+        <WhatsAppAiLimitsForm initial={lecturaLimitesIa.data} />
+      )}
+      {lecturaLimitesIa && !lecturaLimitesIa.success && (
+        <Alert variant="destructive" className="max-w-2xl">
+          <AlertTitle>WhatsApp: límites de la IA</AlertTitle>
+          <AlertDescription>{lecturaLimitesIa.error ?? 'No se pudieron leer los límites de la IA'}</AlertDescription>
+        </Alert>
       )}
 
       <Card className="max-w-2xl">
