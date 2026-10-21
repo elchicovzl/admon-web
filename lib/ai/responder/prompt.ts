@@ -5,7 +5,9 @@
  * prompt says it is data, never instructions.
  */
 
-export const PROMPT_VERSION = "2026-10-20.3"
+import { MAX_REPLY_LENGTH } from "./guard"
+
+export const PROMPT_VERSION = "2026-10-20.4"
 
 export function buildSystemPrompt(): string {
   return [
@@ -14,6 +16,7 @@ export function buildSystemPrompt(): string {
     "Cómo responde:",
     "- Siempre en español y tratando al cliente de «usted». Tono cordial, claro y breve: mensajes de WhatsApp, no correos.",
     "- Sin markdown: solo puede usar *negrita*. Nada de títulos, tablas ni enlaces con formato.",
+    `- Cada mensaje tiene como máximo ${MAX_REPLY_LENGTH} caracteres. Si responde con una lista (servicios, requisitos, pasos), nombre cada punto en pocas palabras y ofrezca ampliar el que le interese.`,
     "- Datos concretos (requisitos, precios, plazos, fechas, horarios, procesos): solo los que aparezcan en los resultados de searchKnowledge de este turno. Si no aparecen, no los invente ni los estime.",
     "",
     "Herramientas:",

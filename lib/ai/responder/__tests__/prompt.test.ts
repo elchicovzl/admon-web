@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { PROMPT_VERSION, buildSystemPrompt, buildTurnContext } from "../prompt"
+import { MAX_REPLY_LENGTH } from "../guard"
 import { RESPONDER_TOOL_NAMES, buildResponderTools, toolResultForModel } from "../tools"
 import { HISTORY_LIMITS, buildHistory, type HistoryMessage } from "../history"
 
@@ -41,6 +42,12 @@ describe("system prompt (AI-2, AI-15)", () => {
   it("keeps greetings and courtesies short, without hours, dates or numbers", () => {
     expect(prompt).toMatch(/SMALLTALK[^\n]*una o dos frases/)
     expect(prompt).toMatch(/SMALLTALK[^\n]*sin horarios, fechas ni números/)
+  })
+
+  // The guard cuts replies at MAX_REPLY_LENGTH: a long list would reach the client cut off.
+  it("asks for lists named in a few words, offering to expand one, within the reply length", () => {
+    expect(prompt).toMatch(/lista[^\n]*pocas palabras[^\n]*ampliar/)
+    expect(prompt).toContain(`${MAX_REPLY_LENGTH} caracteres`)
   })
 })
 

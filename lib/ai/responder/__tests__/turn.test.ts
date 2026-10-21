@@ -176,7 +176,9 @@ describe("answer (AI-16, AI-13)", () => {
 
     expect(r).toEqual({ status: "REPLIED" })
     const call = m.generateText.mock.calls[0][0]
-    expect(call).toMatchObject({ model: "chat-model", toolChoice: "auto", maxOutputTokens: 600, maxRetries: 2 })
+    // Thinking is always on in the chat model and counts against this budget: 600 cut the
+    // sendReply call of a list answer in half, so the turn ended without a reply.
+    expect(call).toMatchObject({ model: "chat-model", toolChoice: "auto", maxOutputTokens: 4000, maxRetries: 2 })
     expect(call).not.toHaveProperty("temperature")
     expect(call.providerOptions).toEqual({ anthropic: { effort: "medium" } })
     expect(call.system).toContain("Asistente de Administración Segura")

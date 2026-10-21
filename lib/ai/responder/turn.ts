@@ -51,7 +51,8 @@ const PENDING_LIMIT = 50
 /** Images and PDFs given to the model in one turn; the rest are named, not read. */
 const MAX_ATTACHMENTS = 4
 const HISTORY_FETCH = 30
-const MAX_OUTPUT_TOKENS = 600
+// Per step, thinking included: the chat model always thinks, and 600 cut list answers in half.
+const MAX_OUTPUT_TOKENS = 4000
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const pendingSelect = {
