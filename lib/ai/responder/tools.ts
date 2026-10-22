@@ -1,17 +1,21 @@
 import { tool } from "ai"
 import { z } from "zod"
 import type { RetrievalResult } from "@/lib/knowledge/retrieve"
+import { IDENTITY_DOCUMENT_TYPES, type IdentityDocument } from "@/lib/whatsapp/identity-document"
 import { EscalationReason } from "./escalation"
 
 /**
- * The responder's tools (AI-6). Exactly three: a read-only knowledge search and two terminal
- * tools with no `execute`, so the turn ends when the model calls them and the code decides what
- * happens. There is deliberately no tool to create or change clients, affiliations or payments
- * (S-LD-6, S-AD-5). All are `strict` so arguments always match the schema; length limits live in
- * the guard, not the schema (strict mode supports a limited JSON Schema subset).
+ * The responder's tools (AI-6): a read-only knowledge search, a recorder for the data on an
+ * identity document or RUT the client sent, and two terminal tools with no `execute`, so the turn
+ * ends when the model calls them and the code decides what happens. The recorder only hands the
+ * document to the turn, which applies it after the commit (lib/whatsapp/identity-document.ts):
+ * it fills the contact's lead or resolves an ambiguous contact, never edits a client. There is
+ * deliberately no tool to create or change clients, affiliations or payments (S-LD-6, S-AD-5).
+ * All are `strict` so arguments always match the schema; length limits live in the guard, not
+ * the schema (strict mode supports a limited JSON Schema subset).
  */
 
-export const RESPONDER_TOOL_NAMES = ["searchKnowledge", "escalateToHuman", "sendReply"] as const
+export const RESPONDER_TOOL_NAMES = ["searchKnowledge", "recordIdentityDocument", "escalateToHuman", "sendReply"] as const
 
 export type SearchToolResult =
   | { status: "OK"; results: { sourceId: string; document: string; section: string | null; text: string }[] }
@@ -40,7 +44,10 @@ export const MODEL_ESCALATION_REASONS = [
   EscalationReason.DOCUMENT_REVIEW,
 ] as const
 
-export function buildResponderTools(deps: { searchKnowledge: (query: string) => Promise<SearchToolResult> }) {
+export function buildResponderTools(deps: {
+  searchKnowledge: (query: string) => Promise<SearchToolResult>
+  recordIdentityDocument: (document: IdentityDocument) => void
+}) {
   return {
     searchKnowledge: tool({
       description:
@@ -48,6 +55,21 @@ export function buildResponderTools(deps: { searchKnowledge: (query: string) => 
       inputSchema: z.object({ query: z.string().describe("La pregunta del cliente, en español y con sus palabras clave") }),
       strict: true,
       execute: async ({ query }) => deps.searchKnowledge(query),
+    }),
+    recordIdentityDocument: tool({
+      description:
+        "Registra los datos de una foto de cédula, documento de identidad o RUT que el cliente envió, para que un asesor los verifique. No termina el turno.",
+      inputSchema: z.object({
+        documentType: z.enum(IDENTITY_DOCUMENT_TYPES).describe("NIT si es un RUT"),
+        number: z.string().describe("El número tal como aparece en el documento, con el dígito de verificación del NIT si lo tiene"),
+        fullName: z.string().describe("Nombre completo de la persona; vacío si no aparece"),
+        businessName: z.string().describe("Razón social si es un RUT; vacío si no"),
+      }),
+      strict: true,
+      execute: async (document) => {
+        deps.recordIdentityDocument(document)
+        return { status: "RECORDED" as const }
+      },
     }),
     escalateToHuman: tool({
       description: "Termina el turno pasando la conversación a un asesor humano.",

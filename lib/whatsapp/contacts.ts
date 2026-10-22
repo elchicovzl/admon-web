@@ -12,9 +12,10 @@ export type ContactMatch =
 /**
  * Finds active, non-deleted Clients whose free-form phone reduces to one of the
  * candidate digit strings. The comparison happens in SQL so Client.phone is never
- * rewritten (WC-9). Two rows are enough to know the match is ambiguous.
+ * rewritten (WC-9). Two rows are enough to know the match is ambiguous; a caller that needs
+ * the candidates themselves (resolving an ambiguous contact) asks for more.
  */
-export async function findClientsByWaId(waId: string): Promise<string[]> {
+export async function findClientsByWaId(waId: string, limit = 2): Promise<string[]> {
   const candidates = waIdMatchCandidates(waId)
   if (candidates.length === 0) return []
   const rows = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
@@ -22,7 +23,7 @@ export async function findClientsByWaId(waId: string): Promise<string[]> {
     WHERE "isActive" = true
       AND status <> 'ELIMINADO'
       AND regexp_replace(phone, '\\D', '', 'g') IN (${Prisma.join(candidates)})
-    LIMIT 2
+    LIMIT ${Prisma.raw(String(Math.max(1, Math.trunc(limit))))}
   `)
   return rows.map((row) => row.id)
 }

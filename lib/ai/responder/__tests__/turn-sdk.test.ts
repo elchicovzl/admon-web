@@ -39,7 +39,7 @@ describe("responder tools in the real AI SDK loop", () => {
     const result = await generateText({
       model,
       prompt: "¿Qué necesito?",
-      tools: buildResponderTools({ searchKnowledge: search }),
+      tools: buildResponderTools({ searchKnowledge: search, recordIdentityDocument: vi.fn() }),
       toolChoice: "auto",
       stopWhen: [isStepCount(4), hasToolCall("sendReply"), hasToolCall("escalateToHuman")],
     })
@@ -56,12 +56,30 @@ describe("responder tools in the real AI SDK loop", () => {
     const result = await generateText({
       model: scriptedModel([{ toolName: "escalateToHuman", input: { reason: "USER_REQUEST", summary: "Quiere un asesor" } }]),
       prompt: "asesor",
-      tools: buildResponderTools({ searchKnowledge: vi.fn() }),
+      tools: buildResponderTools({ searchKnowledge: vi.fn(), recordIdentityDocument: vi.fn() }),
       toolChoice: "auto",
       stopWhen: [isStepCount(4), hasToolCall("sendReply"), hasToolCall("escalateToHuman")],
     })
 
     expect(result.steps).toHaveLength(1)
     expect(result.steps[0].toolCalls[0]).toMatchObject({ toolName: "escalateToHuman", input: { reason: "USER_REQUEST" } })
+  })
+
+  it("keeps going after recordIdentityDocument and stops at the reply that follows", async () => {
+    const record = vi.fn()
+    const document = { documentType: "NIT", number: "900.123.456-7", fullName: "", businessName: "Comercial Andes SAS" }
+    const result = await generateText({
+      model: scriptedModel([
+        { toolName: "recordIdentityDocument", input: document },
+        { toolName: "sendReply", input: { type: "SMALLTALK", text: "Recibí el RUT.", sourceIds: [] } },
+      ]),
+      prompt: "[Imagen] Este es el RUT",
+      tools: buildResponderTools({ searchKnowledge: vi.fn(), recordIdentityDocument: record }),
+      toolChoice: "auto",
+      stopWhen: [isStepCount(4), hasToolCall("sendReply"), hasToolCall("escalateToHuman")],
+    })
+
+    expect(record).toHaveBeenCalledWith(document)
+    expect(result.steps.flatMap((step) => step.toolCalls).map((call) => call.toolName)).toEqual(["recordIdentityDocument", "sendReply"])
   })
 })
