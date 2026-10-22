@@ -38,3 +38,11 @@ export function toggleVisibleSelection(current: string[], visibleIds: string[]):
     ? current.filter((id) => !visibleIds.includes(id))
     : [...current, ...visibleIds.filter((id) => !current.includes(id))]
 }
+
+/**
+ * Employees a company (EMPRESA) sub-process is created for: one per selected
+ * employee, or a single company-level sub-process (null) when none is selected.
+ */
+export function employeeTargetsForSubProcess(selectedIds: string[]): (string | null)[] {
+  return selectedIds.length > 0 ? selectedIds : [null]
+}

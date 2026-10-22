@@ -33,7 +33,7 @@ import { getCompanyEmployees } from '@/lib/actions/client.actions'
 import { getManagers } from '@/lib/actions'
 import { addSubProcesses } from '@/lib/actions/affiliation.actions'
 import { EmployeeChecklist } from './employee-checklist'
-import { toggleVisibleSelection } from '@/lib/utils/employee-search'
+import { employeeTargetsForSubProcess, toggleVisibleSelection } from '@/lib/utils/employee-search'
 import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import type { SafeAffiliationSubProcess } from '@/lib/types/affiliation.types'
@@ -190,16 +190,6 @@ export function AddSubProcessDialog({
       return
     }
 
-    // Validate employees for EMPRESA
-    if (isEmpresa) {
-      for (const type of activeTypes) {
-        if (selectedEmployeesByType[type].length === 0) {
-          toast.error(`Debe seleccionar al menos un empleado para ${type}`)
-          return
-        }
-      }
-    }
-
     // Build sub-processes array
     const subProcessesData: { type: AffiliationSubProcessType; assignedToId?: string | null; employeeId?: string | null }[] = []
 
@@ -208,7 +198,8 @@ export function AddSubProcessDialog({
       const assignedToId = assignment.assignToSelf ? currentUserId : assignment.assignedToId
 
       if (isEmpresa) {
-        for (const employeeId of selectedEmployeesByType[type]) {
+        // No employees selected: one company-level sub-process
+        for (const employeeId of employeeTargetsForSubProcess(selectedEmployeesByType[type])) {
           subProcessesData.push({ type, assignedToId, employeeId })
         }
       } else {

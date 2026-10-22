@@ -58,7 +58,7 @@ import type { SafeClient } from '@/lib/types/client.types'
 import type { SafeUser } from '@/lib/types/auth.types'
 import { ClientCredentialsQuickView } from './client-credentials-quick-view'
 import { EmployeeChecklist } from './employee-checklist'
-import { toggleVisibleSelection } from '@/lib/utils/employee-search'
+import { employeeTargetsForSubProcess, toggleVisibleSelection } from '@/lib/utils/employee-search'
 
 const createAffiliationFormSchema = z.object({
   clientId: z.string().min(1, 'Debe seleccionar un cliente'),
@@ -289,17 +289,6 @@ export function AffiliationCreateWizard({
       return
     }
 
-    // Validate employee selection for EMPRESA
-    if (isEmpresa) {
-      const selectedTypes = data.subProcesses.map((sp) => sp.type)
-      for (const type of selectedTypes) {
-        if (selectedEmployeesByType[type].length === 0) {
-          toast.error(`Debe seleccionar al menos un empleado para ${type}`)
-          return
-        }
-      }
-    }
-
     // Validate beneficiary selection (INDIVIDUAL + INCLUSION/EXCLUSION)
     const isBeneficiaryProcess =
       data.processType === AffiliationProcessType.INCLUSION_BENEFICIARIOS ||
@@ -337,9 +326,8 @@ export function AffiliationCreateWizard({
             : {}
 
         if (isEmpresa) {
-          // Expand to one sub-process per employee
-          const employeeIds = selectedEmployeesByType[sp.type]
-          for (const employeeId of employeeIds) {
+          // One sub-process per employee, or a company-level one when none is selected
+          for (const employeeId of employeeTargetsForSubProcess(selectedEmployeesByType[sp.type])) {
             transformedSubProcesses.push({
               type: sp.type,
               assignedToId,

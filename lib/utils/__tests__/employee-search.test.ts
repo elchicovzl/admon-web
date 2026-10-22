@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  employeeTargetsForSubProcess,
   filterEmployeesByQuery,
   normalizeSearchText,
   toggleVisibleSelection,
@@ -44,5 +45,15 @@ describe('toggleVisibleSelection', () => {
 
   it('removes only the visible ids when all of them are selected', () => {
     expect(toggleVisibleSelection(['9', '1', '2'], ['1', '2'])).toEqual(['9'])
+  })
+})
+
+describe('employeeTargetsForSubProcess', () => {
+  it('returns a single company-level target (null) when no employee is selected', () => {
+    expect(employeeTargetsForSubProcess([])).toEqual([null])
+  })
+
+  it('returns one target per selected employee', () => {
+    expect(employeeTargetsForSubProcess(['1', '2'])).toEqual(['1', '2'])
   })
 })
