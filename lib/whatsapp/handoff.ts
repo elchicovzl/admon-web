@@ -12,6 +12,8 @@ export interface HandoffOptions {
   link: boolean
   unlink: boolean
   confirmUnknown: boolean
+  /** Open the linked client's detail page. */
+  viewClient: boolean
 }
 
 /**
@@ -33,5 +35,6 @@ export function handoffOptions(
     link: clientId === null,
     unlink: clientId !== null,
     confirmUnknown: clientId === null && conversation.markers.includes('AMBIGUOUS'),
+    viewClient: clientId !== null,
   }
 }
