@@ -36,6 +36,13 @@ export const SEARCH_DEBOUNCE_MS = 300
 const LIST_ERROR = 'No se pudo cargar la lista de conversaciones'
 const THREAD_ERROR = 'No se pudo cargar la conversación'
 
+/** The list query for a filter tab: a state, only unread, or everything. */
+function filterInput(filter: InboxFilter): { state?: Exclude<InboxFilter, 'ALL' | 'UNREAD'>; unread?: true } {
+  if (filter === 'ALL') return {}
+  if (filter === 'UNREAD') return { unread: true }
+  return { state: filter }
+}
+
 /** Keeps `?c=` in the URL without a server round trip (Next syncs useSearchParams). */
 function writeSelection(id: string | null) {
   const url = new URL(window.location.href)
@@ -97,7 +104,7 @@ export function InboxContainer({
       setListError(null)
     }
     const result = await listConversations({
-      ...(next === 'ALL' ? {} : { state: next }),
+      ...filterInput(next),
       ...(text ? { q: text } : {}),
     })
     // A newer filter or query choice wins over a slow answer.
@@ -129,11 +136,10 @@ export function InboxContainer({
   const loadMore = async () => {
     if (!nextCursor) return
     setLoadingMore(true)
-    const state = filter === 'ALL' ? undefined : filter
     const text = queryRef.current
     const result = await listConversations({
       cursor: nextCursor,
-      ...(state ? { state } : {}),
+      ...filterInput(filter),
       ...(text ? { q: text } : {}),
     })
     // Ignore a page that belongs to a query the user already left.

@@ -16,10 +16,11 @@ import { SEARCH_MAX_LENGTH } from '@/lib/whatsapp/search'
 import { ConversationAvatar } from './conversation-avatar'
 import { ConversationListSkeleton } from './inbox-skeletons'
 
-export type InboxFilter = 'ALL' | ConversationSummary['status']
+export type InboxFilter = 'ALL' | 'UNREAD' | ConversationSummary['status']
 
 const FILTERS: { value: InboxFilter; label: string }[] = [
   { value: 'ALL', label: 'Todas' },
+  { value: 'UNREAD', label: 'No leídas' },
   { value: 'ESCALATED', label: 'Escaladas' },
   { value: 'HUMAN', label: 'Asesor' },
   { value: 'AI', label: 'IA' },
