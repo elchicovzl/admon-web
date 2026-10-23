@@ -21,6 +21,8 @@ const conversationId = z
 
 export const listConversationsSchema = z.object({
   state: z.enum(['AI', 'HUMAN', 'ESCALATED', 'CLOSED'], { invalid_type_error: 'Estado inválido' }).optional(),
+  /** Only conversations with unread client messages; combines with `state` and `q`. */
+  unread: z.boolean({ invalid_type_error: 'Filtro inválido' }).optional(),
   limit: z
     .number({ invalid_type_error: 'Límite inválido' })
     .int('Límite inválido')

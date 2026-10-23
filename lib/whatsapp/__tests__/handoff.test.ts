@@ -46,4 +46,10 @@ describe('handoffOptions (mirrors the state machine, D9)', () => {
       confirmUnknown: false,
     })
   })
+
+  it('offers the client detail only when the contact is linked to a client', () => {
+    expect(handoffOptions({ ...base, clientId: 'client-1' }).viewClient).toBe(true)
+    expect(handoffOptions({ ...base, markers: ['AMBIGUOUS'] }).viewClient).toBe(false)
+    expect(handoffOptions({ ...base, status: 'CLOSED', clientId: 'client-1' }).viewClient).toBe(true)
+  })
 })

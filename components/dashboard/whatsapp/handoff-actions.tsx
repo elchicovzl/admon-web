@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Bot, ChevronDown, Hand, Loader2, MoreHorizontal, RotateCcw, XCircle } from 'lucide-react'
+import Link from 'next/link'
+import { Bot, ChevronDown, Hand, Loader2, MoreHorizontal, RotateCcw, UserRound, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -34,8 +35,8 @@ interface HandoffActionsProps {
 
 /**
  * Conversation header actions (WI-9): take, hand back to the AI, close, reopen, the per-chat AI
- * switch, and the contact decisions (link, unlink, confirm as unknown). Only the actions the
- * state machine allows from the current state are shown.
+ * switch, the linked client's detail, and the contact decisions (link, unlink, confirm as
+ * unknown). Only the actions the state machine allows from the current state are shown.
  */
 export function HandoffActions({ conversation, actions }: HandoffActionsProps) {
   const options = handoffOptions(conversation)
@@ -57,7 +58,7 @@ export function HandoffActions({ conversation, actions }: HandoffActionsProps) {
     void (value === 'unlink' ? actions.unlink() : actions.confirmUnknown())
   }
 
-  const hasContactMenu = options.link || options.unlink || options.confirmUnknown
+  const hasContactMenu = options.viewClient || options.link || options.unlink || options.confirmUnknown
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -108,6 +109,14 @@ export function HandoffActions({ conversation, actions }: HandoffActionsProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {options.viewClient && conversation.clientId && (
+              <DropdownMenuItem asChild>
+                <Link href={`/dashboard/clients/${conversation.clientId}`}>
+                  <UserRound className="h-4 w-4" />
+                  Ver cliente
+                </Link>
+              </DropdownMenuItem>
+            )}
             {options.link && <DropdownMenuItem onSelect={() => setLinking(true)}>Vincular a un cliente</DropdownMenuItem>}
             {options.unlink && (
               <DropdownMenuItem onSelect={() => setDecision('unlink')}>Desvincular del cliente</DropdownMenuItem>

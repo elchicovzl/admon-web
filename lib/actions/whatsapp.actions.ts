@@ -271,12 +271,13 @@ export async function listConversations(
 
     const parsed = listConversationsSchema.safeParse(input)
     if (!parsed.success) return validationError(parsed.error.issues)
-    const { state, limit, cursor, q } = parsed.data
-    // Search narrows both queries (escalated and others) and combines with the state filter.
+    const { state, unread, limit, cursor, q } = parsed.data
+    // Search and the unread filter narrow both queries (escalated and others) and combine with the state filter.
     const searchSql = buildConversationSearchSql(q)
-    const search: Prisma.ConversationWhereInput = searchSql
-      ? { id: { in: (await prisma.$queryRaw<{ id: string }[]>(searchSql)).map((row) => row.id) } }
-      : {}
+    const search: Prisma.ConversationWhereInput = {
+      ...(searchSql ? { id: { in: (await prisma.$queryRaw<{ id: string }[]>(searchSql)).map((row) => row.id) } } : {}),
+      ...(unread ? { unreadCount: { gt: 0 } } : {}),
+    }
 
     const cursorAt = new Date()
     const wantEscalated = !cursor && (!state || state === 'ESCALATED')

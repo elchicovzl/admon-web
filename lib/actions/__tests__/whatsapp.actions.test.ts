@@ -326,6 +326,20 @@ describe('listConversations', () => {
     expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'CLOSED' })
   })
 
+  it('filters unread conversations in both queries and combines it with the state filter', async () => {
+    await listConversations({ unread: true })
+    expect(prismaMock.conversation.findMany).toHaveBeenCalledTimes(2)
+    const wheres = prismaMock.conversation.findMany.mock.calls.map(([a]) => a.where)
+    expect(wheres).toEqual([
+      { status: 'ESCALATED', unreadCount: { gt: 0 } },
+      { status: { not: 'ESCALATED' }, unreadCount: { gt: 0 } },
+    ])
+
+    prismaMock.conversation.findMany.mockClear()
+    await listConversations({ state: 'HUMAN', unread: true })
+    expect(prismaMock.conversation.findMany.mock.calls[0][0].where).toEqual({ status: 'HUMAN', unreadCount: { gt: 0 } })
+  })
+
   it('resolves ids with one parameterized raw query and feeds them to both queries', async () => {
     prismaMock.$queryRaw.mockResolvedValue([{ id: CONV_ID }, { id: CONV_ID_2 }])
     await listConversations({ q: 'jose' })
