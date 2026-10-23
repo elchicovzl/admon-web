@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   recordUsage: vi.fn(),
   setOutcome: vi.fn(),
   getObjectBytes: vi.fn(),
+  applyIdentityDocument: vi.fn(),
 }))
 vi.mock("@/lib/db/prisma", () => ({
   default: {
@@ -34,6 +35,10 @@ vi.mock("@/lib/knowledge/retrieve", () => ({ retrieveKnowledge: m.retrieve }))
 vi.mock("../commit", () => ({ commitAiReply: m.commitReply, commitAiEscalation: m.commitEscalation }))
 vi.mock("../usage", () => ({ recordChatTurnUsage: m.recordUsage, setUsageOutcome: m.setOutcome }))
 vi.mock("@/lib/storage/r2", () => ({ getObjectBytes: m.getObjectBytes }))
+vi.mock("@/lib/whatsapp/identity-document", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/whatsapp/identity-document")>()),
+  applyIdentityDocument: m.applyIdentityDocument,
+}))
 
 import { FALLBACK_TEXT } from "../guard"
 import { AI_FAILURE_HOLDING_TEXT, HANDOFF_IN_HOURS_TEXT, TRANSCRIPTION_FAILED_TEXT, UNSUPPORTED_MEDIA_TEXT } from "../texts"
@@ -64,7 +69,7 @@ function conversation(overrides: Record<string, unknown> = {}) {
     aiPaused: false,
     aiCursorAt: null,
     consecutiveAiFailures: 0,
-    contact: { profileName: "Ana", client: null, lead: { status: "NEW" } },
+    contact: { id: "contact-1", profileName: "Ana", client: null, lead: { status: "NEW" } },
     ...overrides,
   }
 }
@@ -120,6 +125,7 @@ beforeEach(() => {
   m.recordUsage.mockResolvedValue("usage-1")
   m.commitReply.mockResolvedValue({ status: "QUEUED", messageId: "out-1" })
   m.commitEscalation.mockResolvedValue({ status: "ESCALATED", messageId: "out-1" })
+  m.applyIdentityDocument.mockResolvedValue({ status: "LEAD_UPDATED", leadId: "lead-1" })
   modelEndsWith("sendReply", { type: "ANSWER", text: "Necesita la cédula.", sourceIds: ["chunk-1"] })
 })
 
@@ -499,5 +505,57 @@ describe("media (S-MH-2/4/5, MH-5)", () => {
     const content = m.generateText.mock.calls[0][0].messages.at(-1).content as { type: string; text?: string }[]
     expect(content.filter((part) => part.type === "image")).toHaveLength(4)
     expect(content.filter((part) => part.text === "[Imagen no revisada: demasiados adjuntos]")).toHaveLength(2)
+  })
+})
+
+describe("identity documents (cédula / RUT)", () => {
+  const CEDULA = { documentType: "CEDULA", number: "1033657664", fullName: "Miguel Vizcaino", businessName: "" }
+
+  /** The model records the document, then ends with the given terminal call. */
+  function modelRecordsDocumentThen(toolName: "sendReply" | "escalateToHuman", input: Record<string, unknown>) {
+    m.generateText.mockImplementation(async (options: { tools: Record<string, { execute?: (i: unknown, o: unknown) => Promise<unknown> }> }) => {
+      await options.tools.recordIdentityDocument.execute!(CEDULA, { toolCallId: "t1", messages: [] })
+      return {
+        steps: [{ toolCalls: [{ toolName: "recordIdentityDocument", input: CEDULA }] }, { toolCalls: [{ toolName, input }] }],
+        totalUsage: { inputTokens: 5000, outputTokens: 300 },
+      }
+    })
+  }
+
+  it("applies the recorded document to the contact after the reply commits", async () => {
+    modelRecordsDocumentThen("sendReply", { type: "SMALLTALK", text: "Recibí sus datos, un asesor los verificará.", sourceIds: [] })
+
+    expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "REPLIED" })
+    expect(m.applyIdentityDocument).toHaveBeenCalledWith({ contactId: "contact-1", conversationId: "conv-1", document: CEDULA, now: NOW })
+    expect(m.commitReply.mock.invocationCallOrder[0]).toBeLessThan(m.applyIdentityDocument.mock.invocationCallOrder[0])
+  })
+
+  it("also applies it when the turn escalates", async () => {
+    modelRecordsDocumentThen("escalateToHuman", { reason: "DOCUMENT_REVIEW", summary: "Envió su cédula" })
+
+    expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "ESCALATED" })
+    expect(m.applyIdentityDocument).toHaveBeenCalledWith(expect.objectContaining({ contactId: "contact-1", document: CEDULA }))
+  })
+
+  it("does not apply it when the reply was discarded (a person took over)", async () => {
+    modelRecordsDocumentThen("sendReply", { type: "SMALLTALK", text: "Recibí sus datos.", sourceIds: [] })
+    m.commitReply.mockResolvedValue({ status: "DISCARDED", reason: "NOT_AI" })
+
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.applyIdentityDocument).not.toHaveBeenCalled()
+  })
+
+  it("never fails the turn when saving the document fails", async () => {
+    modelRecordsDocumentThen("sendReply", { type: "SMALLTALK", text: "Recibí sus datos.", sourceIds: [] })
+    m.applyIdentityDocument.mockRejectedValue(new Error("db down"))
+
+    expect(await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })).toEqual({ status: "REPLIED" })
+  })
+
+  it("applies nothing when the model recorded no document", async () => {
+    await runAiTurn({ conversationId: "conv-1" }, { now: () => NOW })
+
+    expect(m.applyIdentityDocument).not.toHaveBeenCalled()
   })
 })

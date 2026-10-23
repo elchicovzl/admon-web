@@ -150,6 +150,8 @@ IA (`lib/ai/providers.ts`, AI SDK v7): Claude vía `@ai-sdk/anthropic` para conv
 
 Base de conocimiento: migración `knowledge_base` con índices crudos (HNSW coseno sobre `embedding`, GIN `spanish` sobre `content`) y RLS. Prisma no puede expresar el HNSW y `migrate dev` lo reporta como drift proponiendo `DROP INDEX knowledge_chunks_embedding_hnsw`: **no aceptar ese drop**; `lib/__tests__/migration-guard.test.ts` falla si una migración posterior lo borra.
 
+Documentos de identidad (`lib/whatsapp/identity-document.ts`): si el cliente manda foto de cédula o RUT, la IA llama `recordIdentityDocument` y, solo después de confirmar el turno, se aplica: un contacto **Ambiguo** se vincula al único cliente con ese teléfono y ese número (cédula o NIT, sin importar puntos ni dígito de verificación); si no hay uno solo, o el contacto no tiene cliente, los datos van a los campos vacíos del lead y a `notes` con la marca "Extraído por IA … Pendiente de verificar". Nunca edita un cliente.
+
 Cola (`lib/queue/`): con `WHATSAPP_ENABLED` distinto de `true` el arranque es un no-op total (no valida config, no conecta, no crea el schema `pgboss` ni colas). Con `true`, pg-boss crea el schema `pgboss` en la base al arrancar el servidor (necesita permisos DDL con `DIRECT_URL`) y cualquier fallo de config o de la cola aborta el arranque. Topología y reintentos en `lib/queue/queues.ts`; los jobs agotados van a la cola `wa.dead`. Los handlers se registran con `registerWorker` en `lib/queue/workers.ts`.
 
 ---

@@ -35,6 +35,7 @@ import {
   LEAD_RECOVERY_MAX_ATTEMPTS,
   confirmContactAsUnknown,
   ensureLead,
+  findClientsByWaId,
   linkContactToClient,
   recoverMissingLeads,
   removeLead,
@@ -116,6 +117,15 @@ describe("upsertAndMatchContact", () => {
     const query = m.queryRaw.mock.calls[0][0] as Prisma.Sql
     expect(query.values).toEqual(["573001234567", "3001234567"])
     expect(query.sql).toContain("ELIMINADO")
+  })
+
+  it("stops at two clients by default and returns more only when asked", async () => {
+    m.queryRaw.mockResolvedValue([])
+    await findClientsByWaId("573001234567")
+    await findClientsByWaId("573001234567", 20)
+
+    expect((m.queryRaw.mock.calls[0][0] as Prisma.Sql).sql).toMatch(/LIMIT 2\s*$/)
+    expect((m.queryRaw.mock.calls[1][0] as Prisma.Sql).sql).toMatch(/LIMIT 20\s*$/)
   })
 
   it("rejects ids that cannot be a phone number", async () => {

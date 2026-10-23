@@ -6,6 +6,7 @@ import { getAiConfig } from "@/lib/config/runtime-config"
 import { retrieveKnowledge } from "@/lib/knowledge/retrieve"
 import { getObjectBytes } from "@/lib/storage/r2"
 import { isBusinessHours, nextBusinessSlot } from "@/lib/whatsapp/business-hours"
+import { applyIdentityDocument, type IdentityDocument } from "@/lib/whatsapp/identity-document"
 import { isAiGloballyEnabled } from "@/lib/whatsapp/transitions"
 import { commitAiEscalation, commitAiReply, type TurnSnapshot } from "./commit"
 import { siteUrlFrom } from "./consent"
@@ -26,7 +27,8 @@ import { recordChatTurnUsage, setUsageOutcome, type ChatTurnUsage } from "./usag
  * Order: kill switches → pending batch → staleness → debounce → deterministic checks (request for
  * a person, forbidden topic, daily limit, daily spend cap, unreadable attachments) → the model with the knowledge
  * search → output guard → commit under a row lock (commit.ts). Nothing is written before the
- * commit, except the usage record and moving the cursor past a stale batch.
+ * commit, except the usage record and moving the cursor past a stale batch. An identity document
+ * the model recorded is applied to the contact after the commit (identity-document.ts).
  *
  * Model call: `claude-opus-5-5` / `claude-sonnet-5-5` reject forced tool choice and `temperature`
  * (HTTP 400), so tools are strict with `toolChoice: 'auto'`; the prompt requires ending with
@@ -181,7 +183,7 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
       aiPaused: true,
       aiCursorAt: true,
       consecutiveAiFailures: true,
-      contact: { select: { profileName: true, client: { select: { fullName: true } }, lead: { select: { status: true } } } },
+      contact: { select: { id: true, profileName: true, client: { select: { fullName: true } }, lead: { select: { status: true } } } },
     },
   })
   if (!conversation || conversation.status !== "AI" || conversation.aiPaused) return { status: "SKIPPED", reason: "NOT_AI" }
@@ -306,6 +308,7 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
   const allowedSourceIds = new Set<string>()
   const retrievalScores: ChatTurnUsage["retrievalScores"] = []
   let topSimilarity: number | null = null
+  let recordedDocument: IdentityDocument | null = null
   const tools = buildResponderTools({
     searchKnowledge: async (query) => {
       const result = await retrieveKnowledge(query)
@@ -319,6 +322,9 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
         topSimilarity = Math.max(topSimilarity ?? 0, result.topSimilarity)
       }
       return toolResultForModel(result)
+    },
+    recordIdentityDocument: (document) => {
+      recordedDocument = document
     },
   })
   const messages: ModelMessage[] = [...buildHistory(history), { role: "user", content: parts }]
@@ -395,5 +401,11 @@ export async function runAiTurn(job: TurnJob, deps: { now?: () => Date } = {}): 
   }
   if (outcome.status === "DISCARDED") await setUsageOutcome(usageRecordId, "DISCARDED", outcome.reason)
   else await setUsageOutcome(usageRecordId, outcome.status === "ESCALATED" ? "ESCALATED" : "REPLIED")
+  // Only once the turn committed; a failure here never undoes the reply or the escalation.
+  if (recordedDocument && outcome.status !== "DISCARDED") {
+    await applyIdentityDocument({ contactId: contact.id, conversationId: conversation.id, document: recordedDocument, now }).catch(
+      () => console.error(`[ai] could not apply the identity document for conversation ${conversation.id}`)
+    )
+  }
   return outcome
 }

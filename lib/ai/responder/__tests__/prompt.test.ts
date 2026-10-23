@@ -26,6 +26,13 @@ describe("system prompt (AI-2, AI-15)", () => {
     }
   })
 
+  it("records an identity document or RUT and confirms receipt instead of escalating only for it", () => {
+    expect(prompt).toContain("recordIdentityDocument")
+    expect(prompt).toMatch(/cédula[\s\S]*RUT/)
+    expect(prompt).toContain("no escale solo por haber recibido el documento")
+    expect(prompt).toMatch(/no puede crear ni modificar clientes[^\n]*salvo registrar/)
+  })
+
   it("requires the knowledge base for facts and ending every turn with sendReply or escalateToHuman", () => {
     expect(prompt).toContain("searchKnowledge")
     expect(prompt).toContain("sendReply")
@@ -106,19 +113,29 @@ describe("turn context", () => {
 
 describe("responder tools (AI-6, S-LD-6, S-AD-5)", () => {
   const search = vi.fn(async () => ({ status: "OK" as const, results: [] }))
-  const tools = buildResponderTools({ searchKnowledge: search })
+  const recordDocument = vi.fn()
+  const tools = buildResponderTools({ searchKnowledge: search, recordIdentityDocument: recordDocument })
 
-  it("are exactly searchKnowledge, escalateToHuman and sendReply", () => {
-    expect(RESPONDER_TOOL_NAMES).toEqual(["searchKnowledge", "escalateToHuman", "sendReply"])
+  it("are exactly searchKnowledge, recordIdentityDocument, escalateToHuman and sendReply", () => {
+    expect(RESPONDER_TOOL_NAMES).toEqual(["searchKnowledge", "recordIdentityDocument", "escalateToHuman", "sendReply"])
     expect(Object.keys(tools).sort()).toEqual([...RESPONDER_TOOL_NAMES].sort())
   })
 
   it("give the model no way to create or edit a client, change an affiliation, or pay", () => {
     const forbidden = /client|affiliat|afiliac|pago|pay|crear|create|update|edit|delete|borrar|activ/i
     for (const name of Object.keys(tools)) expect(name).not.toMatch(forbidden)
-    // The only executable tool is the read-only knowledge search.
+    // Executable tools: the read-only knowledge search and the document recorder, which only
+    // hands the data to the turn (it is applied after the commit, not by the tool).
     const executable = Object.entries(tools).filter(([, definition]) => "execute" in definition && definition.execute)
-    expect(executable.map(([name]) => name)).toEqual(["searchKnowledge"])
+    expect(executable.map(([name]) => name)).toEqual(["searchKnowledge", "recordIdentityDocument"])
+  })
+
+  it("recordIdentityDocument only passes the document to the turn and tells the model it was noted", async () => {
+    const document = { documentType: "CEDULA", number: "1033657664", fullName: "Miguel Vizcaino", businessName: "" }
+    const result = await tools.recordIdentityDocument.execute!(document as never, { toolCallId: "t2", messages: [] } as never)
+
+    expect(recordDocument).toHaveBeenCalledWith(document)
+    expect(result).toEqual({ status: "RECORDED" })
   })
 
   it("makes sendReply and escalateToHuman terminal (no execute: the turn ends there)", () => {
