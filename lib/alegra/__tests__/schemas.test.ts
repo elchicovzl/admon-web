@@ -154,6 +154,13 @@ describe('InvoiceListItemSchema', () => {
   it('rechaza un status inválido', () => {
     expect(() => InvoiceListItemSchema.parse(buildInvoice({ status: 'pagada' }))).toThrow()
   })
+
+  it('acepta un cliente sin identification (el listado /invoices dejó de enviarla, oct 2026)', () => {
+    const client = { id: '995', name: 'CADAVID PEREZ TULIA MARCELA', regime: 'COMMON_REGIME' }
+    const result = InvoiceListItemSchema.parse(buildInvoice({ client }))
+    expect(result.client.name).toBe('CADAVID PEREZ TULIA MARCELA')
+    expect(result.client.identification).toBeUndefined()
+  })
 })
 
 // -----------------------------------------------------------------------------
