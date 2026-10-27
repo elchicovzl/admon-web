@@ -20,11 +20,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
  * Structural minimum this card needs, declared here rather than importing a
  * Zod-inferred type.
  *
- * Clients and providers are the same contact in Alegra but their schemas
- * differ in optionality (`identification` is nullable-required on clients,
- * fully optional on providers). Depending on one concrete inferred type made
- * the other fail to assign for a reason that has nothing to do with
- * rendering. The component states its own contract; both shapes satisfy it.
+ * Clients and providers are the same contact in Alegra but their schemas are
+ * declared separately and have drifted apart before. Depending on one concrete
+ * inferred type made the other fail to assign for a reason that has nothing to
+ * do with rendering. The component states its own contract; both shapes
+ * satisfy it.
  */
 export interface ContactCardData {
   name: string

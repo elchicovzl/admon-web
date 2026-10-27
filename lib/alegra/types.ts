@@ -84,7 +84,8 @@ export type NumberTemplate = z.infer<typeof NumberTemplateSchema>
 export const InvoiceClientSchema = z.object({
   id: z.string(),
   name: z.string(),
-  identification: z.string().nullable(),
+  // The /invoices list stopped sending it (2026-10): every consumer already treats it as optional.
+  identification: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   phonePrimary: z.string().nullable().optional(),
   address: z.object({
@@ -672,11 +673,9 @@ export type PaymentDocumentLink = z.infer<typeof PaymentDocumentLinkSchema>
 /**
  * Counterparty on a payment.
  *
- * Deliberately NOT `InvoiceClientSchema`: that one requires `identification`
- * (nullable but present) and names the phone field `phonePrimary`. Live
- * payment payloads use `phone` and don't guarantee `identification`. Reusing
- * the invoice schema here is what would make a perfectly valid payment fail
- * to parse.
+ * Deliberately NOT `InvoiceClientSchema`: that one names the phone field
+ * `phonePrimary`, while live payment payloads use `phone`. Keeping the two
+ * apart lets each follow its own endpoint's shape.
  */
 export const PaymentClientSchema = z.object({
   id: z.string(),
