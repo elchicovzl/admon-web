@@ -44,7 +44,9 @@ import {
 } from '@/lib/alegra/cache'
 import {
   GrupoCategoria,
+  TipoContraparte,
   TipoMovimiento,
+  UserRole,
   type Prisma,
 } from '@prisma/client'
 import type { ActionResponse } from '@/lib/types/auth.types'
@@ -55,6 +57,7 @@ import {
   type CategoriaListItem,
   type TipoServicioListItem,
   type ContraparteListItem,
+  type ManagerPrestamoItem,
   type ClienteReciboItem,
   type ServicioAlegraListItem,
   type SincronizacionServiciosResultado,
@@ -1595,6 +1598,25 @@ export const getPrestamos = cache(
   }
 )
 
+/** Préstamos solo se le hacen a managers activos del sistema. */
+export const getManagersParaPrestamo = cache(
+  async (): Promise<ActionResponse<ManagerPrestamoItem[]>> => {
+    const auth = await requireControlAuth()
+    if (!auth.authorized) return sinAutorizacion(auth.error)
+
+    const managers = await prisma.user.findMany({
+      where: { role: UserRole.MANAGER, isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, email: true },
+    })
+
+    return {
+      success: true,
+      data: managers.map((m) => ({ id: m.id, nombre: m.name || m.email })),
+    }
+  }
+)
+
 /**
  * Crea el préstamo y su movimiento de desembolso en una sola transacción.
  *
@@ -1628,10 +1650,32 @@ export async function createPrestamo(
     return { success: false, error: `El periodo ${periodo} ya está cerrado para ese bolsillo.` }
   }
 
+  const manager = await prisma.user.findFirst({
+    where: { id: entrada.userId, role: UserRole.MANAGER, isActive: true },
+    select: { id: true, name: true, email: true },
+  })
+  if (!manager) {
+    return { success: false, error: 'Solo se le puede prestar a un manager activo' }
+  }
+
   const prestamoId = await prisma.$transaction(async (tx) => {
+    // El manager se registra como contraparte la primera vez que recibe un
+    // préstamo; después se reutiliza la misma por `userId`.
+    const contraparte = await tx.contraparte.upsert({
+      where: { userId: manager.id },
+      update: {},
+      create: {
+        nombre: manager.name || manager.email,
+        tipo: TipoContraparte.EMPLEADO,
+        userId: manager.id,
+        createdById: auth.userId,
+      },
+      select: { id: true },
+    })
+
     const prestamo = await tx.prestamo.create({
       data: {
-        contraparteId: entrada.contraparteId,
+        contraparteId: contraparte.id,
         fechaDesembolso: fecha,
         montoOriginal: entrada.montoOriginal,
         concepto: entrada.concepto,
@@ -1651,7 +1695,7 @@ export async function createPrestamo(
         concepto: `Desembolso: ${entrada.concepto}`.slice(0, 200),
         bolsilloId: entrada.bolsilloOrigenId,
         categoriaId,
-        contraparteId: entrada.contraparteId,
+        contraparteId: contraparte.id,
         prestamoId: prestamo.id,
         createdById: auth.userId,
       },

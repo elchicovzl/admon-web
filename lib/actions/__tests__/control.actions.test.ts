@@ -39,7 +39,8 @@ const {
     categoriaMovimiento: { findFirst: vi.fn(), create: vi.fn() },
     prestamo: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     bolsillo: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
-    contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    contraparte: { findUnique: vi.fn(), create: vi.fn(), findMany: vi.fn(), update: vi.fn(), upsert: vi.fn() },
+    user: { findFirst: vi.fn(), findMany: vi.fn() },
     client: { findFirst: vi.fn(), findMany: vi.fn() },
     servicioReferenciado: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     conceptoPagoAlegra: { findMany: vi.fn(), create: vi.fn() },
@@ -108,6 +109,7 @@ import {
   getNominaDelAnio,
   getDetalleDelCorte,
   createPrestamo,
+  getManagersParaPrestamo,
   getPagosDelPeriodo,
   importarPagosComoEgresos,
   emitirReciboDeMovimiento,
@@ -3036,8 +3038,9 @@ describe('getDetalleDelCorte', () => {
 // ---------------------------------------------------------------------------
 
 describe('createPrestamo', () => {
+  const MANAGER = 'cmanageryudy1'
   const VALIDO = {
-    contraparteId: 'ccontra00001',
+    userId: MANAGER,
     fechaDesembolso: '2026-09-05',
     montoOriginal: 2_000_000,
     concepto: 'Adelanto de sueldo',
@@ -3047,6 +3050,8 @@ describe('createPrestamo', () => {
 
   beforeEach(() => {
     prismaMock.categoriaMovimiento.findFirst.mockResolvedValue({ id: 'ccatdesemb01' })
+    prismaMock.user.findFirst.mockResolvedValue({ id: MANAGER, name: 'Yudy', email: 'yudy@test.com' })
+    prismaMock.contraparte.upsert.mockResolvedValue({ id: 'ccontra00001' })
     prismaMock.prestamo.create.mockResolvedValue({ id: 'cpre0000001' })
     prismaMock.movimiento.create.mockResolvedValue(filaMovimiento())
     prismaMock.$transaction.mockImplementation(async (fn: unknown) =>
@@ -3078,6 +3083,39 @@ describe('createPrestamo', () => {
         }),
       })
     )
+  })
+
+  it('le presta a la contraparte del manager, creándola si no existe', async () => {
+    const res = await createPrestamo(VALIDO)
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: MANAGER, role: 'MANAGER', isActive: true }),
+      })
+    )
+    expect(prismaMock.contraparte.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: MANAGER },
+        create: expect.objectContaining({ nombre: 'Yudy', tipo: 'EMPLEADO', userId: MANAGER }),
+      })
+    )
+    expect(prismaMock.movimiento.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ contraparteId: 'ccontra00001' }),
+      })
+    )
+  })
+
+  it('rechaza a quien no sea un manager activo', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null)
+
+    const res = await createPrestamo(VALIDO)
+
+    expect(res.success).toBe(false)
+    expect(res.error).toBe('Solo se le puede prestar a un manager activo')
+    expect(prismaMock.contraparte.upsert).not.toHaveBeenCalled()
+    expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
   })
 
   it('los dos van en la MISMA transacción', async () => {
@@ -3137,6 +3175,33 @@ describe('createPrestamo', () => {
 
     expect((await createPrestamo(VALIDO)).success).toBe(false)
     expect(prismaMock.prestamo.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('getManagersParaPrestamo', () => {
+  it('lista solo usuarios MANAGER activos', async () => {
+    prismaMock.user.findMany.mockResolvedValue([
+      { id: 'cmanageryudy1', name: 'Yudy', email: 'yudy@test.com' },
+      { id: 'cmanagersinnom', name: null, email: 'sin@test.com' },
+    ])
+
+    const res = await getManagersParaPrestamo()
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { role: 'MANAGER', isActive: true } })
+    )
+    expect(res.data).toEqual([
+      { id: 'cmanageryudy1', nombre: 'Yudy' },
+      { id: 'cmanagersinnom', nombre: 'sin@test.com' },
+    ])
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    expect((await getManagersParaPrestamo()).success).toBe(false)
+    expect(prismaMock.user.findMany).not.toHaveBeenCalled()
   })
 })
 

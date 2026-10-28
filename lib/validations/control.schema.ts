@@ -341,7 +341,8 @@ export type AnularMovimientoInput = z.infer<typeof anularMovimientoSchema>
 // ---------------------------------------------------------------------------
 
 export const createPrestamoSchema = z.object({
-  contraparteId: cuid('Seleccioná a quién se le presta'),
+  /** Manager (usuario del sistema) a quien se le presta. */
+  userId: cuid('Seleccioná a quién se le presta'),
   fechaDesembolso: fechaCalendario,
   montoOriginal: monto,
   concepto: z

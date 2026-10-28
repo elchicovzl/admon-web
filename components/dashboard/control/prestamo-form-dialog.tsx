@@ -11,12 +11,11 @@
  */
 
 import { useState } from 'react'
-import { TipoContraparte } from '@prisma/client'
 import { toast } from 'sonner'
 import { Loader2, Plus } from 'lucide-react'
 
-import { createPrestamo, createContraparte } from '@/lib/actions/control.actions'
-import type { BolsilloListItem, ContraparteListItem } from '@/lib/types/control.types'
+import { createPrestamo } from '@/lib/actions/control.actions'
+import type { BolsilloListItem, ManagerPrestamoItem } from '@/lib/types/control.types'
 import { formatearMonto, hoyComoFechaCalendario } from '@/lib/utils/control-format'
 
 import { Button } from '@/components/ui/button'
@@ -35,11 +34,12 @@ import {
 
 interface Props {
   bolsillos: BolsilloListItem[]
-  contrapartes: ContraparteListItem[]
+  /** Solo managers activos: a nadie más se le presta. */
+  managers: ManagerPrestamoItem[]
 }
 
 const VACIO = {
-  contraparteId: '',
+  userId: '',
   fechaDesembolso: hoyComoFechaCalendario(),
   montoOriginal: '',
   concepto: '',
@@ -47,50 +47,23 @@ const VACIO = {
   notas: '',
 }
 
-export function PrestamoFormDialog({ bolsillos, contrapartes }: Props) {
+export function PrestamoFormDialog({ bolsillos, managers }: Props) {
   const [abierto, setAbierto] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [form, setForm] = useState(VACIO)
 
-  /**
-   * Las contrapartes se guardan en estado local: se pueden crear sin salir de
-   * acá y tienen que aparecer en el selector al instante.
-   */
-  const [lista, setLista] = useState(contrapartes)
-  const [creando, setCreando] = useState(false)
-  const [nombreNuevo, setNombreNuevo] = useState('')
-  const [guardandoContraparte, setGuardandoContraparte] = useState(false)
-
   const monto = Number(form.montoOriginal)
   const puedeGuardar =
-    Boolean(form.contraparteId) &&
+    Boolean(form.userId) &&
     Boolean(form.bolsilloOrigenId) &&
     form.concepto.trim().length >= 3 &&
     monto > 0
-
-  async function crearContraparte() {
-    setGuardandoContraparte(true)
-    try {
-      const r = await createContraparte({ nombre: nombreNuevo, tipo: TipoContraparte.OTRO })
-      if (r.success && r.data) {
-        setLista((a) => [...a, r.data!])
-        setForm((f) => ({ ...f, contraparteId: r.data!.id }))
-        setNombreNuevo('')
-        setCreando(false)
-        toast.success(r.message ?? 'Contraparte creada')
-      } else {
-        toast.error(r.error ?? 'No se pudo crear')
-      }
-    } finally {
-      setGuardandoContraparte(false)
-    }
-  }
 
   async function guardar() {
     setEnviando(true)
     try {
       const r = await createPrestamo({
-        contraparteId: form.contraparteId,
+        userId: form.userId,
         fechaDesembolso: form.fechaDesembolso,
         montoOriginal: monto,
         concepto: form.concepto,
@@ -133,52 +106,15 @@ export function PrestamoFormDialog({ bolsillos, contrapartes }: Props) {
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>A quién se le presta</Label>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs"
-                disabled={enviando}
-                onClick={() => setCreando((v) => !v)}
-              >
-                {creando ? 'Cancelar' : '+ Nueva contraparte'}
-              </Button>
-            </div>
-
+            <Label>A quién se le presta</Label>
             <SearchableSelect
-              options={lista
-                .filter((c) => c.isActive)
-                .map((c) => ({ value: c.id, label: c.nombre }))}
-              value={form.contraparteId || null}
-              onValueChange={(v) => setForm((f) => ({ ...f, contraparteId: v ?? '' }))}
-              placeholder="Buscá o seleccioná…"
+              options={managers.map((m) => ({ value: m.id, label: m.nombre }))}
+              value={form.userId || null}
+              onValueChange={(v) => setForm((f) => ({ ...f, userId: v ?? '' }))}
+              placeholder="Buscá o seleccioná un manager…"
               searchPlaceholder="Escribí para filtrar…"
               disabled={enviando}
             />
-
-            {creando && (
-              <div className="flex gap-2 rounded-md border bg-muted/40 p-3">
-                <Input
-                  placeholder="Nombre"
-                  value={nombreNuevo}
-                  onChange={(e) => setNombreNuevo(e.target.value)}
-                  disabled={guardandoContraparte}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={guardandoContraparte || nombreNuevo.trim().length < 2}
-                  onClick={crearContraparte}
-                >
-                  {guardandoContraparte && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Crear
-                </Button>
-              </div>
-            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -253,7 +189,7 @@ export function PrestamoFormDialog({ bolsillos, contrapartes }: Props) {
             <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
               Sale <strong className="text-foreground">{formatearMonto(monto)}</strong> de{' '}
               {bolsillos.find((b) => b.id === form.bolsilloOrigenId)?.nombre} para{' '}
-              {lista.find((c) => c.id === form.contraparteId)?.nombre}.
+              {managers.find((m) => m.id === form.userId)?.nombre}.
             </p>
           )}
         </div>

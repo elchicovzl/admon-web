@@ -4,7 +4,7 @@ import type { Metadata } from 'next'
 import {
   getPrestamos,
   getBolsillos,
-  getContrapartes,
+  getManagersParaPrestamo,
 } from '@/lib/actions/control.actions'
 import { formatearMonto } from '@/lib/utils/control-format'
 import { PrestamosTable } from '@/components/dashboard/control/prestamos-table'
@@ -19,12 +19,15 @@ export const metadata: Metadata = {
 
 /** El botón vive aparte para que no espere a que carguen los préstamos. */
 async function BotonNuevo() {
-  const [bolsillos, contrapartes] = await Promise.all([getBolsillos(), getContrapartes()])
+  const [bolsillos, managers] = await Promise.all([
+    getBolsillos(),
+    getManagersParaPrestamo(),
+  ])
 
   return (
     <PrestamoFormDialog
       bolsillos={bolsillos.data ?? []}
-      contrapartes={contrapartes.data ?? []}
+      managers={managers.data ?? []}
     />
   )
 }
