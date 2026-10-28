@@ -143,6 +143,12 @@ export interface ClienteReciboItem {
   contraparteId: string | null
 }
 
+/** Manager al que se le puede prestar. */
+export interface ManagerPrestamoItem {
+  id: string
+  nombre: string
+}
+
 export interface ContraparteListItem {
   id: string
   nombre: string
