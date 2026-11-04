@@ -6,7 +6,9 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { GrupoCategoria } from '@prisma/client'
 import {
+  categoriasDeCobro,
   CLAVE_CONSECUTIVO_RECIBO,
   formatearNumeroRecibo,
   montoEnLetras,
@@ -395,5 +397,26 @@ describe('esLineaVacia', () => {
     expect(esLineaVacia({ servicioAlegraId: 's1', monto: undefined })).toBe(false)
     expect(esLineaVacia({ servicioAlegraId: '', monto: 500 })).toBe(false)
     expect(esLineaVacia({ servicioAlegraId: 's1', monto: 500 })).toBe(false)
+  })
+})
+
+describe('categoriasDeCobro', () => {
+  const categoria = (id: string, grupo: GrupoCategoria, isActive = true) => ({
+    id,
+    nombre: id,
+    grupo,
+    isActive,
+    esNomina: false,
+  })
+
+  it('keeps only active collection categories (quotation and invoice)', () => {
+    const resultado = categoriasDeCobro([
+      categoria('cotizacion', GrupoCategoria.COBRO_COTIZACION),
+      categoria('factura', GrupoCategoria.COBRO_FACTURA),
+      categoria('gasto', GrupoCategoria.GASTO_OPERATIVO),
+      categoria('nomina', GrupoCategoria.NOMINA_FIJA),
+      categoria('inactiva', GrupoCategoria.COBRO_FACTURA, false),
+    ])
+    expect(resultado.map((c) => c.id)).toEqual(['cotizacion', 'factura'])
   })
 })
