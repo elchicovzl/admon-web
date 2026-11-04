@@ -1,11 +1,12 @@
 /**
  * Affiliations Table Component
- * Displays all affiliations with client info, sub-processes, and progress
+ * Displays all affiliations with client info, sub-processes, and progress.
+ * Affiliations with INCAPACIDADES sub-processes get one highlighted sub-row per disability.
  */
 
 'use client'
 
-import { useEffect, useState, useMemo, useTransition } from 'react'
+import { Fragment, useEffect, useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -48,6 +49,8 @@ import {
   getAffiliationGlobalStatus,
 } from '@/lib/types/affiliation.types'
 import { TypeBadge } from './status-badge'
+import { DisabilitySubRow } from './disability-sub-row'
+import { buildDisabilityRows } from '@/lib/utils/disability-rows'
 import { AffiliationEditDialog } from './affiliation-edit-dialog'
 import { AffiliationSubProcessStatus, AffiliationProcessType, ClientType } from '@prisma/client'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -57,6 +60,8 @@ interface AffiliationsTableProps {
   searchQuery?: string
   onAffiliationUpdated?: (affiliationId: string, updates: Partial<AffiliationWithRelations>) => void
 }
+
+const TABLE_COLUMN_COUNT = 8
 
 type EmployeeMini = { id: string; fullName: string; identificationNumber?: string | null }
 
@@ -277,8 +282,11 @@ export function AffiliationsTable({
             const showMatchedList = trimmedQuery.length > 0 && matchedEmployees.length > 0
             const showCountBadge = !showMatchedList && uniqueEmployees.length > 0
 
+            const disabilityRows = buildDisabilityRows([affiliation], '')
+
             return (
-              <TableRow key={affiliation.id}>
+              <Fragment key={affiliation.id}>
+              <TableRow>
                 <TableCell className="max-w-[240px]">
                   <div
                     className="cursor-pointer"
@@ -441,6 +449,19 @@ export function AffiliationsTable({
                   </DropdownMenu>
                 </TableCell>
               </TableRow>
+              {disabilityRows.map((row) => (
+                <DisabilitySubRow
+                  key={row.subProcess.id}
+                  row={row}
+                  colSpan={TABLE_COLUMN_COUNT}
+                  onOpen={(affiliationId, subProcessId) =>
+                    startTransition(() =>
+                      router.push(`/dashboard/affiliations/${affiliationId}/subprocess/${subProcessId}`)
+                    )
+                  }
+                />
+              ))}
+              </Fragment>
             )
           })}
         </TableBody>
