@@ -147,6 +147,11 @@ export const getAffiliations = cache(async (): Promise<ActionResponse<Affiliatio
             assignedToId: true,
             employeeId: true,
             statusReason: true,
+            disabilityStartDate: true,
+            disabilityEndDate: true,
+            bankRegistry: true,
+            transcription: true,
+            collection: true,
               createdAt: true,
             updatedAt: true,
             assignedTo: {

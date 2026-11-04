@@ -3,8 +3,6 @@
 import { useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { type ColumnDef, type ColumnPinningState, type Row } from '@tanstack/react-table'
-import { format, differenceInCalendarDays } from 'date-fns'
-import { es } from 'date-fns/locale'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -30,7 +28,8 @@ import {
   AffiliationProcessType,
   AffiliationSubProcessType,
 } from '@prisma/client'
-import { CheckCircle2, Circle } from 'lucide-react'
+import { CheckCell, fmtDate } from '@/components/dashboard/affiliations/disability-cells'
+import { daysSince, disabilityDays } from '@/lib/utils/disability-rows'
 
 const STORAGE_KEY = 'my-assignments-table-v2'
 const SORTABLE_COLUMNS: Set<string> = new Set([
@@ -55,41 +54,6 @@ interface MyAssignmentsClientProps {
   initialPage: MyAssignmentsPage
   currentUserId?: string
   currentUserRole?: string
-}
-
-function fmtDate(d: Date | string | null | undefined) {
-  if (!d) return '—'
-  try {
-    return format(new Date(d), 'd MMM yyyy', { locale: es })
-  } catch {
-    return '—'
-  }
-}
-
-function daysSince(d: Date | string | null | undefined) {
-  if (!d) return null
-  try {
-    return Math.max(0, differenceInCalendarDays(new Date(), new Date(d)))
-  } catch {
-    return null
-  }
-}
-
-function disabilityDays(start: Date | string | null | undefined, end: Date | string | null | undefined) {
-  if (!start || !end) return null
-  try {
-    return Math.max(1, differenceInCalendarDays(new Date(end), new Date(start)) + 1)
-  } catch {
-    return null
-  }
-}
-
-function CheckCell({ value }: { value: boolean }) {
-  return value ? (
-    <CheckCircle2 className="h-4 w-4 text-green-600" />
-  ) : (
-    <Circle className="h-4 w-4 text-muted-foreground/50" />
-  )
 }
 
 export function MyAssignmentsClient({ initialPage }: MyAssignmentsClientProps) {

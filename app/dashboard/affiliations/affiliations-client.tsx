@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, FileText, ArrowRightLeft, HeartPulse, Landmark } from 'lucide-react'
 import { AffiliationsTable } from '@/components/dashboard/affiliations/affiliations-table'
+import { DisabilitySubProcessesTable } from '@/components/dashboard/affiliations/disability-subprocesses-table'
+import { isDisabilityOnlyFilter } from '@/lib/utils/disability-rows'
 import {
   AffiliationTableFiltersBar,
   type AffiliationTableFilters,
@@ -194,11 +196,18 @@ export function AffiliationsClient({
         onFiltersChange={setFilters}
       />
 
-      <AffiliationsTable
-        affiliations={filteredAffiliations}
-        searchQuery={filters.searchQuery}
-        onAffiliationUpdated={handleAffiliationUpdated}
-      />
+      {isDisabilityOnlyFilter(filters.selectedSubProcessTypes) ? (
+        <DisabilitySubProcessesTable
+          affiliations={filteredAffiliations}
+          searchQuery={filters.searchQuery}
+        />
+      ) : (
+        <AffiliationsTable
+          affiliations={filteredAffiliations}
+          searchQuery={filters.searchQuery}
+          onAffiliationUpdated={handleAffiliationUpdated}
+        />
+      )}
 
       <AffiliationCreateWizard
         open={createDialogOpen}
