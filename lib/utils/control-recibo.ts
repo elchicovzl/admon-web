@@ -9,6 +9,7 @@
  * Alegra invoice. It never goes to Alegra or DIAN.
  */
 
+import { GrupoCategoria } from '@prisma/client'
 import { redondearMonto, sumarMontos } from '@/lib/utils/control-ledger'
 
 /** Key of the `Consecutivo` row that numbers receipts. */
@@ -364,4 +365,19 @@ export function etiquetaClienteRecibo(cliente: {
   identificationNumber: string
 }): string {
   return `${cliente.fullName} · ${cliente.identificationNumber}`
+}
+
+const GRUPOS_DE_COBRO: ReadonlySet<GrupoCategoria> = new Set([
+  GrupoCategoria.COBRO_COTIZACION,
+  GrupoCategoria.COBRO_FACTURA,
+])
+
+/**
+ * Categories offered by the quick receipt dialog: only active collection
+ * categories, so a receipt can never land in an expense or payroll row.
+ */
+export function categoriasDeCobro<T extends { grupo: GrupoCategoria; isActive: boolean }>(
+  categorias: readonly T[]
+): T[] {
+  return categorias.filter((c) => c.isActive && GRUPOS_DE_COBRO.has(c.grupo))
 }

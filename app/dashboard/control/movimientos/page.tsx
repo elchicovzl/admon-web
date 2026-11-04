@@ -16,6 +16,7 @@ import {
 } from '@/lib/utils/control-format'
 import { MovimientosTable } from '@/components/dashboard/control/movimientos-table'
 import { MovimientoFormDialog } from '@/components/dashboard/control/movimiento-form-dialog'
+import { ReciboRapidoDialog } from '@/components/dashboard/control/recibo-rapido-dialog'
 import { MovimientosFiltros } from '@/components/dashboard/control/movimientos-filtros'
 import { Paginador } from '@/components/dashboard/control/paginador'
 import { ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
@@ -145,6 +146,12 @@ async function BotonNuevo() {
   return <MovimientoFormDialog {...(await catalogos())} />
 }
 
+async function BotonReciboRapido() {
+  // The quick receipt never picks a counterparty: it is the client's.
+  const { contrapartes: _contrapartes, ...props } = await catalogos()
+  return <ReciboRapidoDialog {...props} />
+}
+
 export default async function MovimientosPage({ searchParams }: PageProps) {
   const sp = await searchParams
   const periodo = sp.periodo ?? periodoActual()
@@ -166,6 +173,9 @@ export default async function MovimientosPage({ searchParams }: PageProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SelectorPeriodo periodo={periodo} />
+          <Suspense fallback={<Skeleton className="h-9 w-36" />}>
+            <BotonReciboRapido />
+          </Suspense>
           <Suspense fallback={<Skeleton className="h-9 w-40" />}>
             <BotonNuevo />
           </Suspense>
