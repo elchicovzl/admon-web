@@ -11,6 +11,7 @@ import { browserNotificationSpec } from '@/lib/notifications/present'
 import { evaluatePoll, type BrowserPermission, type PollState } from '@/lib/notifications/poll-diff'
 import { readMuted, writeMuted } from '@/lib/notifications/preferences'
 import { createSerializedRunner } from '@/lib/utils/serialized-runner'
+import { usePolling } from '@/components/dashboard/whatsapp/use-polling'
 import type { NotificationFeed } from '@/lib/types/notification.types'
 import {
   getBrowserPermission,
@@ -19,7 +20,7 @@ import {
 } from './browser-notifications'
 import { playChime, unlockAudio } from './notification-sound'
 
-export const NOTIFICATION_POLL_INTERVAL_MS = 4000
+export const NOTIFICATION_POLL_INTERVAL_MS = 15_000
 
 function storage(): Storage | null {
   try {
@@ -30,7 +31,7 @@ function storage(): Storage | null {
 }
 
 /**
- * Polls the feed every ~4 s and reacts to what is new: chime and OS notifications fire only
+ * Polls the feed every ~15 s (visible tab only) and reacts to what is new: chime and OS notifications fire only
  * when `evaluatePoll` says so (never on the first poll, never on every poll). The loop is
  * self-scheduling, and every refresh (timer tick, markRead, markAllRead) goes through one
  * serialized runner, so two refreshes never read or write the shared `pollState` concurrently.
@@ -91,25 +92,15 @@ export function useNotificationFeed(userId: string) {
   // which also guarantees that markRead/markAllRead re-read AFTER their write.
   const refresh = useMemo(() => createSerializedRunner(runRefresh), [runRefresh])
 
+  // Load once on mount, then poll only while the tab is visible. A hidden tab used to keep
+  // polling every few seconds, which turned every open dashboard tab into steady POST traffic.
   useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    const tick = async () => {
-      try {
-        await refresh()
-      } catch {
-        // Network blip: keep the last feed and try again on the next tick.
-      }
-      if (!cancelled) timer = setTimeout(tick, NOTIFICATION_POLL_INTERVAL_MS)
-    }
-    void tick()
-
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
+    refresh().catch(() => {
+      // Network blip: keep the last feed and try again on the next tick.
+    })
   }, [refresh])
+
+  usePolling(refresh, NOTIFICATION_POLL_INTERVAL_MS)
 
   const setMuted = useCallback(
     (next: boolean) => {

@@ -5,8 +5,8 @@ import { getUnreadNotificationCount } from '@/lib/actions/notification.actions'
 import { formatBadgeCount } from '@/lib/whatsapp/inbox'
 import { usePolling } from './use-polling'
 
-/** Slower than the bell (4 s): the sidebar only needs a coarse "something is waiting". */
-export const SIDEBAR_BADGE_POLL_INTERVAL_MS = 15_000
+/** Slower than the bell (15 s): the sidebar only needs a coarse "something is waiting". */
+export const SIDEBAR_BADGE_POLL_INTERVAL_MS = 30_000
 
 /**
  * Unread WhatsApp notifications (escalations, new activity on escalated chats, new leads) next

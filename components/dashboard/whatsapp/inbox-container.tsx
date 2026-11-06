@@ -29,7 +29,7 @@ import { useHandoffActions } from './use-handoff-actions'
 import { useThreadActions } from './use-thread-actions'
 
 /** Same cadence as the notification bell. */
-export const INBOX_POLL_INTERVAL_MS = 4000
+export const INBOX_POLL_INTERVAL_MS = 15_000
 /** Wait for the user to stop typing before querying. */
 export const SEARCH_DEBOUNCE_MS = 300
 

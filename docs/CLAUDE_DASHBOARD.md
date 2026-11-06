@@ -657,7 +657,7 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   usuario de la sesión.
 - Cabecera: icono de WhatsApp arriba a la derecha (`components/dashboard/notifications/`),
   visible solo con acceso a WhatsApp. Contador, pulso mientras haya sin leer (respeta
-  `prefers-reduced-motion`), polling cada ~4 s.
+  `prefers-reduced-motion`), polling cada ~15 s, solo con la pestaña visible.
 - Sonido: tono Web Audio, desbloqueado con el primer clic; interruptor de silencio por usuario
   en `localStorage`. Suena solo si aparece un id nuevo o sube el contador
   (`lib/notifications/poll-diff.ts`), nunca en el primer poll.
@@ -681,12 +681,12 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   compuesto `(timestamp, id)` (`before: { timestamp, id }`) porque varios mensajes pueden
   compartir el mismo timestamp.
 - Lógica pura y probada en `lib/whatsapp/inbox.ts` (orden, marcadores, "Atender: lun 8:00",
-  ventana de 24 h, previews, merges). Polling cada 4 s, solo con la pestaña visible.
+  ventana de 24 h, previews, merges). Polling cada 15 s, solo con la pestaña visible.
 - Medios: solo por `getMediaUrl` (URL firmada de 10 min, pedida cuando el adjunto es visible);
   nunca se expone la clave de R2.
 - Datos de prueba locales: `pnpm seed:whatsapp-dev` (solo base local, ver el script).
 - Insignia en el menú lateral ("WhatsApp"): `WhatsAppSidebarBadge` reutiliza
-  `getUnreadNotificationCount` (cada 15 s, solo con la pestaña visible y solo si el usuario ve la
+  `getUnreadNotificationCount` (cada 30 s, solo con la pestaña visible y solo si el usuario ve la
   entrada).
 
 #### Búsqueda, avatares y ticks (UX de la bandeja)
