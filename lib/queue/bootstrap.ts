@@ -2,6 +2,7 @@ import { registerTranscriptionWorkers } from "@/lib/ai/transcription-worker"
 import { registerAiTurnWorkers } from "@/lib/ai/turn-worker"
 import { loadRuntimeConfig } from "@/lib/config/runtime-config"
 import { registerKnowledgeWorkers } from "@/lib/knowledge/worker"
+import { registerRetentionWorkers } from "@/lib/retention/purge"
 import { registerWhatsAppWorkers } from "@/lib/whatsapp/event-worker"
 import { startBoss } from "./boss"
 import { ensureQueues } from "./queues"
@@ -52,6 +53,7 @@ export async function bootstrapRuntime(
   registerKnowledgeWorkers()
   registerTranscriptionWorkers()
   registerAiTurnWorkers()
+  registerRetentionWorkers()
   const workers = await startWorkers(boss)
   console.info(`[queue] started (${workers} workers registered)`)
 }
