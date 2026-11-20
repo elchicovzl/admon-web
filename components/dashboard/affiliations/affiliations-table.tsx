@@ -39,7 +39,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Trash2, Loader2, Users } from 'lucide-react'
+import { BellRing, ChevronLeft, ChevronRight, Eye, MoreHorizontal, Pencil, Power, PowerOff, Trash2, Loader2, Users } from 'lucide-react'
+import { useSession } from 'next-auth/react'
+import { NotifyAssigneeDialog } from '@/components/dashboard/attention/notify-assignee-dialog'
 import { toast } from 'sonner'
 import { toggleAffiliationStatus, deleteAffiliation } from '@/lib/actions/affiliation.actions'
 import type { AffiliationWithRelations } from '@/lib/types/affiliation.types'
@@ -159,6 +161,8 @@ export function AffiliationsTable({
   const [currentPage, setCurrentPage] = useState(1)
   const [editingAffiliation, setEditingAffiliation] = useState<AffiliationWithRelations | null>(null)
   const [deleteAffiliationId, setDeleteAffiliationId] = useState<string | null>(null)
+  const [notifyAffiliation, setNotifyAffiliation] = useState<AffiliationWithRelations | null>(null)
+  const { data: session } = useSession()
   const [isDeletingAffiliation, setIsDeletingAffiliation] = useState(false)
 
   // Reset to page 1 when filtered data changes
@@ -413,6 +417,12 @@ export function AffiliationsTable({
                         <Eye className="mr-2 h-4 w-4" />
                         Ver Detalles
                       </DropdownMenuItem>
+                      {(affiliation.subProcesses?.length ?? 0) > 0 && (
+                        <DropdownMenuItem className="cursor-pointer" onClick={() => setNotifyAffiliation(affiliation)}>
+                          <BellRing className="mr-2 h-4 w-4" />
+                          Notificar responsable
+                        </DropdownMenuItem>
+                      )}
                       {affiliation.status === 'ACTIVE' && (
                         <DropdownMenuItem
                           className="cursor-pointer"
@@ -513,6 +523,13 @@ export function AffiliationsTable({
       )}
 
       {/* Delete confirmation dialog */}
+      <NotifyAssigneeDialog
+        open={!!notifyAffiliation}
+        onOpenChange={(open) => !open && setNotifyAffiliation(null)}
+        targets={notifyAffiliation?.subProcesses ?? []}
+        currentUserId={session?.user?.id}
+      />
+
       <AlertDialog open={!!deleteAffiliationId} onOpenChange={(open) => !open && setDeleteAffiliationId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

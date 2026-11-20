@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/breadcrumb'
 import { usePathname } from 'next/navigation'
 import { useDashboardStore } from '@/lib/stores/use-dashboard-store'
+import { AttentionBell } from '@/components/dashboard/attention/attention-bell'
 import { NotificationBell } from '@/components/dashboard/notifications/notification-bell'
 
 const STATIC_LABELS: Record<string, string> = {
@@ -88,11 +89,11 @@ export function DashboardHeader({ whatsappNotificationsUserId = null }: Dashboar
           ))}
         </BreadcrumbList>
       </Breadcrumb>
-      {whatsappNotificationsUserId && (
-        <div className="ml-auto flex items-center">
-          <NotificationBell userId={whatsappNotificationsUserId} />
-        </div>
-      )}
+      <div className="ml-auto flex items-center gap-1">
+        {/* Process attention requests: every active user; the actions re-check isActive. */}
+        <AttentionBell />
+        {whatsappNotificationsUserId && <NotificationBell userId={whatsappNotificationsUserId} />}
+      </div>
     </header>
   )
 }
