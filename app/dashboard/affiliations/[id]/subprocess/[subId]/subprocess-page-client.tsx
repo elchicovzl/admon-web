@@ -20,6 +20,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ArrowLeft, User, Calendar, Clock, Loader2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
+import { SubProcessAttentionSection } from '@/components/dashboard/attention/subprocess-attention-section'
+import type { AttentionRequestView } from '@/lib/types/attention-request.types'
 import { SubProcessObservationsSection } from '@/components/dashboard/affiliations/subprocess-observations-section'
 import { SubProcessDocumentsSection } from '@/components/dashboard/affiliations/subprocess-documents-section'
 import { SubProcessClientTab } from '@/components/dashboard/affiliations/subprocess-client-tab'
@@ -45,6 +47,7 @@ interface SubProcessPageClientProps {
   clientName?: string
   currentUserId: string
   currentUserRole: string
+  attentionRequests: AttentionRequestView[]
 }
 
 export function SubProcessPageClient({
@@ -55,6 +58,7 @@ export function SubProcessPageClient({
   clientName,
   currentUserId,
   currentUserRole,
+  attentionRequests,
 }: SubProcessPageClientProps) {
   const [subProcess, setSubProcess] = useState(initialSubProcess)
   const setBreadcrumbLabels = useDashboardStore((s) => s.setBreadcrumbLabels)
@@ -461,6 +465,13 @@ export function SubProcessPageClient({
             currentUserRole={currentUserRole}
             onObservationAdded={handleObservationAdded}
             onObservationDeleted={handleObservationDeleted}
+          />
+
+          {/* Attention requests to the assignee */}
+          <SubProcessAttentionSection
+            target={subProcess}
+            requests={attentionRequests}
+            currentUserId={currentUserId}
           />
         </div>
       </div>

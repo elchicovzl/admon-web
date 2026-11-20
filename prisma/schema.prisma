@@ -72,6 +72,8 @@ model User {
   affiliationObservations        AffiliationObservation[] @relation("AffiliationObservationCreatedBy")
   affiliationStatusLogs          AffiliationStatusLog[]   @relation("StatusLogChangedBy")
   sentEmails                     SentEmail[]              @relation("SentEmailSentBy")
+  sentAttentionRequests          ProcessAttentionRequest[] @relation("AttentionRequestSender")
+  receivedAttentionRequests      ProcessAttentionRequest[] @relation("AttentionRequestRecipient")
 
   // WhatsApp in-app notifications addressed to this user
   notifications                  Notification[]           @relation("UserNotifications")
@@ -744,6 +746,7 @@ model AffiliationSubProcess {
   observations      AffiliationObservation[]
   statusLogs        AffiliationStatusLog[]
   beneficiaries     AffiliationSubProcessBeneficiary[]
+  attentionRequests ProcessAttentionRequest[]
 
   @@map("affiliation_subprocesses")
   @@index([affiliationId])
@@ -2135,4 +2138,31 @@ model KnowledgeChunk {
   @@index([documentId])
   @@index([embeddingModel, embeddingDimensions])
   @@map("knowledge_chunks")
+}
+
+// ---------------------------------------------------------------- process attention requests
+
+// A user asks the assignee of a sub-process for attention (e.g. the client wrote on WhatsApp).
+// The recipient is the sub-process assignee at send time. One reply per request, which goes back
+// to the sender. `readAt` is the recipient's read mark; `replyReadAt` is the sender's read mark
+// for the reply. Both feed the header attention bell, separate from WhatsApp notifications.
+model ProcessAttentionRequest {
+  id           String                @id @default(cuid())
+  subProcessId String
+  subProcess   AffiliationSubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  senderId     String
+  sender       User                  @relation("AttentionRequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId  String
+  recipient    User                  @relation("AttentionRequestRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  message      String                @db.Text
+  reply        String?               @db.Text
+  repliedAt    DateTime?
+  readAt       DateTime?
+  replyReadAt  DateTime?
+  createdAt    DateTime              @default(now())
+
+  @@index([recipientId, readAt, createdAt(sort: Desc)])
+  @@index([senderId, repliedAt(sort: Desc)])
+  @@index([subProcessId, createdAt(sort: Desc)])
+  @@map("process_attention_requests")
 }

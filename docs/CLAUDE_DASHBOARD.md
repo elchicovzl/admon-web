@@ -665,6 +665,18 @@ Estados: `AI`, `HUMAN`, `ESCALATED`, `CLOSED`. La lógica pura vive en
   nunca al cargar). `tag` = conversación; al hacer clic se enfoca la pestaña y se abre el enlace.
   Con el navegador cerrado haría falta Web Push (service worker + VAPID): fuera de alcance.
 
+### Solicitudes de atención a procesos (campana del header)
+
+Sirve para avisarle al responsable de un sub-proceso que algo necesita su atención (por ejemplo, el cliente escribió por WhatsApp). Es independiente de las notificaciones de WhatsApp: tiene su propia campana (`Bell`) en el header, que ven **todos los usuarios activos** sin necesidad de ningún permiso.
+
+- **Enviar**: "Notificar responsable" está en el menú "Acciones" del listado de afiliaciones (abre un diálogo para elegir el sub-proceso), en la tarjeta del kanban, en cada fila de sub-procesos del detalle de la afiliación y en la sección "Solicitudes de atención" del sub-proceso. Todos usan el mismo diálogo (`components/dashboard/attention/notify-assignee-dialog.tsx`).
+- **Quién puede enviar**: cualquier usuario activo (`isActive` se consulta en la base en cada acción, no se toma del token). El destinatario es el `assignedToId` del sub-proceso al momento de enviar. Se rechaza el envío si el sub-proceso no tiene responsable, si el responsable está inactivo o si quien envía es el propio responsable.
+- **Responder**: el responsable responde una sola vez desde la campana. La respuesta le llega a quien envió la solicitud, en su propia campana. Si hay que seguir la conversación, se envía una solicitud nueva.
+- **Enlace**: cada ítem de la campana lleva a `/dashboard/affiliations/{affiliationId}/subprocess/{subProcessId}`.
+- **Historial**: el detalle del sub-proceso muestra todas las solicitudes, con su respuesta y su estado (Pendiente o Respondida).
+- **Datos**: modelo `ProcessAttentionRequest` (tabla `process_attention_requests`, con RLS). `readAt` marca que el destinatario la leyó; `replyReadAt` marca que quien la envió vio la respuesta. El contador de la campana suma las solicitudes recibidas sin leer más las respuestas sin ver.
+- **Código**: acciones en `lib/actions/attention-request.actions.ts`, validaciones en `lib/validations/attention-request.schema.ts` (máximo 1000 caracteres) y UI en `components/dashboard/attention/`. La campana consulta cada 30 s, solo mientras la pestaña está visible (`usePolling`).
+
 ### Bandeja de WhatsApp (`/dashboard/whatsapp`)
 
 - Página server (`app/dashboard/whatsapp/page.tsx`) con Suspense + esqueleto; carga la primera

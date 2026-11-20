@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { ChevronDown, ChevronUp, Mail, Phone, FileText, Key, ExternalLink, Users, Plus, Eye, Trash2, Loader2 } from 'lucide-react'
+import { NotifyAssigneeButton } from '@/components/dashboard/attention/notify-assignee-dialog'
 import { AffiliationSubProcessType } from '@prisma/client'
 import { StatusBadge, TypeBadge } from '@/components/dashboard/affiliations/status-badge'
 import { AddSubProcessDialog } from '@/components/dashboard/affiliations/add-subprocess-dialog'
@@ -290,6 +291,7 @@ export function AffiliationDetailClient({
                           <TableCell className="text-center text-sm text-muted-foreground">{sp.documents?.length || 0}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <NotifyAssigneeButton target={sp} currentUserId={currentUserId} />
                               <Button variant="ghost" size="icon" className="h-7 w-7">
                                 <Eye className="h-4 w-4" />
                               </Button>
@@ -335,6 +337,7 @@ export function AffiliationDetailClient({
                     <TableCell className="text-center text-sm text-muted-foreground">{sp.documents?.length || 0}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <NotifyAssigneeButton target={sp} currentUserId={currentUserId} />
                         <Button variant="ghost" size="icon" className="h-7 w-7">
                           <Eye className="h-4 w-4" />
                         </Button>

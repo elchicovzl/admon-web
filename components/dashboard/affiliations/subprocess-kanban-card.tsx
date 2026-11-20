@@ -23,6 +23,7 @@ import { StatusBadge, TypeBadge } from './status-badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { FileText, MessageSquare, User, Loader2, Check, ExternalLink, AlertCircle, Building2, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { NotifyAssigneeButton } from '@/components/dashboard/attention/notify-assignee-dialog'
 import { toast } from 'sonner'
 import { updateSubProcessStatus, assignSubProcess } from '@/lib/actions/affiliation.actions'
 import { AffiliationSubProcessStatus } from '@prisma/client'
@@ -313,6 +314,21 @@ export function SubProcessKanbanCard({
             <p className="text-sm font-medium text-red-900">Razón de devolución:</p>
             <p className="text-sm text-red-700 mt-1">{subProcess.statusReason}</p>
           </div>
+        )}
+
+        {/* Attention request to the assignee (anyone but the assignee) */}
+        {subProcess.assignedTo && subProcess.assignedTo.id !== currentUserId && (
+          <NotifyAssigneeButton
+            target={{
+              id: subProcess.id,
+              type: subProcess.type,
+              assignedToId: subProcess.assignedTo.id,
+              assignedTo: subProcess.assignedTo,
+              employee: subProcess.employee,
+            }}
+            currentUserId={currentUserId}
+            variant="full"
+          />
         )}
 
         {/* Status Change Section */}

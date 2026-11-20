@@ -1,3 +1,4 @@
+import { listSubProcessAttentionRequests } from '@/lib/actions/attention-request.actions'
 import { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { auth } from '@/lib/auth/auth'
@@ -25,9 +26,10 @@ export default async function SubProcessPage({ params }: SubProcessPageProps) {
 
   const { id, subId } = await params
 
-  const [subProcessResult, affiliationResult] = await Promise.all([
+  const [subProcessResult, affiliationResult, attentionResult] = await Promise.all([
     getSubProcessById(subId),
     getAffiliationById(id),
+    listSubProcessAttentionRequests({ subProcessId: subId }),
   ])
 
   if (!subProcessResult.success || !subProcessResult.data) {
@@ -47,6 +49,7 @@ export default async function SubProcessPage({ params }: SubProcessPageProps) {
       clientName={affiliationResult.data.client?.fullName}
       currentUserId={session.user.id}
       currentUserRole={session.user.role}
+      attentionRequests={attentionResult.success ? (attentionResult.data ?? []) : []}
     />
   )
 }
