@@ -176,7 +176,9 @@ export function NotifyAssigneeButton({ target, currentUserId, variant = 'icon' }
   }
 
   return (
-    <>
+    // Portaled dialog events (including overlay clicks) still bubble through the React tree;
+    // stop them here so a clickable row or card around the button never navigates.
+    <span className={variant === 'full' ? 'block' : 'inline-flex'} onClick={(event) => event.stopPropagation()}>
       {variant === 'icon' ? (
         <Button
           variant="ghost"
@@ -196,6 +198,6 @@ export function NotifyAssigneeButton({ target, currentUserId, variant = 'icon' }
         </Button>
       )}
       <NotifyAssigneeDialog open={open} onOpenChange={setOpen} targets={[target]} currentUserId={currentUserId} />
-    </>
+    </span>
   )
 }
