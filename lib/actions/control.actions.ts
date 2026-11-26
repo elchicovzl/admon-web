@@ -140,6 +140,7 @@ import {
   createPrestamoSchema,
   abonarPrestamoSchema,
   marcarIncobrableSchema,
+  actualizarNotasPrestamoSchema,
   createServicioSchema,
   registrarPataServicioSchema,
   registrarConteoSchema,
@@ -158,6 +159,7 @@ import {
   type CreatePrestamoInput,
   type AbonarPrestamoInput,
   type MarcarIncobrableInput,
+  type ActualizarNotasPrestamoInput,
   type CreateServicioInput,
   type EmitirReciboInput,
   type RegistrarPataServicioInput,
@@ -254,6 +256,7 @@ const movimientoSelect = {
       id: true,
       concepto: true,
       fechaDesembolso: true,
+      notas: true,
       contraparte: { select: { nombre: true } },
     },
   },
@@ -295,6 +298,7 @@ function aMovimientoListItem(row: MovimientoRow): MovimientoListItem {
           id: row.prestamo.id,
           concepto: row.prestamo.concepto,
           fechaDesembolso: row.prestamo.fechaDesembolso,
+          notas: row.prestamo.notas,
           contraparte: row.prestamo.contraparte.nombre,
         }
       : null,
@@ -1809,6 +1813,32 @@ export async function marcarIncobrable(
       ? 'Préstamo marcado como incobrable'
       : 'Préstamo reactivado',
   }
+}
+
+export async function actualizarNotasPrestamo(
+  data: ActualizarNotasPrestamoInput
+): Promise<ActionResponse> {
+  const auth = await requireControlAuth()
+  if (!auth.authorized) return sinAutorizacion(auth.error)
+
+  const validado = actualizarNotasPrestamoSchema.safeParse(data)
+  if (!validado.success) {
+    return { success: false, error: validado.error.issues[0]?.message ?? 'Datos inválidos' }
+  }
+
+  const { prestamoId, notas } = validado.data
+
+  const prestamo = await prisma.prestamo.findUnique({
+    where: { id: prestamoId },
+    select: { id: true },
+  })
+  if (!prestamo) return { success: false, error: 'El préstamo no existe' }
+
+  await prisma.prestamo.update({ where: { id: prestamoId }, data: { notas } })
+
+  revalidatePath(RUTA_CONTROL)
+
+  return { success: true, message: 'Notas actualizadas' }
 }
 
 // ---------------------------------------------------------------------------

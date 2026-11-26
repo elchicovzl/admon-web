@@ -2,9 +2,13 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, MoreHorizontal, HandCoins, Ban, ListTree } from 'lucide-react'
+import { Loader2, MoreHorizontal, HandCoins, Ban, ListTree, NotebookPen } from 'lucide-react'
 
-import { abonarPrestamo, marcarIncobrable } from '@/lib/actions/control.actions'
+import {
+  abonarPrestamo,
+  actualizarNotasPrestamo,
+  marcarIncobrable,
+} from '@/lib/actions/control.actions'
 import type { PrestamoListItem, BolsilloListItem, EstadoPrestamo } from '@/lib/types/control.types'
 import { formatearMonto, formatearFecha, hoyComoFechaCalendario } from '@/lib/utils/control-format'
 
@@ -61,18 +65,47 @@ interface Props {
 export function PrestamosTable({ prestamos, bolsillos }: Props) {
   const [abonando, setAbonando] = useState<PrestamoListItem | null>(null)
   const [incobrable, setIncobrable] = useState<PrestamoListItem | null>(null)
+  const [editandoNotas, setEditandoNotas] = useState<PrestamoListItem | null>(null)
   const [enviando, setEnviando] = useState(false)
 
   const [monto, setMonto] = useState('')
   const [bolsilloId, setBolsilloId] = useState('')
   const [motivo, setMotivo] = useState('')
+  const [notas, setNotas] = useState('')
 
   function cerrarDialogos() {
     setAbonando(null)
     setIncobrable(null)
+    setEditandoNotas(null)
     setMonto('')
     setBolsilloId('')
     setMotivo('')
+    setNotas('')
+  }
+
+  function abrirNotas(prestamo: PrestamoListItem) {
+    setNotas(prestamo.notas ?? '')
+    setEditandoNotas(prestamo)
+  }
+
+  async function confirmarNotas() {
+    if (!editandoNotas) return
+    setEnviando(true)
+    try {
+      const resultado = await actualizarNotasPrestamo({
+        prestamoId: editandoNotas.id,
+        notas,
+      })
+
+      if (resultado.success) {
+        toast.success(resultado.message ?? 'Notas actualizadas')
+        cerrarDialogos()
+      } else {
+        toast.error(resultado.error ?? 'No se pudieron guardar las notas')
+      }
+    } finally {
+      setEnviando(false)
+    }
   }
 
   async function confirmarAbono() {
@@ -153,6 +186,11 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {prestamo.concepto}
+                    {prestamo.notas && (
+                      <p className="mt-1 max-w-md whitespace-pre-line text-xs">
+                        {prestamo.notas}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-sm">
                     {formatearFecha(prestamo.fechaDesembolso)}
@@ -196,6 +234,10 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
                             <ListTree className="mr-2 h-4 w-4" />
                             Ver sus movimientos
                           </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => abrirNotas(prestamo)}>
+                          <NotebookPen className="mr-2 h-4 w-4" />
+                          {prestamo.notas ? 'Editar notas' : 'Agregar notas'}
                         </DropdownMenuItem>
                         {prestamo.saldoActual > 0 && (
                           <DropdownMenuItem onClick={() => setAbonando(prestamo)}>
@@ -279,6 +321,47 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
             >
               {enviando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Registrar abono
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Notas */}
+      <Dialog open={editandoNotas !== null} onOpenChange={(o) => !o && cerrarDialogos()}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Notas del préstamo</DialogTitle>
+            <DialogDescription>
+              Solo cambia el texto. Montos, fechas y movimientos no se tocan.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editandoNotas && (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="font-medium">{editandoNotas.contraparte.nombre}</p>
+              <p className="text-muted-foreground">{editandoNotas.concepto}</p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="notas-prestamo">Notas</Label>
+            <Textarea
+              id="notas-prestamo"
+              rows={6}
+              maxLength={2000}
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              disabled={enviando}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={cerrarDialogos} disabled={enviando}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarNotas} disabled={enviando}>
+              {enviando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Guardar
             </Button>
           </div>
         </DialogContent>

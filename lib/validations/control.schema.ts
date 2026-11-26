@@ -390,6 +390,21 @@ export const marcarIncobrableSchema = z.object({
 
 export type MarcarIncobrableInput = z.infer<typeof marcarIncobrableSchema>
 
+/**
+ * Las notas viven solo en el préstamo. El movimiento de desembolso las lee
+ * desde ahí, así que editarlas no exige tocar el libro.
+ */
+export const actualizarNotasPrestamoSchema = z.object({
+  prestamoId: cuid('Préstamo inválido'),
+  notas: z
+    .string()
+    .max(2000, 'Las notas no pueden exceder 2000 caracteres')
+    .nullable()
+    .transform((v) => (v?.trim() ? v.trim() : null)),
+})
+
+export type ActualizarNotasPrestamoInput = z.input<typeof actualizarNotasPrestamoSchema>
+
 // ---------------------------------------------------------------------------
 // Servicios referenciados
 // ---------------------------------------------------------------------------

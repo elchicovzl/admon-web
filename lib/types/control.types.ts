@@ -188,6 +188,8 @@ export interface MovimientoListItem {
     id: string
     concepto: string
     fechaDesembolso: Date
+    /** Notas del préstamo; se leen desde ahí, no se copian al movimiento. */
+    notas: string | null
     contraparte: string
   } | null
   notas: string | null

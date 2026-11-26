@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { TipoMovimiento } from '@prisma/client'
+import { GrupoCategoria, TipoMovimiento } from '@prisma/client'
 import { toast } from 'sonner'
 import {
   ArrowDownCircle,
@@ -52,6 +52,19 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { SearchableSelect } from '@/components/ui/searchable-select'
+
+/**
+ * Las notas de un préstamo viven en el préstamo, no en su desembolso. La fila
+ * del desembolso las muestra cuando no tiene notas propias; las de un abono
+ * no, porque parecerían escritas sobre ese abono.
+ */
+function notasDeFila(movimiento: MovimientoListItem): string | null {
+  if (movimiento.notas) return movimiento.notas
+  if (movimiento.categoria.grupo === GrupoCategoria.PRESTAMO_DESEMBOLSO) {
+    return movimiento.prestamo?.notas ?? null
+  }
+  return null
+}
 
 const ICONO_TIPO = {
   INGRESO: ArrowDownCircle,
@@ -192,6 +205,7 @@ export function MovimientosTable({ movimientos, clientes }: Props) {
               const esAnulacion = movimiento.anulaMovimientoId !== null
               const puedeAnular = !movimiento.estaAnulado && !esAnulacion
               const puedeEmitir = puedeEmitirReciboDeFila(movimiento)
+              const notas = notasDeFila(movimiento)
 
               return (
                 <TableRow
@@ -230,9 +244,12 @@ export function MovimientosTable({ movimientos, clientes }: Props) {
                         </Badge>
                       )}
                     </div>
-                    {movimiento.notas && (
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {movimiento.notas}
+                    {notas && (
+                      <p
+                        className="text-xs text-muted-foreground line-clamp-1"
+                        title={notas}
+                      >
+                        {notas}
                       </p>
                     )}
                   </TableCell>
