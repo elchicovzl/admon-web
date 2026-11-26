@@ -109,6 +109,7 @@ import {
   getNominaDelAnio,
   getDetalleDelCorte,
   createPrestamo,
+  actualizarNotasPrestamo,
   getManagersParaPrestamo,
   getPagosDelPeriodo,
   importarPagosComoEgresos,
@@ -3768,5 +3769,93 @@ describe('recibo de pago', () => {
       expect(res.success).toBe(false)
       expect(prismaMock.reciboPago.findUnique).not.toHaveBeenCalled()
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('actualizarNotasPrestamo', () => {
+  const PRESTAMO = 'cpre0000001'
+
+  beforeEach(() => {
+    prismaMock.prestamo.findUnique.mockResolvedValue({ id: PRESTAMO })
+    prismaMock.prestamo.update.mockResolvedValue({ id: PRESTAMO })
+  })
+
+  it('guarda las notas en el préstamo, sin tocar sus movimientos', async () => {
+    const res = await actualizarNotasPrestamo({
+      prestamoId: PRESTAMO,
+      notas: '  $100.000 transferencia Leidy\n$70.000 veneno  ',
+    })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.prestamo.update).toHaveBeenCalledWith({
+      where: { id: PRESTAMO },
+      data: { notas: '$100.000 transferencia Leidy\n$70.000 veneno' },
+    })
+    expect(prismaMock.movimiento.create).not.toHaveBeenCalled()
+  })
+
+  it('vaciar las notas las borra', async () => {
+    const res = await actualizarNotasPrestamo({ prestamoId: PRESTAMO, notas: '   ' })
+
+    expect(res.success).toBe(true)
+    expect(prismaMock.prestamo.update).toHaveBeenCalledWith({
+      where: { id: PRESTAMO },
+      data: { notas: null },
+    })
+  })
+
+  it('avisa si el préstamo no existe', async () => {
+    prismaMock.prestamo.findUnique.mockResolvedValue(null)
+
+    const res = await actualizarNotasPrestamo({ prestamoId: PRESTAMO, notas: 'algo' })
+
+    expect(res.success).toBe(false)
+    expect(res.error).toBe('El préstamo no existe')
+    expect(prismaMock.prestamo.update).not.toHaveBeenCalled()
+  })
+
+  it('rechaza notas de más de 2000 caracteres', async () => {
+    const res = await actualizarNotasPrestamo({ prestamoId: PRESTAMO, notas: 'x'.repeat(2001) })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.prestamo.update).not.toHaveBeenCalled()
+  })
+
+  it('exige acceso a Control', async () => {
+    hasControlAccessMock.mockResolvedValue(false)
+
+    const res = await actualizarNotasPrestamo({ prestamoId: PRESTAMO, notas: 'algo' })
+
+    expect(res.success).toBe(false)
+    expect(prismaMock.prestamo.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('getMovimientos — notas del préstamo', () => {
+  beforeEach(() => {
+    prismaMock.movimiento.count.mockResolvedValue(1)
+    prismaMock.movimiento.aggregate.mockResolvedValue({ _sum: { monto: dec(145000) } })
+  })
+
+  it('el movimiento trae las notas del préstamo al que pertenece', async () => {
+    prismaMock.movimiento.findMany.mockResolvedValue([
+      filaMovimiento({
+        prestamoId: 'cpre0000001',
+        prestamo: {
+          id: 'cpre0000001',
+          concepto: 'VINO',
+          fechaDesembolso: new Date('2026-11-12T00:00:00.000Z'),
+          notas: 'detalle del préstamo',
+          contraparte: { nombre: 'Tatiana Gomez' },
+        },
+      }),
+    ])
+
+    const res = await getMovimientos({ prestamoId: 'cpre0000001' })
+
+    expect(res.success).toBe(true)
+    expect(res.data?.items[0]?.prestamo?.notas).toBe('detalle del préstamo')
   })
 })
