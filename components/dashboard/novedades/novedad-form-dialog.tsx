@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { fechaGuardadaComoLocal, hoyLocal } from '@/lib/utils/novedad-dates'
 import { CalendarIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { NovedadType, NovedadUnit } from '@prisma/client'
@@ -84,8 +85,8 @@ export function NovedadFormDialog({
       userId: lockedUserId ?? '',
       type: NovedadType.VACACIONES,
       unit: NovedadUnit.DIAS,
-      startDate: new Date(),
-      endDate: new Date(),
+      startDate: hoyLocal(),
+      endDate: hoyLocal(),
       hours: null,
       observation: '',
     },
@@ -99,8 +100,8 @@ export function NovedadFormDialog({
         userId: editNovedad.user.id,
         type: editNovedad.type,
         unit: editNovedad.unit,
-        startDate: new Date(editNovedad.startDate),
-        endDate: new Date(editNovedad.endDate),
+        startDate: fechaGuardadaComoLocal(editNovedad.startDate),
+        endDate: fechaGuardadaComoLocal(editNovedad.endDate),
         hours: editNovedad.hours,
         observation: editNovedad.observation ?? '',
       })
@@ -109,8 +110,8 @@ export function NovedadFormDialog({
         userId: lockedUserId ?? '',
         type: NovedadType.VACACIONES,
         unit: NovedadUnit.DIAS,
-        startDate: new Date(),
-        endDate: new Date(),
+        startDate: hoyLocal(),
+        endDate: hoyLocal(),
         hours: null,
         observation: '',
       })
