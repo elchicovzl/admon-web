@@ -7,7 +7,9 @@ import {
   getManagersParaPrestamo,
 } from '@/lib/actions/control.actions'
 import { formatearMonto } from '@/lib/utils/control-format'
+import { contrapartesConPrestamos } from '@/lib/utils/control-ledger'
 import { PrestamosTable } from '@/components/dashboard/control/prestamos-table'
+import { PrestamosFiltro } from '@/components/dashboard/control/prestamos-filtro'
 import { PrestamoFormDialog } from '@/components/dashboard/control/prestamo-form-dialog'
 import { ControlTableSkeleton } from '@/components/dashboard/control/control-skeletons'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -32,7 +34,11 @@ async function BotonNuevo() {
   )
 }
 
-async function Listado() {
+interface PageProps {
+  searchParams: Promise<{ contraparte?: string }>
+}
+
+async function Listado({ contraparteId }: { contraparteId?: string }) {
   const [prestamos, bolsillos] = await Promise.all([getPrestamos(), getBolsillos()])
 
   if (!prestamos.success) {
@@ -43,12 +49,19 @@ async function Listado() {
     )
   }
 
-  const items = prestamos.data ?? []
+  // Se traen todos para armar las opciones del filtro; el filtro se aplica
+  // después. Así el selector nunca pierde opciones al elegir una.
+  const todos = prestamos.data ?? []
+  const contrapartes = contrapartesConPrestamos(todos)
+  const items = contraparteId
+    ? todos.filter((p) => p.contraparte.id === contraparteId)
+    : todos
   const vivos = items.filter((p) => p.estado === 'ABIERTO' || p.estado === 'PARCIAL')
   const totalVivo = vivos.reduce((acc, p) => acc + p.saldoActual, 0)
 
   return (
     <div className="space-y-4">
+      <PrestamosFiltro contrapartes={contrapartes} />
       <p className="text-sm text-muted-foreground">
         {vivos.length} préstamo{vivos.length === 1 ? '' : 's'} sin cancelar por{' '}
         <span className="font-medium text-foreground tabular-nums">
@@ -60,7 +73,9 @@ async function Listado() {
   )
 }
 
-export default function PrestamosPage() {
+export default async function PrestamosPage({ searchParams }: PageProps) {
+  const { contraparte } = await searchParams
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -75,8 +90,11 @@ export default function PrestamosPage() {
         </Suspense>
       </div>
 
-      <Suspense fallback={<ControlTableSkeleton filas={8} columnas={8} />}>
-        <Listado />
+      <Suspense
+        key={contraparte ?? ''}
+        fallback={<ControlTableSkeleton filas={8} columnas={8} />}
+      >
+        <Listado contraparteId={contraparte} />
       </Suspense>
     </div>
   )
