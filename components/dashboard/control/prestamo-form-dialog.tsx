@@ -38,19 +38,20 @@ interface Props {
   managers: ManagerPrestamoItem[]
 }
 
-const VACIO = {
+/** Función y no constante: una constante congelaría la fecha al cargar el módulo. */
+const vacio = () => ({
   userId: '',
   fechaDesembolso: hoyComoFechaCalendario(),
   montoOriginal: '',
   concepto: '',
   bolsilloOrigenId: '',
   notas: '',
-}
+})
 
 export function PrestamoFormDialog({ bolsillos, managers }: Props) {
   const [abierto, setAbierto] = useState(false)
   const [enviando, setEnviando] = useState(false)
-  const [form, setForm] = useState(VACIO)
+  const [form, setForm] = useState(vacio)
 
   const monto = Number(form.montoOriginal)
   const puedeGuardar =
@@ -73,7 +74,7 @@ export function PrestamoFormDialog({ bolsillos, managers }: Props) {
 
       if (r.success) {
         toast.success(r.message ?? 'Préstamo registrado')
-        setForm({ ...VACIO, fechaDesembolso: form.fechaDesembolso })
+        setForm({ ...vacio(), fechaDesembolso: form.fechaDesembolso })
         setAbierto(false)
       } else {
         toast.error(r.error ?? 'No se pudo registrar')

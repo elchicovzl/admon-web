@@ -110,6 +110,7 @@ import {
   type MovimientoParaNaturaleza,
   type MovimientoParaSaldo,
 } from '@/lib/utils/control-ledger'
+import { hoyComoFechaCalendario } from '@/lib/utils/control-format'
 import {
   CLAVE_CONSECUTIVO_RECIBO,
   armarDatosRecibo,
@@ -1475,7 +1476,7 @@ export async function anularMovimiento(
 
   const fecha = validado.data.fecha
     ? parseFechaCalendario(validado.data.fecha)
-    : parseFechaCalendario(new Date().toISOString().slice(0, 10))
+    : parseFechaCalendario(hoyComoFechaCalendario())
   const periodo = periodoDeFecha(fecha)
 
   const espejo = contraMovimiento({
