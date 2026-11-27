@@ -68,9 +68,23 @@ export function formatearFechaLarga(fecha: Date): string {
   return `${fecha.getUTCDate()} de ${MESES[fecha.getUTCMonth()]} de ${fecha.getUTCFullYear()}`
 }
 
-/** Fecha de hoy como "AAAA-MM-DD", el formato que esperan los schemas. */
-export function hoyComoFechaCalendario(): string {
-  return new Date().toISOString().slice(0, 10)
+const DIA_EN_BOGOTA = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Bogota',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/**
+ * Fecha de hoy en Bogotá como "AAAA-MM-DD", el formato que esperan los schemas.
+ *
+ * No sale de `toISOString()`: desde las 7 p. m. en Bogotá eso ya es mañana en
+ * UTC, y el último día del mes un registro nocturno caía en el periodo
+ * siguiente. Tampoco de la zona local, que en el servidor es UTC.
+ */
+export function hoyComoFechaCalendario(ahora: Date = new Date()): string {
+  // en-CA formatea como AAAA-MM-DD.
+  return DIA_EN_BOGOTA.format(ahora)
 }
 
 /** Periodo actual como "AAAA-MM". */
