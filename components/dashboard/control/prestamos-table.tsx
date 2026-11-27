@@ -11,6 +11,7 @@ import {
 } from '@/lib/actions/control.actions'
 import type { PrestamoListItem, BolsilloListItem, EstadoPrestamo } from '@/lib/types/control.types'
 import { formatearMonto, formatearFecha, hoyComoFechaCalendario } from '@/lib/utils/control-format'
+import { cn } from '@/lib/utils'
 
 import {
   Table,
@@ -49,11 +50,19 @@ import {
 
 const BADGE_ESTADO: Record<
   EstadoPrestamo,
-  { texto: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }
+  {
+    texto: string
+    variant: 'default' | 'secondary' | 'outline' | 'destructive'
+    className?: string
+  }
 > = {
   ABIERTO: { texto: 'Abierto', variant: 'default' },
   PARCIAL: { texto: 'Parcial', variant: 'outline' },
-  CANCELADO: { texto: 'Cancelado', variant: 'secondary' },
+  CANCELADO: {
+    texto: 'Cancelado',
+    variant: 'default',
+    className: 'bg-emerald-600 text-white dark:bg-emerald-500',
+  },
   INCOBRABLE: { texto: 'Incobrable', variant: 'destructive' },
 }
 
@@ -178,13 +187,16 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
           <TableBody>
             {prestamos.map((prestamo) => {
               const badge = BADGE_ESTADO[prestamo.estado]
+              // Pagado del todo: sigue en la lista para auditarlo, pero
+              // tachado para que no se lea como deuda viva.
+              const tachado = prestamo.estado === 'CANCELADO' && 'line-through opacity-60'
 
               return (
                 <TableRow key={prestamo.id}>
-                  <TableCell className="font-medium">
+                  <TableCell className={cn('font-medium', tachado)}>
                     {prestamo.contraparte.nombre}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  <TableCell className={cn('text-sm text-muted-foreground', tachado)}>
                     {prestamo.concepto}
                     {prestamo.notas && (
                       <p className="mt-1 max-w-md whitespace-pre-line text-xs">
@@ -192,13 +204,17 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
                       </p>
                     )}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm">
+                  <TableCell className={cn('whitespace-nowrap text-sm', tachado)}>
                     {formatearFecha(prestamo.fechaDesembolso)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                  <TableCell
+                    className={cn('text-right tabular-nums text-muted-foreground', tachado)}
+                  >
                     {formatearMonto(prestamo.montoOriginal)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                  <TableCell
+                    className={cn('text-right tabular-nums text-muted-foreground', tachado)}
+                  >
                     {formatearMonto(prestamo.totalAbonado)}
                     {prestamo.cantidadAbonos > 0 && (
                       <span className="ml-1 text-xs">
@@ -208,11 +224,13 @@ export function PrestamosTable({ prestamos, bolsillos }: Props) {
                   </TableCell>
                   {/* El saldo NO es una columna en la base: se deriva de los
                       movimientos cada vez que se lee. */}
-                  <TableCell className="text-right tabular-nums font-medium">
+                  <TableCell className={cn('text-right tabular-nums font-medium', tachado)}>
                     {formatearMonto(prestamo.saldoActual)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={badge.variant}>{badge.texto}</Badge>
+                    <Badge variant={badge.variant} className={badge.className}>
+                      {badge.texto}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

@@ -177,6 +177,25 @@ export function totalAbonado(movimientos: MovimientoDePrestamo[]): number {
 }
 
 /** Cuánto falta por pagar. Nunca baja de cero, aunque se abone de más. */
+/**
+ * Contrapartes que tienen al menos un préstamo, una sola vez cada una y
+ * ordenadas por nombre. Son las opciones del filtro de préstamos: ofrecer
+ * todas las contrapartes llevaría a listas vacías.
+ */
+export function contrapartesConPrestamos(
+  prestamos: { contraparte: { id: string; nombre: string } }[]
+): { id: string; nombre: string }[] {
+  const porId = new Map<string, { id: string; nombre: string }>()
+  for (const { contraparte } of prestamos) {
+    if (!porId.has(contraparte.id)) {
+      porId.set(contraparte.id, { id: contraparte.id, nombre: contraparte.nombre })
+    }
+  }
+  return [...porId.values()].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+  )
+}
+
 export function saldoPrestamo(
   montoOriginal: number,
   movimientos: MovimientoDePrestamo[]

@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest'
 import { TipoMovimiento, GrupoCategoria } from '@prisma/client'
 import {
+  contrapartesConPrestamos,
   sumarMontos,
   redondearMonto,
   parseFechaCalendario,
@@ -1562,5 +1563,38 @@ describe('itemsDelCorte', () => {
     const delCorte = itemsDelCorte(movs, 'egresos', 'Otros honorarios', EN_TRANSITO)
 
     expect(sumarMontos(delCorte.map((i) => i.aporta))).toBe(delDesglose.monto)
+  })
+})
+
+// ---------------------------------------------------------------------------
+
+describe('contrapartesConPrestamos', () => {
+  const p = (id: string, nombre: string) => ({ contraparte: { id, nombre } })
+
+  it('lista cada contraparte una sola vez, aunque tenga varios préstamos', () => {
+    const r = contrapartesConPrestamos([
+      p('c1', 'Tatiana Gomez'),
+      p('c2', 'Yudy Milena'),
+      p('c1', 'Tatiana Gomez'),
+    ])
+
+    expect(r).toEqual([
+      { id: 'c1', nombre: 'Tatiana Gomez' },
+      { id: 'c2', nombre: 'Yudy Milena' },
+    ])
+  })
+
+  it('ordena por nombre, sin importar mayúsculas ni tildes', () => {
+    const r = contrapartesConPrestamos([
+      p('c1', 'yudy'),
+      p('c2', 'Álvaro'),
+      p('c3', 'Jackeline'),
+    ])
+
+    expect(r.map((c) => c.nombre)).toEqual(['Álvaro', 'Jackeline', 'yudy'])
+  })
+
+  it('sin préstamos, no hay opciones', () => {
+    expect(contrapartesConPrestamos([])).toEqual([])
   })
 })
