@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { fechaGuardadaComoLocal } from '@/lib/utils/novedad-dates'
 import { Pencil, CalendarX2 } from 'lucide-react'
 import { NovedadType } from '@prisma/client'
 import type { NovedadListItem } from '@/lib/types/novedad.types'
@@ -30,8 +31,8 @@ interface NovedadesTableProps {
 }
 
 function formatPeriod(novedad: NovedadListItem): string {
-  const start = format(new Date(novedad.startDate), 'dd/MM/yyyy', { locale: es })
-  const end = format(new Date(novedad.endDate), 'dd/MM/yyyy', { locale: es })
+  const start = format(fechaGuardadaComoLocal(novedad.startDate), 'dd/MM/yyyy', { locale: es })
+  const end = format(fechaGuardadaComoLocal(novedad.endDate), 'dd/MM/yyyy', { locale: es })
   const range = start === end ? start : `${start} → ${end}`
   if (novedad.unit === 'HORAS' && novedad.hours != null) {
     return `${range} · ${novedad.hours}h`
